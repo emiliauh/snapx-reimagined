@@ -28,6 +28,13 @@
   <PropertyGroup Condition="!Exists('.git')">
     <UpdateAssemblyInfo>false</UpdateAssemblyInfo>
     <DisableGitVersionTask>true</DisableGitVersionTask>
+    <WriteVersionInfoToBuildLog>false</WriteVersionInfoToBuildLog>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(DisableGitVersionTask)' == '1'">
+    <DisableGitVersionTask>true</DisableGitVersionTask>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(DisableGitVersionTask)' == 'true'">
+    <WriteVersionInfoToBuildLog>false</WriteVersionInfoToBuildLog>
   </PropertyGroup>
   <PropertyGroup>
     <TargetLinux>false</TargetLinux>
