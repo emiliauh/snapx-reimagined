@@ -1738,15 +1738,7 @@ public static class TaskHelpers
         return !string.IsNullOrEmpty(content) && Encoding.UTF8.GetByteCount(content) <= 2952;
     }
 
-    public static bool IsUploadAllowed()
-    {
-        if (SnapXL.Settings.DisableUpload)
-        {
-            return false;
-        }
-
-        return true;
-    }
+    public static bool IsUploadAllowed() => SnapXL.CanUpload();
 
     public static async Task PlaySound(Stream stream)
     {

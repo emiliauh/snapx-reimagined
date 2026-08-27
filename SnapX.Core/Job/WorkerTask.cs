@@ -268,9 +268,19 @@ public class WorkerTask : IDisposable
 
             if (!StopRequested)
             {
-                if (Info.IsUploadJob && TaskHelpers.IsUploadAllowed())
+                if (Info.IsUploadJob)
                 {
-                    DoUploadJob();
+                    if (TaskHelpers.IsUploadAllowed())
+                    {
+                        DoUploadJob();
+                    }
+                    else
+                    {
+                        const string uploadDisabledMessage =
+                            "Uploads are disabled application-wide. Enable uploads in Settings > Application > Upload.";
+                        DebugHelper.WriteLine(uploadDisabledMessage);
+                        AddErrorMessage(uploadDisabledMessage);
+                    }
                 }
                 else
                 {

@@ -20,6 +20,11 @@ for arg in "$@"; do
                     exit 0
                 fi
             fi
+            V=$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' "$SCRIPT_DIR/Directory.Build.props" | head -n 1)
+            if [ -n "$V" ]; then
+                printf '%s\n' "$V"
+                exit 0
+            fi
             ;;
     esac
 done
