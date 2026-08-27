@@ -3,6 +3,9 @@
 
 
 using System.Diagnostics;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using SnapX.Core.Utils;
 using SnapX.Core.Utils.Extensions;
 using SnapX.Core.Utils.Random;
@@ -37,6 +40,11 @@ public class VideoThumbnailer
     {
         MediaPath = mediaPath;
 
+        if (Options.ThumbnailCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(Options.ThumbnailCount), "At least one video thumbnail is required.");
+        }
+
         UpdateVideoInfo();
 
         if (VideoInfo == null || VideoInfo.Duration == TimeSpan.Zero)
@@ -69,7 +77,7 @@ public class VideoThumbnailer
                 ProcessStartInfo psi = new ProcessStartInfo()
                 {
                     FileName = FFmpegPath,
-                    Arguments = $"-ss {timeSliceElapsed} -i \"{MediaPath}\" -f image2 -vframes 1 -y \"{tempThumbnailPath}\"",
+                    Arguments = $"-ss {timeSliceElapsed} -i \"{MediaPath}\" -frames:v 1 -update 1 -y \"{tempThumbnailPath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
@@ -103,7 +111,11 @@ public class VideoThumbnailer
         {
             if (Options.CombineScreenshots)
             {
-                throw new NotImplementedException("VideoThumbnailer Combine screenshots is not implemented.");
+                VideoThumbnailInfo? combined = CombineThumbnails(tempThumbnails);
+                if (combined is not null)
+                {
+                    thumbnails.Add(combined);
+                }
             }
             else
             {
@@ -119,12 +131,165 @@ public class VideoThumbnailer
         return thumbnails;
     }
 
+    /// <summary>
+    /// Extracts a single still for a completed recording. The caller owns the
+    /// returned image. This is intentionally a result preview, not a live
+    /// recorder preview, so it works for any FFmpeg output supported by the
+    /// configured encoder.
+    /// </summary>
+    public static Image? TryCreatePreviewImage(string? ffmpegPath, string? mediaPath, int maximumWidth = 640)
+    {
+        if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath) || string.IsNullOrWhiteSpace(ffmpegPath))
+        {
+            return null;
+        }
+
+        string temporaryPath = Path.Combine(Path.GetTempPath(), $"snapx-video-preview-{Guid.NewGuid():N}.png");
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = ffmpegPath,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+            process.StartInfo.ArgumentList.Add("-hide_banner");
+            process.StartInfo.ArgumentList.Add("-loglevel");
+            process.StartInfo.ArgumentList.Add("error");
+            process.StartInfo.ArgumentList.Add("-ss");
+            process.StartInfo.ArgumentList.Add("0.5");
+            process.StartInfo.ArgumentList.Add("-i");
+            process.StartInfo.ArgumentList.Add(mediaPath);
+            process.StartInfo.ArgumentList.Add("-frames:v");
+            process.StartInfo.ArgumentList.Add("1");
+            process.StartInfo.ArgumentList.Add("-y");
+            process.StartInfo.ArgumentList.Add(temporaryPath);
+
+            if (!process.Start() || !process.WaitForExit(10_000))
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                return null;
+            }
+
+            if (process.ExitCode != 0 || !File.Exists(temporaryPath))
+            {
+                return null;
+            }
+
+            using var source = Image.Load(temporaryPath);
+            if (maximumWidth > 0 && source.Width > maximumWidth)
+            {
+                return source.Clone(context => context.Resize(new ResizeOptions
+                {
+                    Size = new Size(maximumWidth, 0),
+                    Mode = ResizeMode.Max
+                }));
+            }
+
+            return source.CloneAs<Rgba32>();
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine($"Unable to create video preview for '{mediaPath}': {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            }
+            catch (IOException)
+            {
+                // The preview is optional; a delayed temporary-file cleanup is harmless.
+            }
+        }
+    }
+
+    private VideoThumbnailInfo? CombineThumbnails(IReadOnlyList<VideoThumbnailInfo> thumbnails)
+    {
+        var sourcePaths = thumbnails
+            .Select(thumbnail => thumbnail.FilePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Cast<string>()
+            .ToList();
+        if (sourcePaths.Count == 0)
+        {
+            return null;
+        }
+
+        int columns = Math.Max(1, Options.ColumnCount);
+        int padding = Math.Max(0, Options.Padding);
+        int spacing = Math.Max(0, Options.Spacing);
+        var images = new List<Image<Rgba32>>();
+        try
+        {
+            foreach (string path in sourcePaths)
+            {
+                var image = Image.Load<Rgba32>(path);
+                if (Options.MaxThumbnailWidth > 0 && image.Width > Options.MaxThumbnailWidth)
+                {
+                    image.Mutate(context => context.Resize(new ResizeOptions
+                    {
+                        Size = new Size(Options.MaxThumbnailWidth, 0),
+                        Mode = ResizeMode.Max
+                    }));
+                }
+
+                images.Add(image);
+            }
+
+            int cellWidth = images.Max(image => image.Width);
+            int cellHeight = images.Max(image => image.Height);
+            int rows = (int)Math.Ceiling(images.Count / (double)columns);
+            int width = (padding * 2) + (columns * cellWidth) + ((columns - 1) * spacing);
+            int height = (padding * 2) + (rows * cellHeight) + ((rows - 1) * spacing);
+            using var canvas = new Image<Rgba32>(width, height, Color.Black);
+            for (int index = 0; index < images.Count; index++)
+            {
+                int column = index % columns;
+                int row = index / columns;
+                Image<Rgba32> image = images[index];
+                int x = padding + (column * (cellWidth + spacing)) + ((cellWidth - image.Width) / 2);
+                int y = padding + (row * (cellHeight + spacing)) + ((cellHeight - image.Height) / 2);
+                canvas.Mutate(context => context.DrawImage(image, new Point(x, y), 1f));
+            }
+
+            string filename = Path.GetFileNameWithoutExtension(MediaPath) + Options.FilenameSuffix + "." + Options.ImageFormat.GetDescription();
+            string outputPath = Path.Combine(GetOutputDirectory()!, filename);
+            canvas.Save(outputPath);
+
+            if (!Options.KeepScreenshots)
+            {
+                foreach (string sourcePath in sourcePaths)
+                {
+                    if (!string.Equals(sourcePath, outputPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        FileHelpers.DeleteFile(sourcePath);
+                    }
+                }
+            }
+
+            return new VideoThumbnailInfo(outputPath);
+        }
+        finally
+        {
+            foreach (Image<Rgba32> image in images)
+            {
+                image.Dispose();
+            }
+        }
+    }
+
     protected void OnProgressChanged(int current, int length)
     {
         ProgressChanged?.Invoke(current, length);
     }
 
-    private string? GetOutputDirectory()
+    private string GetOutputDirectory()
     {
         string? directory;
 
@@ -142,6 +307,8 @@ public class VideoThumbnailer
                 break;
         }
 
+        directory ??= Path.GetDirectoryName(MediaPath);
+        directory ??= Path.GetTempPath();
         FileHelpers.CreateDirectory(directory);
 
         return directory;
@@ -164,4 +331,3 @@ public class VideoThumbnailer
         return (int)((RandomFast.NextDouble() * (mediaSeekTimes[start + 1] - mediaSeekTimes[start])) + mediaSeekTimes[start]);
     }
 }
-

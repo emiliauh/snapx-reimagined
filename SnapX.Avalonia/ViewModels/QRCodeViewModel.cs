@@ -166,18 +166,18 @@ public partial class QRCodeViewModel : ViewModelBase
 
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            var dialog = new ContentDialog()
+            var dialog = new FAContentDialog()
             {
                 Title = isTooBig ? "Content too large" : "Generation Failed",
                 Content = isTooBig
                     ? $"This content is {byteCount} bytes. The limit for a QR code is 2952 bytes."
                     : $"{randomJoke} (Generation failed)",
                 PrimaryButtonText = "Dismiss",
-                SecondaryButtonText = "See Why",
-                DefaultButton = ContentDialogButton.Primary
+                SecondaryButtonText = "Details",
+                DefaultButton = FAContentDialogButton.Primary
             };
 
-            if (await dialog.ShowAsync() == ContentDialogResult.Secondary)
+            if (await dialog.ShowAsync() == FAContentDialogResult.Secondary)
                 URLHelpers.OpenURL("https://www.qrcode.com/en/about/version.html");
         });
     }

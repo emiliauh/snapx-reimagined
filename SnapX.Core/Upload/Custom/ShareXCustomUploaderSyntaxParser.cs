@@ -18,16 +18,20 @@ public class ShareXCustomUploaderSyntaxParser : ShareXSyntaxParser
     public bool URLEncode { get; set; } // Only URL encodes file name and input
     public bool UseNameParser { get; set; }
     public NameParserType NameParserType { get; set; } = NameParserType.Text;
+    public ICustomUploaderInteraction Interaction { get; }
 
 
-    public ShareXCustomUploaderSyntaxParser()
+    public ShareXCustomUploaderSyntaxParser(ICustomUploaderInteraction? interaction = null)
     {
+        Interaction = interaction ?? CustomUploaderInteraction.Current;
     }
 
-    public ShareXCustomUploaderSyntaxParser(CustomUploaderInput input)
+    public ShareXCustomUploaderSyntaxParser(CustomUploaderInput input, ICustomUploaderInteraction? interaction = null)
     {
+        ArgumentNullException.ThrowIfNull(input);
         FileName = input.FileName;
         Input = input.Input;
+        Interaction = interaction ?? CustomUploaderInteraction.Current;
     }
 
     public override string? Parse(string? text)
@@ -66,4 +70,3 @@ public class ShareXCustomUploaderSyntaxParser : ShareXSyntaxParser
         throw new Exception("Invalid function name: " + functionName);
     }
 }
-

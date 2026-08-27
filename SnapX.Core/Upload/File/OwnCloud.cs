@@ -9,6 +9,7 @@ using SnapX.Core.Upload.BaseServices;
 using SnapX.Core.Upload.BaseUploaders;
 using SnapX.Core.Upload.Utils;
 using SnapX.Core.Utils;
+using SnapX.Core.Utils.Miscellaneous;
 
 namespace SnapX.Core.Upload.File;
 
@@ -89,7 +90,7 @@ public sealed class OwnCloud : FileUploader
         var headers = RequestHelpers.CreateAuthenticationHeader(Username, Password);
         headers["OCS-APIREQUEST"] = "true";
 
-        var response = SendRequest(HttpMethod.Put, url, stream, MimeTypes.GetMimeType(fileName), null, headers);
+        var response = SendRequest(HttpMethod.Put, url, stream, MimeTypesPlus.GetMimeType(fileName), null, headers);
 
         var result = new UploadResult(response);
 

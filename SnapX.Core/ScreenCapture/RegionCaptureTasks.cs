@@ -1,199 +1,321 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 using SnapX.Core.Media;
 using SnapX.Core.ScreenCapture.Helpers;
+using SnapX.Core.Utils;
 
 namespace SnapX.Core.ScreenCapture;
 
+/// <summary>
+/// Result returned by the host application's region selector. Coordinates are
+/// expressed in virtual-desktop pixels, while <see cref="Image"/> contains only
+/// the selected pixels when an image was requested.
+/// </summary>
+public sealed class RegionCaptureSelection
+{
+    public Rectangle Rectangle { get; init; }
+    public Rectangle CaptureBounds { get; init; }
+    public Image? Image { get; init; }
+    public WindowInfo? WindowInfo { get; init; }
+}
+
+/// <summary>
+/// Describes an interactive selection request without introducing a dependency
+/// on a particular UI toolkit in SnapX.Core.
+/// </summary>
+public sealed class RegionCaptureRequest
+{
+    public RegionCaptureOptions Options { get; init; } = new();
+    public RegionCaptureType CaptureType { get; init; }
+    public bool CaptureImage { get; init; }
+}
+
 public static class RegionCaptureTasks
 {
-    public static Image GetRegionImage(RegionCaptureOptions options = null)
-    {
-        RegionCaptureOptions newOptions = GetRegionCaptureOptions(options);
+    private static Func<RegionCaptureRequest, CancellationToken, Task<RegionCaptureSelection?>>? regionSelector;
+    private static readonly Lock LastRegionLock = new();
+    private static Rectangle lastRegion = Rectangle.Empty;
+    private static RegionCaptureType lastRegionCaptureType = RegionCaptureType.Default;
 
-        // using (RegionCaptureForm form = new RegionCaptureForm(RegionCaptureMode.Default, newOptions))
-        // {
-        //     form.ShowDialog();
-        //
-        //     return form.GetResultImage();
-        // }
-        return new Image<Rgba32>(400, 400);
+    public static bool IsRegionSelectorAvailable => Volatile.Read(ref regionSelector) is not null;
+
+    public static void SetRegionSelector(
+        Func<RegionCaptureRequest, CancellationToken, Task<RegionCaptureSelection?>>? selector)
+    {
+        Volatile.Write(ref regionSelector, selector);
     }
 
-    public static Image GetRegionImage(out Rectangle rect, RegionCaptureOptions options = null)
+    public static async Task<RegionCaptureSelection?> SelectRegionAsync(
+        RegionCaptureOptions? options = null,
+        RegionCaptureType captureType = RegionCaptureType.Default,
+        bool captureImage = true,
+        CancellationToken cancellationToken = default)
     {
-        RegionCaptureOptions newOptions = GetRegionCaptureOptions(options);
-        //
-        // using (RegionCaptureForm form = new RegionCaptureForm(RegionCaptureMode.Default, newOptions))
-        // {
-        //     form.ShowDialog();
-        //
-        //     rect = form.GetSelectedRectangle();
-        //     return form.GetResultImage();
-        // }
-        // TODO: Implement GetRegionImage in UI
-        rect = new Rectangle();
-        return new Image<Rgba32>(400, 400);
+        var selector = Volatile.Read(ref regionSelector);
+        if (selector is null)
+        {
+            throw new InvalidOperationException(
+                "Interactive region capture is unavailable because the desktop host did not register a region selector.");
+        }
+
+        var request = new RegionCaptureRequest
+        {
+            Options = GetRegionCaptureOptions(options),
+            CaptureType = captureType,
+            CaptureImage = captureImage
+        };
+
+        RegionCaptureSelection? selection = await selector(request, cancellationToken).ConfigureAwait(false);
+        if (selection is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            Rectangle captureBounds = selection.CaptureBounds;
+            if (captureBounds.Width <= 0 || captureBounds.Height <= 0)
+            {
+                try
+                {
+                    captureBounds = CaptureHelpers.GetScreenBounds();
+                }
+                catch (Exception ex) when (OperatingSystem.IsLinux())
+                {
+                    throw new PlatformNotSupportedException(
+                        "The desktop backend did not provide usable capture bounds and native screen bounds are unavailable.",
+                        ex);
+                }
+            }
+
+            Rectangle normalized = NormalizeRectangle(
+                selection.Rectangle,
+                captureBounds,
+                request.Options.MinimumSize);
+            if (normalized.IsEmpty)
+            {
+                throw new InvalidOperationException("The selected capture region is empty or outside the virtual desktop.");
+            }
+
+            if (captureImage && selection.Image is null)
+            {
+                throw new InvalidOperationException("The region selector completed without returning the requested image.");
+            }
+
+            if (request.Options.UpdateRegionHistory)
+            {
+                lock (LastRegionLock)
+                {
+                    lastRegion = normalized;
+                    lastRegionCaptureType = captureType;
+                }
+            }
+
+            return new RegionCaptureSelection
+            {
+                Rectangle = normalized,
+                CaptureBounds = captureBounds,
+                Image = selection.Image,
+                WindowInfo = selection.WindowInfo
+            };
+        }
+        catch
+        {
+            // The selector transfers image ownership only on a successful
+            // result. Validation failures (bad bounds, cancellation races,
+            // or a missing requested image) must not retain its full-frame
+            // bitmap while the capture gate unwinds.
+            selection.Image?.Dispose();
+            throw;
+        }
     }
 
-    public static bool GetRectangleRegion(out Rectangle rect, RegionCaptureOptions options = null)
+    public static bool TryGetLastRegion(out Rectangle rectangle, out RegionCaptureType captureType)
     {
-        RegionCaptureOptions newOptions = GetRegionCaptureOptions(options);
-
-        // using (RegionCaptureForm form = new RegionCaptureForm(RegionCaptureMode.Default, newOptions))
-        // {
-        //     form.ShowDialog();
-        //
-        //     rect = form.GetSelectedRectangle();
-        // }
-        rect = new Rectangle();
-
-        return !rect.IsEmpty;
+        lock (LastRegionLock)
+        {
+            rectangle = lastRegion;
+            captureType = lastRegionCaptureType;
+            return !rectangle.IsEmpty;
+        }
     }
 
-    public static bool GetRectangleRegion(out Rectangle rect, out WindowInfo windowInfo, RegionCaptureOptions options = null)
+    public static void SetLastRegion(Rectangle rectangle, RegionCaptureType captureType)
     {
-        RegionCaptureOptions newOptions = GetRegionCaptureOptions(options);
+        if (rectangle.Width <= 0 || rectangle.Height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rectangle), "The last region must have positive dimensions.");
+        }
 
-        // using (RegionCaptureForm form = new RegionCaptureForm(RegionCaptureMode.Default, newOptions))
-        // {
-        //     form.ShowDialog();
-        //
-        //     rect = form.GetSelectedRectangle();
-        //     windowInfo = form.GetWindowInfo();
-        // }
-        rect = new Rectangle();
-        windowInfo = new WindowInfo();
+        lock (LastRegionLock)
+        {
+            lastRegion = rectangle;
+            lastRegionCaptureType = captureType;
+        }
+    }
 
-        return !rect.IsEmpty;
+    public static Image? GetRegionImage(RegionCaptureOptions? options = null)
+    {
+        return WaitForSelection(SelectRegionAsync(options))?.Image;
+    }
+
+    public static Image? GetRegionImage(out Rectangle rect, RegionCaptureOptions? options = null)
+    {
+        RegionCaptureSelection? selection = WaitForSelection(SelectRegionAsync(options));
+        rect = selection?.Rectangle ?? Rectangle.Empty;
+        return selection?.Image;
+    }
+
+    public static bool GetRectangleRegion(out Rectangle rect, RegionCaptureOptions? options = null)
+    {
+        RegionCaptureSelection? selection = WaitForSelection(
+            SelectRegionAsync(options, captureImage: false));
+        rect = selection?.Rectangle ?? Rectangle.Empty;
+        return selection is not null;
+    }
+
+    public static bool GetRectangleRegion(
+        out Rectangle rect,
+        out WindowInfo windowInfo,
+        RegionCaptureOptions? options = null)
+    {
+        RegionCaptureSelection? selection = WaitForSelection(
+            SelectRegionAsync(options, captureImage: false));
+        rect = selection?.Rectangle ?? Rectangle.Empty;
+        windowInfo = selection?.WindowInfo ?? new WindowInfo();
+        return selection is not null;
     }
 
     public static bool GetRectangleRegionTransparent(out Rectangle rect)
     {
-        // using (RegionCaptureTransparentForm regionCaptureTransparentForm = new RegionCaptureTransparentForm())
-        // {
-        //     if (regionCaptureTransparentForm.ShowDialog() == DialogResult.OK)
-        //     {
-        //         rect = regionCaptureTransparentForm.SelectionRectangle;
-        //         return true;
-        //     }
-        // }
-
-        rect = Rectangle.Empty;
-        return false;
+        RegionCaptureSelection? selection = WaitForSelection(
+            SelectRegionAsync(captureType: RegionCaptureType.Transparent, captureImage: false));
+        rect = selection?.Rectangle ?? Rectangle.Empty;
+        return selection is not null;
     }
 
-    // public static PointInfo GetPointInfo(RegionCaptureOptions options, Image canvas = null)
-    // {
-    // RegionCaptureOptions newOptions = GetRegionCaptureOptions(options);
-    // newOptions.DetectWindows = false;
-    // newOptions.BackgroundDimStrength = 0;
-
-    // using (RegionCaptureForm form = new RegionCaptureForm(RegionCaptureMode.ScreenColorPicker, newOptions, canvas))
-    // {
-    //     form.ShowDialog();
-    //
-    //     if (form.Result == RegionResult.Region)
-    //     {
-    //         PointInfo pointInfo = new PointInfo();
-    //         pointInfo.Position = form.CurrentPosition;
-    //         pointInfo.Color = form.ShapeManager.GetCurrentColor();
-    //         return pointInfo;
-    //     }
-    // }
-    //
-    //     return null;
-    // }
-
-    public static SimpleWindowInfo GetWindowInfo(RegionCaptureOptions options)
+    public static SimpleWindowInfo? GetWindowInfo(RegionCaptureOptions options)
     {
         RegionCaptureOptions newOptions = GetRegionCaptureOptions(options);
         newOptions.BackgroundDimStrength = 0;
         newOptions.ShowMagnifier = false;
+        newOptions.DetectWindows = true;
 
-        // using (RegionCaptureForm form = new RegionCaptureForm(RegionCaptureMode.OneClick, newOptions))
-        // {
-        //     form.ShowDialog();
-        //
-        //     if (form.Result == RegionResult.Region)
-        //     {
-        //         return form.SelectedWindow;
-        //     }
-        // }
+        RegionCaptureSelection? selection = WaitForSelection(
+            SelectRegionAsync(newOptions, captureImage: false));
+        if (selection?.WindowInfo is not { Handle: var handle } || handle == IntPtr.Zero)
+        {
+            return null;
+        }
 
-        return null;
+        return new SimpleWindowInfo(handle, selection.WindowInfo.Rectangle)
+        {
+            IsWindow = true
+        };
     }
-
-    // public static void ShowScreenColorPickerDialog(RegionCaptureOptions options)
-    // {
-    //     Color color = Color.Red;
-    //     ColorPickerForm colorPickerForm = new ColorPickerForm(color, true, true, options.ColorPickerOptions);
-    //     colorPickerForm.EnableScreenColorPickerButton(() => GetPointInfo(options));
-    //     colorPickerForm.Show();
-    // }
 
     public static void ShowScreenRuler(RegionCaptureOptions options)
     {
-        RegionCaptureOptions newOptions = GetRegionCaptureOptions(options);
-        newOptions.QuickCrop = false;
-        newOptions.UseLightResizeNodes = true;
-
-        // using (RegionCaptureForm form = new RegionCaptureForm(RegionCaptureMode.Ruler, newOptions))
-        // {
-        //     form.ShowDialog();
-        // }
+        throw new NotSupportedException(
+            "The current rectangle selector does not provide an interactive screen ruler.");
     }
 
-    // public static Image ApplyRegionPathToImage(Image img, GraphicsPath gp, out Rectangle resultArea)
-    // {
-    //     if (img != null && gp != null)
-    //     {
-    //         Rectangle regionArea = Rectangle.Round(gp.GetBounds());
-    //         Rectangle screenRectangle = CaptureHelpers.GetScreenBounds();
-    //         resultArea = Rectangle.Intersect(regionArea, new Rectangle(0, 0, screenRectangle.Width, screenRectangle.Height));
-    //
-    //         if (resultArea.IsValid())
-    //         {
-    //             using (Bitmap bmpResult = img.CreateEmptyBitmap())
-    //             using (Graphics g = Graphics.FromImage(bmpResult))
-    //             using (TextureBrush brush = new TextureBrush(img))
-    //             {
-    //                 g.PixelOffsetMode = PixelOffsetMode.Half;
-    //                 g.SmoothingMode = SmoothingMode.HighQuality;
-    //
-    //                 g.FillPath(brush, gp);
-    //
-    //                 return ImageHelpers.CropBitmap(bmpResult, resultArea);
-    //             }
-    //         }
-    //     }
-    //
-    //     resultArea = Rectangle.Empty;
-    //     return null;
-    // }
-
-    private static RegionCaptureOptions GetRegionCaptureOptions(RegionCaptureOptions options)
+    /// <summary>
+    /// Normalizes an arbitrary drag rectangle and clamps it to the virtual desktop.
+    /// </summary>
+    public static Rectangle NormalizeRectangle(Rectangle rectangle, Rectangle bounds, int minimumSize = 1)
     {
-        if (options == null)
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return Rectangle.Empty;
+        }
+
+        long rectangleX2 = (long)rectangle.X + rectangle.Width;
+        long rectangleY2 = (long)rectangle.Y + rectangle.Height;
+        long left = Math.Min(rectangle.X, rectangleX2);
+        long top = Math.Min(rectangle.Y, rectangleY2);
+        long right = Math.Max(rectangle.X, rectangleX2);
+        long bottom = Math.Max(rectangle.Y, rectangleY2);
+
+        long boundsX2 = (long)bounds.X + bounds.Width;
+        long boundsY2 = (long)bounds.Y + bounds.Height;
+        long boundsLeft = Math.Min(bounds.X, boundsX2);
+        long boundsTop = Math.Min(bounds.Y, boundsY2);
+        long boundsRight = Math.Max(bounds.X, boundsX2);
+        long boundsBottom = Math.Max(bounds.Y, boundsY2);
+
+        left = Math.Clamp(left, boundsLeft, boundsRight);
+        top = Math.Clamp(top, boundsTop, boundsBottom);
+        right = Math.Clamp(right, boundsLeft, boundsRight);
+        bottom = Math.Clamp(bottom, boundsTop, boundsBottom);
+
+        long width = right - left;
+        long height = bottom - top;
+        int requiredSize = Math.Max(1, minimumSize);
+        if (left < int.MinValue || left > int.MaxValue
+            || top < int.MinValue || top > int.MaxValue
+            || width < requiredSize || width > int.MaxValue
+            || height < requiredSize || height > int.MaxValue
+            || left + width > int.MaxValue
+            || top + height > int.MaxValue)
+        {
+            return Rectangle.Empty;
+        }
+
+        return new Rectangle((int)left, (int)top, (int)width, (int)height);
+    }
+
+    private static RegionCaptureSelection? WaitForSelection(Task<RegionCaptureSelection?> selectionTask)
+    {
+        if (!selectionTask.IsCompleted && SynchronizationContext.Current is not null)
+        {
+            throw new InvalidOperationException(
+                "Synchronous region selection cannot block a UI synchronization context. Use SelectRegionAsync instead.");
+        }
+
+        return selectionTask.ConfigureAwait(false).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Returns a sanitized copy of the region-capture options for a selector session.
+    /// </summary>
+    public static RegionCaptureOptions GetRegionCaptureOptions(RegionCaptureOptions? options)
+    {
+        if (options is null)
         {
             return new RegionCaptureOptions();
         }
-        else
+
+        return new RegionCaptureOptions
         {
-            return new RegionCaptureOptions()
-            {
-                DetectControls = options.DetectControls,
-                SnapSizes = options.SnapSizes,
-                ShowMagnifier = options.ShowMagnifier,
-                UseSquareMagnifier = options.UseSquareMagnifier,
-                MagnifierPixelCount = options.MagnifierPixelCount,
-                MagnifierPixelSize = options.MagnifierPixelSize,
-                ShowCrosshair = options.ShowCrosshair,
-                ScreenColorPickerInfoText = options.ScreenColorPickerInfoText
-            };
-        }
+            QuickCrop = options.QuickCrop,
+            MinimumSize = Math.Max(1, options.MinimumSize),
+            DetectWindows = options.DetectWindows,
+            DetectControls = options.DetectControls,
+            UseDimming = options.UseDimming,
+            BackgroundDimStrength = Math.Clamp(options.BackgroundDimStrength, 0, 100),
+            SnapSizes = options.SnapSizes?.ToList() ?? [],
+            ShowInfo = options.ShowInfo,
+            ShowMagnifier = options.ShowMagnifier,
+            UseSquareMagnifier = options.UseSquareMagnifier,
+            MagnifierPixelCount = Math.Clamp(options.MagnifierPixelCount,
+                RegionCaptureOptions.MagnifierPixelCountMinimum,
+                RegionCaptureOptions.MagnifierPixelCountMaximum),
+            MagnifierPixelSize = Math.Clamp(options.MagnifierPixelSize,
+                RegionCaptureOptions.MagnifierPixelSizeMinimum,
+                RegionCaptureOptions.MagnifierPixelSizeMaximum),
+            ShowCrosshair = options.ShowCrosshair,
+            UseLightResizeNodes = options.UseLightResizeNodes,
+            EnableAnimations = options.EnableAnimations,
+            IsFixedSize = options.IsFixedSize,
+            FixedSize = options.FixedSize,
+            ActiveMonitorMode = options.ActiveMonitorMode,
+            ScreenColorPickerInfoText = options.ScreenColorPickerInfoText,
+            WindowPickerMode = options.WindowPickerMode,
+            WindowOrRegionPickerMode = options.WindowOrRegionPickerMode,
+            MonitorPickerMode = options.MonitorPickerMode,
+            UpdateRegionHistory = options.UpdateRegionHistory
+        };
     }
 }

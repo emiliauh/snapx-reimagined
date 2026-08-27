@@ -15,9 +15,8 @@ public enum Keys
     LineFeed = 0x0A,
     Clear = 0x0C,
     Return = 0x0D,
-    Shift = 0x10,
     ShiftKey = 0x10,
-    Control = 0x11,
+    ControlKey = 0x11,
     Menu = 0x12,
     Pause = 0x13,
     CapsLock = 0x14,
@@ -151,10 +150,12 @@ public enum Keys
     Noname = 0xFC,
     Pa1 = 0xFD,
     OemClear = 0xFE,
-    Alt = 0xFF6,
     PrintScreen = 0xFF7,
     KeyCode = 0xFFFF, // Mask to isolate the key code part of the hotkey combination
-    Modifiers = Shift | Control | Menu | LShiftKey | RShiftKey | LControlKey | RControlKey | LMenu | RMenu
+    Shift = 0x10000,
+    Control = 0x20000,
+    Alt = 0x40000,
+    Modifiers = Shift | Control | Alt
 
 }
 

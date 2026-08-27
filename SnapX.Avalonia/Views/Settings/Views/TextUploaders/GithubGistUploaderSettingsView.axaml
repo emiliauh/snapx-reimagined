@@ -7,13 +7,13 @@
     <ScrollViewer>
         <StackPanel Margin="12" Spacing="12">
 
-            <controls:SettingsExpander
+            <controls:FASettingsExpander
                 Header="Account Authentication"
                 IconSource="Contact"
                 IsExpanded="True">
 
-                <controls:SettingsExpanderItem Content="Account Status">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Account Status">
+                    <controls:FASettingsExpanderItem.Footer>
                         <StackPanel
                             Orientation="Horizontal"
                             Spacing="12"
@@ -24,51 +24,51 @@
                                 x:Name="LoginStatus" />
                             <Button
                                 Click="ConnectButton_OnClick"
-                                Content="Connect..."
+                                Content="Connect"
                                 Width="120"
                                 x:Name="ConnectButton" />
                         </StackPanel>
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Authorization Code" Description="Paste the code from GitHub after authorizing.">
+                <controls:FASettingsExpanderItem Content="Authorization Code" Description="Paste the code from GitHub after authorizing.">
 
-                    <controls:SettingsExpanderItem.Footer>
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox
                             PastingFromClipboard="PasswordTextBox_OnPastingFromClipboard"
                             Watermark="Paste authorization code here"
                             Width="400"
                             x:Name="PasswordTextBox" />
-                    </controls:SettingsExpanderItem.Footer>
+                    </controls:FASettingsExpanderItem.Footer>
 
-                </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem>
 
-            </controls:SettingsExpander>
+            </controls:FASettingsExpander>
 
-            <controls:SettingsExpander Header="Gist Options" IsExpanded="True">
+            <controls:FASettingsExpander Header="Gist Options" IsExpanded="True">
 
-                <controls:SettingsExpanderItem Content="Use Raw URL">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Use Raw URL">
+                    <controls:FASettingsExpanderItem.Footer>
                         <CheckBox x:Name="cbGistUseRawURL" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Publish Gist as Public">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Publish Gist as Public">
+                    <controls:FASettingsExpanderItem.Footer>
                         <CheckBox x:Name="cbGistPublishPublic" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Custom URL">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Custom URL">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox
                             Watermark="Optional custom URL"
                             Width="400"
                             x:Name="txtGistCustomURL" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-            </controls:SettingsExpander>
+            </controls:FASettingsExpander>
 
         </StackPanel>
     </ScrollViewer>

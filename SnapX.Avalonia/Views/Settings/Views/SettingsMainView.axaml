@@ -19,7 +19,7 @@
     <Design.DataContext>
         <viewModels1:SettingsMainViewVM />
     </Design.DataContext>
-    <controls:NavigationView
+    <controls:FANavigationView
         AlwaysShowHeader="False"
         BackRequested="NavigationView_OnBackRequested"
         Background="{DynamicResource SolidBackgroundFillColorBase}"
@@ -31,367 +31,375 @@
         PaneDisplayMode="Left"
         SelectionChanged="NavigationView_OnSelectionChanged"
         UseLayoutRounding="True">
-        <controls:NavigationView.MenuItems>
-            <controls:NavigationViewItem Content="Application" Tag="Application">
-                <controls:NavigationViewItem.IconSource>
+        <controls:FANavigationView.Styles>
+            <Style Selector="controls|FANavigationViewItem">
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="Padding" Value="12,0" />
+                <Setter Property="MinHeight" Value="44" />
+            </Style>
+        </controls:FANavigationView.Styles>
+        <controls:FANavigationView.MenuItems>
+            <controls:FANavigationViewItem Content="Application" Tag="Application">
+                <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="WindowApps"
-                        IconSize="Size32"
+                        IconSize="Size24"
                         IconVariant="Regular" />
-                </controls:NavigationViewItem.IconSource>
-                <controls:NavigationView.MenuItems>
-                    <controls:NavigationViewItem Content="General" Tag="General">
-                        <controls:NavigationViewItem.IconSource>
+                </controls:FANavigationViewItem.IconSource>
+                <controls:FANavigationView.MenuItems>
+                    <controls:FANavigationViewItem Content="General" Tag="General">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="AppGeneric"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Theme">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Theme" Tag="Theme">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="DarkTheme"
                                 IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Integration" Tag="Integration">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Integration" Tag="Integration">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="CalligraphyPen"
                                 IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Paths" Tag="Paths">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Paths" Tag="Paths">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="Folder"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Tag="Housekeeping">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Tag="Housekeeping">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="BroomSparkle"
-                                IconSize="Size20"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
                         <ToolTip.Tip>Previously, Main window</ToolTip.Tip>
                         Housekeeping
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="View" Tag="View">
-                        <controls:NavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="View" Tag="View">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="SquareHintApps"
                                 IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Upload" Tag="Upload">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Upload" Tag="Upload">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="ArrowUpload"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="History" Tag="History">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="History" Tag="History">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="History"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Print" Tag="Print">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Print" Tag="Print">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="Print"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Proxy" Tag="Proxy">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Proxy" Tag="Proxy">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="ShieldPerson"
-                                IconSize="Size20"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Advanced" Tag="Advanced">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Advanced" Tag="Advanced">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="WrenchScrewdriver"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                </controls:NavigationView.MenuItems>
-            </controls:NavigationViewItem>
-            <controls:NavigationViewItem Content="Tasks" Tag="Tasks">
-                <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                </controls:FANavigationView.MenuItems>
+            </controls:FANavigationViewItem>
+            <controls:FANavigationViewItem Content="Tasks" Tag="Tasks">
+                <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="TaskList"
                         IconSize="Size24"
                         IconVariant="Regular" />
-                </controls:NavigationViewItem.IconSource>
-                <controls:NavigationView.MenuItems>
-                    <controls:NavigationViewItem Content="Image" Tag="Image">
-                        <controls:NavigationViewItem.IconSource>
+                </controls:FANavigationViewItem.IconSource>
+                <controls:FANavigationView.MenuItems>
+                    <controls:FANavigationViewItem Content="Image" Tag="Image">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="Image"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                        <controls:NavigationViewItem.MenuItems>
-                            <controls:NavigationViewItem Content="Effects" Tag="Effects">
-                                <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                        <controls:FANavigationViewItem.MenuItems>
+                            <controls:FANavigationViewItem Content="Effects" Tag="Effects">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageSparkle"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                            <controls:NavigationViewItem Content="Thumbnail" Tag="Thumbnail">
-                                <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                            <controls:FANavigationViewItem Content="Thumbnail" Tag="Thumbnail">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="TabDesktopImage"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                        </controls:NavigationViewItem.MenuItems>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Capture" Tag="Capture">
-                        <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                        </controls:FANavigationViewItem.MenuItems>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Capture" Tag="Capture">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="CameraEdit"
-                                IconSize="Size20"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                        <controls:NavigationViewItem.MenuItems>
-                            <controls:NavigationViewItem Content="Region" Tag="Region">
-                                <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                        <controls:FANavigationViewItem.MenuItems>
+                            <controls:FANavigationViewItem Content="Region" Tag="Region">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageBorder"
-                                        IconSize="Size32"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                            <controls:NavigationViewItem Content="Screen recorder" Tag="ScreenRecordOptions">
-                                <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                            <controls:FANavigationViewItem Content="Screen recorder" Tag="ScreenRecordOptions">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="VideoRecording"
-                                        IconSize="Size20"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                            <controls:NavigationViewItem Content="OCR" Tag="OCR">
-                                <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                            <controls:FANavigationViewItem Content="OCR" Tag="OCR">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageAltText"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                        </controls:NavigationViewItem.MenuItems>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Upload" Tag="Upload">
-                        <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                        </controls:FANavigationViewItem.MenuItems>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Upload" Tag="Upload">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="ArrowUpload"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                        <controls:NavigationViewItem.MenuItems>
-                            <controls:NavigationViewItem Content="File naming" Tag="FileNaming">
-                                <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                        <controls:FANavigationViewItem.MenuItems>
+                            <controls:FANavigationViewItem Content="File naming" Tag="FileNaming">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="RenameA"
-                                        IconSize="Size20"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                            <controls:NavigationViewItem Content="Clipboard" Tag="Clipboard">
-                                <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                            <controls:FANavigationViewItem Content="Clipboard" Tag="Clipboard">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ClipboardSettings"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                            <controls:NavigationViewItem Content="Filters" Tag="Filters">
-                                <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                            <controls:FANavigationViewItem Content="Filters" Tag="Filters">
+                                <controls:FANavigationViewItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="Filter"
-                                        IconSize="Size32"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:NavigationViewItem.IconSource>
-                            </controls:NavigationViewItem>
-                        </controls:NavigationViewItem.MenuItems>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Actions" Tag="Actions">
-                        <controls:NavigationViewItem.IconSource>
+                                </controls:FANavigationViewItem.IconSource>
+                            </controls:FANavigationViewItem>
+                        </controls:FANavigationViewItem.MenuItems>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Actions" Tag="Actions">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="TaskListSquareSettings"
-                                IconSize="Size20"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Watch folders" Tag="WatchFolders">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Watch folders" Tag="WatchFolders">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="FolderSearch"
                                 IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Tools" Tag="Tools">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Tools" Tag="Tools">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="Toolbox"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Advanced" Tag="Advanced">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Advanced" Tag="Advanced">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="WrenchScrewdriver"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                </controls:NavigationView.MenuItems>
-            </controls:NavigationViewItem>
-            <controls:NavigationViewItem Content="Hotkeys" Tag="Hotkeys">
-                <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                </controls:FANavigationView.MenuItems>
+            </controls:FANavigationViewItem>
+            <controls:FANavigationViewItem Content="Hotkeys" Tag="Hotkeys">
+                <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="KeyboardShiftUppercase"
                         IconSize="Size24"
                         IconVariant="Regular" />
-                </controls:NavigationViewItem.IconSource>
-            </controls:NavigationViewItem>
-            <controls:NavigationViewItem Content="Destinations">
-                <controls:NavigationViewItem.IconSource>
+                </controls:FANavigationViewItem.IconSource>
+            </controls:FANavigationViewItem>
+            <controls:FANavigationViewItem Content="Destinations" Tag="Destinations">
+                <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="GlobeLocation"
                         IconSize="Size24"
                         IconVariant="Regular" />
-                </controls:NavigationViewItem.IconSource>
-                <controls:NavigationViewItem.MenuItems>
-                    <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.ImageUploaders}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.ImageUploaders}">
-                        <controls:NavigationViewItem.IconSource>
+                </controls:FANavigationViewItem.IconSource>
+                <controls:FANavigationViewItem.MenuItems>
+                    <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.ImageUploaders}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.ImageUploaders}">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="ImageCopy"
                                 IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                        <controls:NavigationViewItem.MenuItems>
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Imgur}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Imgur}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.ImageShack}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.ImageShack}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Flickr}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Flickr}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Picasa}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Picasa}" />
+                        </controls:FANavigationViewItem.IconSource>
+                        <controls:FANavigationViewItem.MenuItems>
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Imgur}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Imgur}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.ImageShack}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.ImageShack}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Flickr}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Flickr}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Picasa}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Picasa}" />
 
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Chevereto}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Chevereto}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Vgyme}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Vgyme}" />
-                        </controls:NavigationViewItem.MenuItems>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.TextUploaders}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.TextUploaders}">
-                        <controls:NavigationViewItem.IconSource>
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Chevereto}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Chevereto}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:ImageDestination.Vgyme}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:ImageDestination.Vgyme}" />
+                        </controls:FANavigationViewItem.MenuItems>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.TextUploaders}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.TextUploaders}">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="DocumentText"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                        <controls:NavigationViewItem.MenuItems>
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Pastebin}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Pastebin}" />
+                        </controls:FANavigationViewItem.IconSource>
+                        <controls:FANavigationViewItem.MenuItems>
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Pastebin}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Pastebin}" />
                             <!--  Paste2 has no config  -->
-                            <!-- <controls:NavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Paste2}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Paste2}" /> -->
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Paste_ee}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Paste_ee}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Gist}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Gist}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Hastebin}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Hastebin}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.OneTimeSecret}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.OneTimeSecret}" />
-                        </controls:NavigationViewItem.MenuItems>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.FileUploaders}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.FileUploaders}">
-                        <controls:NavigationViewItem.IconSource>
+                            <!-- <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Paste2}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Paste2}" /> -->
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Paste_ee}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Paste_ee}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Gist}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Gist}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.Hastebin}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.Hastebin}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:TextDestination.OneTimeSecret}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:TextDestination.OneTimeSecret}" />
+                        </controls:FANavigationViewItem.MenuItems>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.FileUploaders}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.FileUploaders}">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="DataFunnel"
                                 IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                        <controls:NavigationViewItem.MenuItems>
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.FTP}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.FTP}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Dropbox}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Dropbox}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.GoogleDrive}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.GoogleDrive}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.GoogleCloudStorage}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.GoogleCloudStorage}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.OneDrive}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.OneDrive}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Puush}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Puush}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Box}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Box}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.AmazonS3}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.AmazonS3}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.AzureStorage}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.AzureStorage}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.BackblazeB2}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.BackblazeB2}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Mega}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Mega}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.OwnCloud}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.OwnCloud}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.MediaFire}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.MediaFire}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Pushbullet}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Pushbullet}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.SendSpace}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.SendSpace}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Localhostr}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Localhostr}" />
-                            <!-- <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Lambda}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Lambda}" /> -->
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Pomf}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Pomf}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Seafile}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Seafile}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Streamable}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Streamable}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Sul}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Sul}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Lithiio}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Lithiio}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Plik}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Plik}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.YouTube}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.YouTube}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.SharedFolder}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.SharedFolder}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Email}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Email}" />
+                        </controls:FANavigationViewItem.IconSource>
+                        <controls:FANavigationViewItem.MenuItems>
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.FTP}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.FTP}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Dropbox}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Dropbox}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.GoogleDrive}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.GoogleDrive}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.GoogleCloudStorage}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.GoogleCloudStorage}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.OneDrive}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.OneDrive}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Puush}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Puush}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Box}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Box}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.AmazonS3}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.AmazonS3}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.AzureStorage}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.AzureStorage}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.BackblazeB2}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.BackblazeB2}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Mega}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Mega}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.OwnCloud}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.OwnCloud}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.MediaFire}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.MediaFire}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Pushbullet}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Pushbullet}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.SendSpace}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.SendSpace}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Localhostr}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Localhostr}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Lambda}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Lambda}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Pomf}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Pomf}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Seafile}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Seafile}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Streamable}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Streamable}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Sul}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Sul}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Lithiio}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Lithiio}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Plik}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Plik}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.YouTube}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.YouTube}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.SharedFolder}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.SharedFolder}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:FileDestination.Email}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:FileDestination.Email}" />
 
 
 
-                        </controls:NavigationViewItem.MenuItems>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.URLShorteners}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.URLShorteners}">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.MenuItems>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UploaderCategory.URLShorteners}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UploaderCategory.URLShorteners}">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="LinkEdit"
                                 IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                        <controls:NavigationViewItem.MenuItems>
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.YOURLS}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.YOURLS}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.Polr}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.Polr}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.FirebaseDynamicLinks}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.FirebaseDynamicLinks}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.Kutt}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.Kutt}" />
-                            <controls:NavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.ZeroWidthShortener}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.ZeroWidthShortener}" />
+                        </controls:FANavigationViewItem.IconSource>
+                        <controls:FANavigationViewItem.MenuItems>
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.YOURLS}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.YOURLS}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.Polr}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.Polr}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.FirebaseDynamicLinks}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.FirebaseDynamicLinks}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.Kutt}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.Kutt}" />
+                            <controls:FANavigationViewItem Content="{Binding Source={x:Static upload:UrlShortenerType.ZeroWidthShortener}, Converter={StaticResource EnumDescConverter}}" Tag="{x:Static upload:UrlShortenerType.ZeroWidthShortener}" />
 
 
-                        </controls:NavigationViewItem.MenuItems>
-                    </controls:NavigationViewItem>
-                    <controls:NavigationViewItem Content="Custom uploaders" Tag="CustomUploader">
-                        <controls:NavigationViewItem.IconSource>
+                        </controls:FANavigationViewItem.MenuItems>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="Custom uploaders" Tag="CustomUploader">
+                        <controls:FANavigationViewItem.IconSource>
                             <fluent:FluentIconSource
                                 Icon="AppGeneric"
-                                IconSize="Size32"
+                                IconSize="Size24"
                                 IconVariant="Regular" />
-                        </controls:NavigationViewItem.IconSource>
-                    </controls:NavigationViewItem>
-                </controls:NavigationViewItem.MenuItems>
-            </controls:NavigationViewItem>
-        </controls:NavigationView.MenuItems>
-        <controls:NavigationView.PaneFooter>
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                </controls:FANavigationViewItem.MenuItems>
+            </controls:FANavigationViewItem>
+        </controls:FANavigationView.MenuItems>
+        <controls:FANavigationView.PaneFooter>
             <StackPanel
                 HorizontalAlignment="Stretch"
                 Margin="8"
                 Name="ControlPanelStackPanel"
                 Spacing="4">
                 <TextBlock
+                    Name="ControlPanelHeader"
                     FontSize="11"
                     Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
                     HorizontalAlignment="Center"
@@ -413,7 +421,7 @@
                     HorizontalContentAlignment="Left"
                     Tag="Destinations">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <controls:SymbolIcon FontSize="16" Symbol="Share" />
+                        <controls:FASymbolIcon FontSize="16" Symbol="Share" />
                         <TextBlock Text="Destinations" VerticalAlignment="Center" />
                     </StackPanel>
 
@@ -424,7 +432,7 @@
                             OverlayDismissEventPassThrough="True"
                             Placement="RightEdgeAlignedTop"
                             ShowMode="Transient">
-                            <controls:MenuFlyoutItem Text="Loading..." />
+                            <controls:FAMenuFlyoutItem Text="Loading" />
                         </controls:FAMenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
@@ -443,230 +451,230 @@
                             Closing="PopupFlyoutBase_OnClosing"
                             Opening="PopupFlyoutBase_OnOpening"
                             Placement="RightEdgeAlignedTop"
-                            ShowMode="TransientWithDismissOnPointerMoveAway">
-                            <controls:ToggleMenuFlyoutItem
+                            ShowMode="Transient">
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 IsVisible="False"
                                 Tag="!ShowQuickTaskMenu"
                                 Text="Show quick task menu" />
-                            <controls:ToggleMenuFlyoutItem
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 IsVisible="False"
                                 Tag="!ShowAfterCaptureWindow"
                                 Text="Show After capture window" />
-                            <controls:ToggleMenuFlyoutItem
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 Tag="!BeautifyImage"
                                 Text="Beautify image">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageSparkle"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:MenuFlyoutSubItem IsEnabled="False" Text="Add Image Effects">
-                                <controls:MenuFlyoutSubItem.IconSource>
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAMenuFlyoutSubItem IsEnabled="False" Text="Add Image Effects">
+                                <controls:FAMenuFlyoutSubItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="FilmstripImage"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:MenuFlyoutSubItem.IconSource>
-                            </controls:MenuFlyoutSubItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAMenuFlyoutSubItem.IconSource>
+                            </controls:FAMenuFlyoutSubItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 Tag="!AnnotateImage"
                                 Text="Open in Image Editor">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageEdit"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!CopyImageToClipboard"
                                 Text="Copy Image to Clipboard">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageCopy"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 IsVisible="False"
                                 Tag="!PinToScreen"
                                 Text="Pin To Screen">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="TabDesktopImage"
-                                        IconSize="Size28"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 IsVisible="False"
                                 Tag="!SendImageToPrinter"
                                 Text="Send Image to Printer">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="DocumentPrint"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!SaveImageToFile"
                                 Text="Save to File">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="DocumentSave"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 IsVisible="False"
                                 Tag="!SaveImageToFileWithDialog"
                                 Text="Save to File (Dialog)">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="DocumentImage"
-                                        IconSize="Size28"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!SaveThumbnailImageToFile"
                                 Text="Save thumbnail image to file">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageReflection"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!PerformActions"
                                 Text="Perform actions">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="Code"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!CopyFileToClipboard"
                                 Text="Copy file to clipboard">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ClipboardPaste"
-                                        IconSize="Size32"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!CopyFilePathToClipboard"
                                 Text="Copy file path to clipboard">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ClipboardText"
-                                        IconSize="Size32"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!ShowInExplorer"
                                 Text="Show file in explorer">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="FolderDocument"
-                                        IconSize="Size28"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!ScanQRCode"
                                 Text="Scan QR Code">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="QrCode"
-                                        IconSize="Size28"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!DoOCR"
                                 Text="Perform OCR">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ScanText"
-                                        IconSize="Size28"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 Tag="!ShowBeforeUploadWindow"
                                 Text="Show before upload window">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="WindowNew"
-                                        IconSize="Size28"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!UploadImageToHost"
                                 Text="Upload image to host">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageGlobe"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!DeleteFile"
                                 Text="Delete file locally">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="Delete"
-                                        IconSize="Size28"
+                                        IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
                         </controls:FAMenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
 
                 <DropDownButton HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <controls:SymbolIcon FontSize="16" Symbol="CloudSync" />
+                        <controls:FASymbolIcon FontSize="16" Symbol="CloudSync" />
                         <TextBlock Text="After Upload" VerticalAlignment="Center" />
                     </StackPanel>
 
@@ -675,103 +683,103 @@
                             Closing="PopupFlyoutBase_OnClosing"
                             Opening="PopupFlyoutBase_OnOpening"
                             Placement="RightEdgeAlignedTop"
-                            ShowMode="TransientWithDismissOnPointerMoveAway">
-                            <controls:ToggleMenuFlyoutItem
+                            ShowMode="Transient">
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IsEnabled="False"
                                 Tag="!ShowAfterUploadWindow"
                                 Text="Show after upload window" />
-                            <controls:ToggleMenuFlyoutItem
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!UseURLShortener"
                                 Text="Shorten URL">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="LinkEdit"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IconSource="Share"
                                 Tag="!ShareURL"
                                 Text="Share URL" />
-                            <controls:ToggleMenuFlyoutItem
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 IconSource="Link"
                                 Tag="!CopyURLToClipboard"
                                 Text="Copy URL to Clipboard" />
 
-                            <controls:ToggleMenuFlyoutItem
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!OpenURL"
                                 Text="Open URL">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="PreviewLink"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
-                            <controls:ToggleMenuFlyoutItem
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
+                            <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
                                 Tag="!ShowQRCode"
                                 Text="Show QR Code">
-                                <controls:ToggleMenuFlyoutItem.IconSource>
+                                <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="QrCode"
                                         IconSize="Size24"
                                         IconVariant="Regular" />
-                                </controls:ToggleMenuFlyoutItem.IconSource>
-                            </controls:ToggleMenuFlyoutItem>
+                                </controls:FAToggleMenuFlyoutItem.IconSource>
+                            </controls:FAToggleMenuFlyoutItem>
                         </controls:FAMenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
             </StackPanel>
-        </controls:NavigationView.PaneFooter>
-        <controls:NavigationView.FooterMenuItems>
-            <controls:NavigationViewItem
+        </controls:FANavigationView.PaneFooter>
+        <controls:FANavigationView.FooterMenuItems>
+            <controls:FANavigationViewItem
                 Content="Config Folder"
                 PointerPressed="DynamicFolder_OnPointerPressed"
+                Tag="ConfigFolder"
                 ToolTip.Tip="{x:Static core:SnapXL.ConfigFolder}">
-                <controls:NavigationViewItem.IconSource>
+                <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="Folder"
-                        IconSize="Size32"
+                        IconSize="Size24"
                         IconVariant="Regular" />
-                </controls:NavigationViewItem.IconSource>
-            </controls:NavigationViewItem>
-            <controls:NavigationViewItem
+                </controls:FANavigationViewItem.IconSource>
+            </controls:FANavigationViewItem>
+            <controls:FANavigationViewItem
                 Content="Database"
                 Tag="Database"
-                ToolTip.Tip="I'm still cooking in the oven, don't judge me!">
-                <controls:NavigationViewItem.IconSource>
+                ToolTip.Tip="Inspect and maintain the local task database.">
+                <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="DatabaseWindow"
-                        IconSize="Size20"
+                        IconSize="Size24"
                         IconVariant="Regular" />
-                </controls:NavigationViewItem.IconSource>
-            </controls:NavigationViewItem>
-            <controls:NavigationViewItem Content="Import/Export" Tag="ImportExport">
-                <controls:NavigationViewItem.IconSource>
+                </controls:FANavigationViewItem.IconSource>
+            </controls:FANavigationViewItem>
+            <controls:FANavigationViewItem Content="Import/Export" Tag="ImportExport">
+                <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="ArchiveSettings"
-                        IconSize="Size32"
+                        IconSize="Size24"
                         IconVariant="Regular" />
-                </controls:NavigationViewItem.IconSource>
-            </controls:NavigationViewItem>
-        </controls:NavigationView.FooterMenuItems>
-        <controls:NavigationView.AutoCompleteBox>
+                </controls:FANavigationViewItem.IconSource>
+            </controls:FANavigationViewItem>
+        </controls:FANavigationView.FooterMenuItems>
+        <controls:FANavigationView.AutoCompleteBox>
             <!--
                 See AutoSuggestBox documentation for
                 more info about how to implement search.
             -->
             <AutoCompleteBox x:Name="NavViewSearchBox" />
-        </controls:NavigationView.AutoCompleteBox>
+        </controls:FANavigationView.AutoCompleteBox>
         <Border>
             <TransitioningContentControl Content="{Binding CurrentPage}" />
         </Border>
-    </controls:NavigationView>
+    </controls:FANavigationView>
 </UserControl>
-

@@ -523,3 +523,12 @@ APIKeysLocal.cs
 # macOS specific files
 .DS_Store
 *.DS_Store
+
+# Local development artifacts - never publish these
+.idea/
+.vscode/
+.agents/
+.codex/
+.snapx-*/
+SNAPX_HANDOFF_*.md
+docs/

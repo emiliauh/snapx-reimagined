@@ -133,6 +133,8 @@ public class SnapXL
 
     internal static Stopwatch StartTimer { get; private set; }
     internal static HotkeyManager HotkeyManager { get; set; }
+    private static SynchronizationContext? HotkeySynchronizationContext { get; set; }
+    private static readonly SemaphoreSlim HotkeyReloadGate = new(1, 1);
     internal static WatchFolderManager WatchFolderManager { get; set; }
     public static SnapXCLIManager CLIManager { get; set; }
 
@@ -438,6 +440,8 @@ public class SnapXL
             DebugHelper.WriteLine($"DB: {Args.CurrentState}");
         };
         SettingManager.LoadInitialSettings();
+        SettingManager.WaitHotkeysConfig();
+        InitializeHotkeys();
         if (TelemetryEnabled()) InitTelemetryServices();
         if (CLIManager.IsCommandExist("noconsole")) IsCLI = false;
         // CleanupManager.CleanupAsync();
@@ -458,6 +462,13 @@ public class SnapXL
 
     public static void InitTelemetryServices()
     {
+        // Telemetry is opt-in for this fork: nothing is initialized or sent unless
+        // SNAPX_TELEMETRY=1 is set in the environment.
+        if (!TelemetryOptIn)
+        {
+            return;
+        }
+
         var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.ClearProviders();
@@ -465,7 +476,7 @@ public class SnapXL
         });
         var logger = loggerFactory.CreateLogger<AptabaseClient>();
 
-        var aptabaseClient = new AptabaseClient("A-US-4105716286", new AptabaseOptions
+        var aptabaseClient = new AptabaseClient(string.Empty, new AptabaseOptions
         {
             EnablePersistence = true,
 #if DEBUG
@@ -500,13 +511,21 @@ public class SnapXL
         });
         InitSentry(TelemetryHandler);
     }
+
+    public static bool TelemetryOptIn => Environment.GetEnvironmentVariable("SNAPX_TELEMETRY") == "1";
+
     public static void InitSentry(Telemetry telemetry)
     {
+        // Only initialize Sentry when telemetry is enabled and a DSN (env) exists.
+        if (!TelemetryOptIn || string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SENTRY_DSN")))
+        {
+            return;
+        }
+
         SentrySdk.Init(options =>
               {
                   // This allows end users to test themselves what data is sent to Sentry
-                  var sentryDsnEnv = Environment.GetEnvironmentVariable("SENTRY_DSN");
-                  options.Dsn = !string.IsNullOrWhiteSpace(sentryDsnEnv) ? sentryDsnEnv : "https://e0a07df30c8b96560f93b10cf4338eba@o4504136997928960.ingest.us.sentry.io/4508785180737536";
+                  options.Dsn = Environment.GetEnvironmentVariable("SENTRY_DSN");
 
                   // When debug is enabled, the Sentry client will emit detailed debugging information to the console.
                   options.Debug = Environment.GetEnvironmentVariable("SENTRY_DEBUG") == "1";
@@ -600,6 +619,87 @@ public class SnapXL
     public UploadersConfig GetUploadersConfig() => UploadersConfig;
     public HotkeysConfig GetHotkeysConfig() => HotkeysConfig;
 
+    /// <summary>
+    /// Re-applies the persisted hotkey options after the settings UI changes them.
+    /// Keeping this behind a public facade prevents UI projects from reaching into
+    /// the internal HotkeyManager while still making edits take effect immediately.
+    /// </summary>
+    public static void ReloadHotkeys()
+    {
+        ReloadHotkeysAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Re-registers global shortcuts without blocking the Avalonia UI thread.
+    /// Portal registration can require user input and can take several seconds.
+    /// </summary>
+    public static async Task ReloadHotkeysAsync(CancellationToken cancellationToken = default)
+    {
+        if (Settings is null || HotkeysConfig is null) return;
+
+        await HotkeyReloadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            SynchronizationContext? context = SynchronizationContext.Current ?? HotkeySynchronizationContext;
+            await Task.Run(() => InitializeHotkeys(context), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            HotkeyReloadGate.Release();
+        }
+    }
+
+    private static void InitializeHotkeys(SynchronizationContext? synchronizationContext = null)
+    {
+        HotkeySynchronizationContext = synchronizationContext ?? SynchronizationContext.Current;
+        HotkeyManager?.Dispose();
+        HotkeyManager = new HotkeyManager(
+            backend: HotkeyBackendFactory.CreateDefault(Settings.HotkeyBackendPreference),
+            hotkeysDisabled: Settings.DisableHotkeys,
+            registrationAllowed: !IgnoreHotkeyWarning);
+        HotkeyManager.HotkeyRepeatLimit = TimeSpan.FromMilliseconds(
+            Settings.HotkeyRepeatLimit > 0 ? Settings.HotkeyRepeatLimit : 500);
+        HotkeyManager.HotkeyTrigger += DispatchHotkey;
+        HotkeyManager.UpdateHotkeys(HotkeysConfig.Hotkeys, showFailedHotkeys: !IgnoreHotkeyWarning);
+
+        if (!HotkeyManager.Backend.IsAvailable)
+        {
+            DebugHelper.WriteLine(
+                $"Global hotkeys unavailable ({HotkeyManager.Backend.Name}): {HotkeyManager.Backend.AvailabilityError}");
+        }
+    }
+
+    private static void DispatchHotkey(HotkeySettings hotkeySetting)
+    {
+        SynchronizationContext? context = HotkeySynchronizationContext;
+        if (context != null && context != SynchronizationContext.Current)
+        {
+            context.Post(
+                static state => _ = DispatchHotkeyAsync((HotkeySettings)state!),
+                hotkeySetting);
+        }
+        else if (context != null)
+        {
+            _ = DispatchHotkeyAsync(hotkeySetting);
+        }
+        else
+        {
+            _ = Task.Run(() => DispatchHotkeyAsync(hotkeySetting));
+        }
+    }
+
+    private static async Task DispatchHotkeyAsync(HotkeySettings hotkeySetting)
+    {
+        try
+        {
+            await TaskHelpers.ExecuteJob(hotkeySetting.TaskSettings).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, $"Hotkey task failed: {hotkeySetting}");
+        }
+    }
+
 
     public static void CloseSequence()
     {
@@ -608,6 +708,7 @@ public class SnapXL
 
         DebugHelper.WriteLine("SnapX closing!");
         TaskManager.StopAllTasks();
+        HotkeyManager?.Dispose();
         WatchFolderManager?.Dispose();
         SettingManager.SaveAllSettings();
         SettingManager.Dispose();
@@ -1016,4 +1117,3 @@ public class SnapXL
         telemetry.LogTelemetry("Sentry", sentryEvent.TransactionName ?? sentryEvent.Exception?.Message ?? "SentryEvent", json.ToJsonString());
     }
 }
-

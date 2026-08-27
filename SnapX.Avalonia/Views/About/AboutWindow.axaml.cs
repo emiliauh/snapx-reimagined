@@ -16,7 +16,7 @@ using SnapX.Core.Utils;
 
 namespace SnapX.Avalonia;
 
-public partial class AboutWindow : AppWindow
+public partial class AboutWindow : FAAppWindow
 {
     internal AboutWindowViewModel ViewModel;
 
@@ -143,7 +143,7 @@ public partial class AboutWindow : AppWindow
     private void DonateButton_Click(object? Sender, RoutedEventArgs E)
     {
         var donationMenu = new Donation();
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
             Title = Lang.KeepSnapXOpenAndFree,
             Content = donationMenu,
@@ -151,7 +151,7 @@ public partial class AboutWindow : AppWindow
             PrimaryButtonText = Lang.CountMeIn,
             IsSecondaryButtonEnabled = true,
             SecondaryButtonText = Lang.MaybeLater,
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             PrimaryButtonCommand = donationMenu.PrimaryClickCommand,
             FullSizeDesired = true,
         };

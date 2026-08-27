@@ -153,7 +153,10 @@ public class UploadInfoManager
 
     public void CopyFile()
     {
-        if (IsItemSelected && SelectedItem.IsFileExist) Clipboard.CopyFile(SelectedItem.Info.FilePath);
+        if (IsItemSelected && SelectedItem.IsFileExist)
+        {
+            SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent([SelectedItem.Info.FilePath]));
+        }
     }
 
     public void CopyImage()
@@ -168,7 +171,10 @@ public class UploadInfoManager
 
     public void CopyThumbnailFile()
     {
-        if (IsItemSelected && SelectedItem.IsThumbnailFileExist) Clipboard.CopyFile(SelectedItem.Info.ThumbnailFilePath);
+        if (IsItemSelected && SelectedItem.IsThumbnailFileExist)
+        {
+            SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent([SelectedItem.Info.ThumbnailFilePath]));
+        }
     }
 
     public void CopyThumbnailImage()
@@ -331,4 +337,3 @@ public class UploadInfoManager
 
     #endregion Other
 }
-

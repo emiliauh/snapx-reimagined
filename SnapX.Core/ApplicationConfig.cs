@@ -4,6 +4,8 @@ using SixLabors.ImageSharp;
 using SnapX.Core.History;
 using SnapX.Core.ImageEffects;
 using SnapX.Core.Job;
+using SnapX.Core.Hotkey;
+using SnapX.Core.ScreenCapture;
 using SnapX.Core.Utils;
 using SnapX.Core.Utils.Converters;
 using SnapX.Core.Utils.Miscellaneous;
@@ -160,6 +162,8 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
     //
     [Category("Hotkey"), DefaultValue(false), Description("Disables hotkeys.")]
     public bool DisableHotkeys { get; set; }
+    [Category("Hotkey"), DefaultValue(HotkeyBackendPreference.Automatic), Description("Selects the global hotkey backend.")]
+    public HotkeyBackendPreference HotkeyBackendPreference { get; set; } = HotkeyBackendPreference.Automatic;
     //
     [Category("Hotkey"), DefaultValue(false), Description("If active window is fullscreen then hotkeys won't be executed.")]
     public bool DisableHotkeysOnFullscreen { get; set; }
@@ -178,6 +182,8 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
             hotkeyRepeatLimit = Math.Max(value, 200);
         }
     }
+    [Category("Integration"), DefaultValue(WaylandCaptureMode.Automatic), Description("Selects the screen capture path for Wayland sessions.")]
+    public WaylandCaptureMode WaylandCaptureMode { get; set; } = WaylandCaptureMode.Automatic;
     [Category("Clipboard"), DefaultValue(true), Description("Show clipboard content viewer when using clipboard upload in main window.")]
     public bool ShowClipboardContentViewer { get; set; }
     //
@@ -230,4 +236,3 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
 
     public string? SQLitePath { get; set; }
 }
-

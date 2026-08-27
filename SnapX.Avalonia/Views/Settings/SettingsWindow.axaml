@@ -1,4 +1,4 @@
-<windowing:AppWindow
+<windowing:FAAppWindow
     Icon="avares://snapx-ui/SnapX_Logo.png"
     Initialized="SettingsWindowInit"
     MinHeight="850"
@@ -19,4 +19,4 @@
 
     <views:SettingsMainView />
 
-</windowing:AppWindow>
+</windowing:FAAppWindow>

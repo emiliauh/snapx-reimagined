@@ -8,11 +8,20 @@ public class HotkeyInfo
 {
     public Keys Hotkey { get; set; }
 
+    /// <summary>
+    /// Stable identifier used by desktop portals. The native registration ID
+    /// remains transient and is kept in <see cref="ID"/>.
+    /// </summary>
+    public string RegistrationId { get; set; } = Guid.NewGuid().ToString("N");
+
     [JsonIgnore, YamlIgnore]
     public ushort ID { get; set; }
 
     [JsonIgnore, YamlIgnore]
     public HotkeyStatus Status { get; set; }
+
+    [JsonIgnore, YamlIgnore]
+    public string? StatusMessage { get; internal set; }
 
     public Keys KeyCode => Hotkey & Keys.KeyCode;
 
@@ -41,9 +50,18 @@ public class HotkeyInfo
         }
     }
 
-    public bool IsOnlyModifiers => KeyCode == Keys.Control || KeyCode == Keys.ShiftKey || KeyCode == Keys.Menu || (KeyCode == Keys.None && Win);
+    public bool IsOnlyModifiers =>
+        KeyCode is Keys.ShiftKey or Keys.ControlKey or Keys.Menu or
+            Keys.LShiftKey or Keys.RShiftKey or Keys.LControlKey or Keys.RControlKey or
+            Keys.LMenu or Keys.RMenu ||
+        (KeyCode == Keys.None && ModifiersEnum != Modifiers.None);
 
-    public bool IsValidHotkey => KeyCode != Keys.None && !IsOnlyModifiers;
+    public bool IsValidHotkey =>
+        KeyCode != Keys.None &&
+        !IsOnlyModifiers &&
+        KeyCode is not Keys.LButton and not Keys.RButton and not Keys.MButton and
+            not Keys.XButton1 and not Keys.XButton2 &&
+        Enum.IsDefined(KeyCode);
 
     public HotkeyInfo()
     {
@@ -145,4 +163,3 @@ public class HotkeyInfo
         return result.ToString();
     }
 }
-

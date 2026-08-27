@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SnapX.Core.Hotkey;
+using SnapX.Core.Media;
 using SnapX.Core.Upload;
 using SnapX.Core.Upload.BaseServices;
 using SnapX.Core.Upload.BaseUploaders;
@@ -594,10 +595,22 @@ public class WorkerTask : IDisposable
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyImageToClipboard))
         {
-            // Clipboard.CopyImage(Image, Info.FileName);
-            Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(Image, Info.FileName));
+            // The Avalonia frontend must convert the ImageSharp capture into a
+            // native bitmap before this worker may dispose Image. Publishing an
+            // async event without waiting used to report success while that
+            // conversion was still queued on another thread.
+            var clipboardEvent = new NeedClipboardCopyEvent(Image, Info.FileName);
+            Core.SnapXL.EventAggregator.Publish(clipboardEvent);
 
-            DebugHelper.WriteLine("Image copied to clipboard.");
+            if (clipboardEvent.Completion.Wait(TimeSpan.FromSeconds(5))
+                && clipboardEvent.Completion.GetAwaiter().GetResult())
+            {
+                DebugHelper.WriteLine("Image copied to clipboard.");
+            }
+            else
+            {
+                DebugHelper.WriteException("Timed out or failed while copying image to clipboard.");
+            }
         }
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.PinToScreen))
@@ -671,6 +684,17 @@ public class WorkerTask : IDisposable
     {
         if (!string.IsNullOrEmpty(Info.FilePath) && System.IO.File.Exists(Info.FilePath))
         {
+            // A completed recording has no source Image, so create a one-frame
+            // result preview before completion. TaskManager keeps it alive for
+            // the toast and the history entry retains the produced video path.
+            if (Image is null && FileHelpers.IsVideoFile(Info.FilePath) &&
+                Info.TaskSettings.GeneralSettings.ShowToastNotificationAfterTaskCompleted)
+            {
+                Image = VideoThumbnailer.TryCreatePreviewImage(
+                    Info.TaskSettings.CaptureSettings.FFmpegOptions.FFmpegPath,
+                    Info.FilePath);
+            }
+
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.PerformActions) && Info.TaskSettings.ExternalPrograms != null)
             {
                 IEnumerable<ExternalProgram> actions = Info.TaskSettings.ExternalPrograms.Where(x => x.IsActive);
@@ -710,7 +734,16 @@ public class WorkerTask : IDisposable
 
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyFileToClipboard))
             {
-                Clipboard.CopyFile(Info.FilePath);
+                // Clipboard.CopyFile only ever logged to debug output and never
+                // placed anything on the system clipboard on any platform. Route
+                // through the same event aggregator every other clipboard task
+                // uses so the frontend can place a real file-object entry (via
+                // StorageProvider.TryGetFileFromPathAsync), matching how the
+                // history view's own "copy file" action already works.
+                if (!string.IsNullOrEmpty(Info.FilePath))
+                {
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(new[] { Info.FilePath }));
+                }
             }
             else if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyFilePathToClipboard))
             {
@@ -1084,12 +1117,9 @@ public class WorkerTask : IDisposable
     {
         if (ImageReady != null)
         {
-            Image image = null;
-
-            if (SnapXL.Settings.TaskViewMode == TaskViewMode.ThumbnailView && Image != null)
-            {
-                DebugHelper.WriteException(new NotImplementedException("SnapX.Settings.TaskViewMode == TaskViewMode.ThumbnailView"));
-            }
+            // UI listeners own the notification image. Keep the task image alive
+            // for the rest of the workflow and give the UI an independent copy.
+            Image? image = Image?.CloneAs<Rgba32>();
 
             threadWorker.InvokeAsync(() =>
             {

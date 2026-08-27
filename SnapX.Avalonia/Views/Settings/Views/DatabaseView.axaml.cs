@@ -61,26 +61,26 @@ public partial class DatabaseView : UserControl
 
     private async Task<bool> ShowConfirmationDialogAsync(DatabaseVM.PathUpdateConfirmationMessage m)
     {
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
-            Title = "Confirm Path Mass-Update",
-            PrimaryButtonText = "Apply Changes",
+            Title = "Confirm path changes",
+            PrimaryButtonText = "Apply changes",
             CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close
+            DefaultButton = FAContentDialogButton.Close
         };
 
         var stack = new StackPanel { Spacing = 10, Width = 600 };
 
         stack.Children.Add(new TextBlock
         {
-            Text = $"⚠️ WARNING: This will update {m.TotalCount} records.",
+            Text = $"This operation will change {m.TotalCount} records.",
             FontWeight = FontWeight.Bold,
             Foreground = Brushes.Red
         });
 
         stack.Children.Add(new TextBlock
         {
-            Text = "There are NO BACKUPS performed by this function. Use it well, use it wisely.",
+            Text = "This operation does not create a backup. Back up the database before you continue.",
             TextWrapping = TextWrapping.Wrap
         });
 
@@ -97,7 +97,7 @@ public partial class DatabaseView : UserControl
         dialog.Content = stack;
 
         var result = await dialog.ShowAsync();
-        return result == ContentDialogResult.Primary;
+        return result == FAContentDialogResult.Primary;
     }
     private void StyledElement_OnInitialized(object? Sender, EventArgs E)
     {
@@ -193,4 +193,3 @@ public partial class DatabaseView : UserControl
 
 
 }
-

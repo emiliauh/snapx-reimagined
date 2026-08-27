@@ -1,0 +1,343 @@
+<UserControl
+    d:DesignHeight="700"
+    d:DesignWidth="900"
+    mc:Ignorable="d"
+    x:Class="SnapX.Avalonia.Views.Settings.Views.SettingsCategoryView"
+    x:DataType="settings:SettingsCategoryVM"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:settings="clr-namespace:SnapX.Avalonia.ViewModels.Settings"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.DataContext>
+        <settings:SettingsCategoryVM />
+    </Design.DataContext>
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="18" MaxWidth="900">
+            <StackPanel Spacing="4">
+                <TextBlock FontSize="26" FontWeight="SemiBold" Text="{Binding PageTitle}" />
+                <TextBlock Opacity="0.75" Text="{Binding PageDescription}" TextWrapping="Wrap" />
+                <TextBlock FontSize="12" Opacity="0.55" Text="{Binding ConfigNote}" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsApplicationPage}">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Application" />
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="24" RowSpacing="8">
+                        <CheckBox Content="Show tray icon" IsChecked="{Binding ShowTray}" />
+                        <CheckBox Grid.Column="1" Content="Start silently" IsChecked="{Binding SilentRun}" />
+                        <CheckBox Grid.Row="1" Content="Tray icon progress" IsChecked="{Binding TrayIconProgressEnabled}" />
+                        <CheckBox Grid.Row="1" Grid.Column="1" Content="Taskbar progress" IsChecked="{Binding TaskbarProgressEnabled}" />
+                        <CheckBox Grid.Row="2" Content="Remember main window position" IsChecked="{Binding RememberMainWindowPosition}" />
+                        <CheckBox Grid.Row="2" Grid.Column="1" Content="Remember main window size" IsChecked="{Binding RememberMainWindowSize}" />
+                        <CheckBox Grid.Row="3" Content="Check for updates" IsChecked="{Binding AutoCheckUpdate}" />
+                        <CheckBox Grid.Row="3" Grid.Column="1" Content="Use custom theme" IsChecked="{Binding UseCustomTheme}" />
+                        <CheckBox Grid.Row="4" Content="Disable telemetry" IsChecked="{Binding DisableTelemetry}" />
+                        <CheckBox Grid.Row="4" Grid.Column="1" Content="Disable file logging" IsChecked="{Binding DisableLogging}" />
+                        <CheckBox Grid.Row="5" Content="Hardware accelerated UI" IsChecked="{Binding HardwareAccelerated}" />
+                        <CheckBox Grid.Row="5" Grid.Column="1" Content="Use binary file-size units" IsChecked="{Binding BinaryUnits}" />
+                        <CheckBox Grid.Row="6" Content="Show most recent task first" IsChecked="{Binding ShowMostRecentTaskFirst}" />
+                        <CheckBox Grid.Row="6" Grid.Column="1" Content="Save settings after task completion" IsChecked="{Binding SaveSettingsAfterTaskCompleted}" />
+                    </Grid>
+                    <Separator />
+                    <TextBlock FontWeight="SemiBold" Text="Language and updates" />
+                    <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Language" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Update channel" />
+                        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding UpdateChannels}" SelectedItem="{Binding SelectedUpdateChannel}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsApplicationUploadPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Application upload" />
+                    <TextBlock Opacity="0.7" Text="Set upload rules that apply to all tasks." TextWrapping="Wrap" />
+                    <CheckBox Content="Disable uploads" IsChecked="{Binding DisableUpload}" />
+                    <CheckBox Content="Accept invalid TLS certificates" IsChecked="{Binding AcceptInvalidSslCertificates}" />
+                    <CheckBox Content="Ignore emoji while URL encoding" IsChecked="{Binding UrlEncodeIgnoreEmoji}" />
+                    <CheckBox Content="Show the first upload warning" IsChecked="{Binding ShowUploadWarning}" />
+                    <CheckBox Content="Show the multi-file upload warning" IsChecked="{Binding ShowMultiUploadWarning}" />
+                    <Grid ColumnDefinitions="230,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Retry count" />
+                        <TextBox Grid.Column="1" Text="{Binding MaxUploadRetryText}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Large-file warning (MB)" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LargeFileWarningText}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Concurrent upload limit" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding UploadLimitText}" />
+                    </Grid>
+                    <TextBlock FontSize="12" Opacity="0.7" Text="Set the large-file warning to 0 to disable it. Select Save settings to write the configuration." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsViewPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Main window and task list" />
+                    <CheckBox Content="Show task menu" IsChecked="{Binding ShowMenu}" />
+                    <CheckBox Content="Show thumbnail titles" IsChecked="{Binding ShowThumbnailTitle}" />
+                    <CheckBox Content="Show task list columns" IsChecked="{Binding ShowColumns}" />
+                    <CheckBox Content="Show tips in an empty task list" IsChecked="{Binding ShowMainWindowTip}" />
+                    <CheckBox Content="Automatically expand the tray capture menu" IsChecked="{Binding TrayAutoExpandCaptureMenu}" />
+                    <TextBlock Margin="0,6,0,0" Text="Thumbnail click action" />
+                    <ComboBox ItemsSource="{Binding ThumbnailActions}" SelectedItem="{Binding ThumbnailAction}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsTaskPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Task defaults" />
+                    <TextBlock FontSize="12" Opacity="0.65" Text="These options specify if the task uses the application defaults." TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="24" RowSpacing="8">
+                        <CheckBox Content="Use default after-capture actions" IsChecked="{Binding UseDefaultAfterCaptureJob}" />
+                        <CheckBox Grid.Column="1" Content="Use default after-upload actions" IsChecked="{Binding UseDefaultAfterUploadJob}" />
+                        <CheckBox Grid.Row="1" Content="Use default destinations" IsChecked="{Binding UseDefaultDestinations}" />
+                        <CheckBox Grid.Row="1" Grid.Column="1" Content="Use default image settings" IsChecked="{Binding UseDefaultImageSettings}" />
+                        <CheckBox Grid.Row="2" Content="Use default capture settings" IsChecked="{Binding UseDefaultCaptureSettings}" />
+                        <CheckBox Grid.Row="2" Grid.Column="1" Content="Use default upload settings" IsChecked="{Binding UseDefaultUploadSettings}" />
+                        <CheckBox Grid.Row="3" Content="Use default action settings" IsChecked="{Binding UseDefaultActions}" />
+                        <CheckBox Grid.Row="3" Grid.Column="1" Content="Use default tools settings" IsChecked="{Binding UseDefaultToolsSettings}" />
+                        <CheckBox Grid.Row="4" Content="Use default advanced settings" IsChecked="{Binding UseDefaultAdvancedSettings}" />
+                        <CheckBox Grid.Row="4" Grid.Column="1" Content="Enable watch folder" IsChecked="{Binding WatchFolderEnabled}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsImagePage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Image" />
+                    <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Image format" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding ImageFormats}" SelectedItem="{Binding ImageFormat}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="JPEG quality" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding JpegQualityText}" Watermark="1-100" />
+                        <CheckBox Grid.Row="2" Grid.ColumnSpan="2" Content="Automatically use JPEG for large images" IsChecked="{Binding ImageAutoUseJpeg}" />
+                        <CheckBox Grid.Row="3" Grid.ColumnSpan="2" Content="Automatically adjust JPEG quality" IsChecked="{Binding ImageAutoJpegQuality}" />
+                        <CheckBox Grid.Row="4" Grid.ColumnSpan="2" Content="Show image effects after capture" IsChecked="{Binding ShowImageEffectsWindowAfterCapture}" IsVisible="{Binding IsEffectsPage}" />
+                        <CheckBox Grid.Row="5" Grid.ColumnSpan="2" Content="Apply effects only to region captures" IsChecked="{Binding ImageEffectOnlyRegionCapture}" IsVisible="{Binding IsEffectsPage}" />
+                    </Grid>
+                    <CheckBox Content="Choose a random image effect" IsChecked="{Binding UseRandomImageEffect}" IsVisible="{Binding IsEffectsPage}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsThumbnailPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Thumbnail" />
+                    <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Width" />
+                        <TextBox Grid.Column="1" Text="{Binding ThumbnailWidthText}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Height (0 = automatic)" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ThumbnailHeightText}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="File suffix" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ThumbnailName}" />
+                    </Grid>
+                    <CheckBox Content="Check thumbnail size before creating it" IsChecked="{Binding ThumbnailCheckSize}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsCapturePage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Capture" />
+                    <CheckBox Content="Capture the mouse cursor" IsChecked="{Binding ShowCursor}" />
+                    <CheckBox Content="Capture transparent windows" IsChecked="{Binding CaptureTransparent}" />
+                    <CheckBox Content="Add window shadow" IsChecked="{Binding CaptureShadow}" />
+                    <CheckBox Content="Capture client area only" IsChecked="{Binding CaptureClientArea}" />
+                    <CheckBox Content="Automatically hide the taskbar" IsChecked="{Binding CaptureAutoHideTaskbar}" />
+                    <Grid ColumnDefinitions="180,*" RowDefinitions="Auto" Margin="0,4,0,0">
+                        <TextBlock VerticalAlignment="Center" Text="Screenshot delay (seconds)" />
+                        <TextBox Grid.Column="1" Text="{Binding ScreenshotDelayText}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsRegionPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Region capture" />
+                    <CheckBox Content="Quick crop" IsChecked="{Binding QuickCrop}" />
+                    <CheckBox Content="Detect windows" IsChecked="{Binding DetectWindows}" />
+                    <CheckBox Content="Detect controls" IsChecked="{Binding DetectControls}" />
+                    <CheckBox Content="Show selection information" IsChecked="{Binding ShowInfo}" />
+                    <CheckBox Content="Show magnifier" IsChecked="{Binding ShowMagnifier}" />
+                    <CheckBox Content="Show crosshair" IsChecked="{Binding ShowCrosshair}" />
+                    <CheckBox Content="Enable selection animations" IsChecked="{Binding EnableAnimations}" />
+                    <CheckBox Content="Use a fixed selection size" IsChecked="{Binding IsFixedSize}" />
+                    <CheckBox Content="Use custom selection information" IsChecked="{Binding UseCustomInfoText}" />
+                    <TextBox Text="{Binding RegionCustomInfoText}" IsVisible="{Binding UseCustomInfoText}" AcceptsReturn="True" Height="70" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsOcrPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="OCR" />
+                    <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Language" />
+                        <TextBox Grid.Column="1" Text="{Binding OcrLanguage}" Watermark="en" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Scale factor" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding OcrScaleText}" />
+                    </Grid>
+                    <CheckBox Content="Return one line of text" IsChecked="{Binding SingleLineOcr}" />
+                    <CheckBox Content="Run OCR silently" IsChecked="{Binding SilentOcr}" />
+                    <CheckBox Content="Copy recognized text automatically" IsChecked="{Binding AutoCopyOcr}" />
+                    <CheckBox Content="Close the OCR window after opening a service link" IsChecked="{Binding CloseOcrWindowAfterLink}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsTaskUploadPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Upload workflow" />
+                    <Grid ColumnDefinitions="210,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Name pattern" />
+                        <TextBox Grid.Column="1" Text="{Binding NameFormatPattern}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Active window pattern" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding NameFormatPatternActiveWindow}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="URL regex" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding UrlRegexReplacePattern}" />
+                        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="URL replacement" />
+                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding UrlRegexReplaceReplacement}" />
+                        <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Application retries" />
+                        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding MaxUploadRetryText}" />
+                    </Grid>
+                    <CheckBox Content="Use the file name pattern" IsChecked="{Binding FileUploadUseNamePattern}" />
+                    <CheckBox Content="Replace problematic file-name characters" IsChecked="{Binding FileUploadReplaceProblematicCharacters}" />
+                    <CheckBox Content="Apply URL regex replacement" IsChecked="{Binding UrlRegexReplace}" />
+                    <CheckBox Content="Upload URL contents from the clipboard" IsChecked="{Binding ClipboardUploadUrlContents}" />
+                    <CheckBox Content="Shorten clipboard upload URLs" IsChecked="{Binding ClipboardUploadShortenUrl}" />
+                    <CheckBox Content="Share clipboard upload URLs" IsChecked="{Binding ClipboardUploadShareUrl}" />
+                    <CheckBox Content="Automatically index clipboard upload folders" IsChecked="{Binding ClipboardUploadAutoIndexFolder}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsProxyPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Network proxy" />
+                    <ComboBox ItemsSource="{Binding ProxyMethods}" SelectedItem="{Binding SelectedProxyMethod}" />
+                    <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Host" />
+                        <TextBox Grid.Column="1" Text="{Binding ProxyHost}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Port" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ProxyPortText}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Username" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ProxyUsername}" />
+                        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Password" />
+                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding ProxyPassword}" PasswordChar="●" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsHistoryPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="History" />
+                    <CheckBox Content="Save completed tasks in history" IsChecked="{Binding HistorySaveTasks}" />
+                    <CheckBox Content="Check history URLs when loading" IsChecked="{Binding HistoryCheckUrl}" />
+                    <CheckBox Content="Clean up backup files automatically" IsChecked="{Binding AutoCleanupBackupFiles}" />
+                    <CheckBox Content="Clean up log files automatically" IsChecked="{Binding AutoCleanupLogFiles}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsAdvancedPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Advanced" />
+                    <CheckBox Content="Save settings after all tasks finish" IsChecked="{Binding SaveSettingsAfterTaskCompleted}" />
+                    <CheckBox Content="Select the last completed task automatically" IsChecked="{Binding AutoSelectLastCompletedTask}" />
+                    <CheckBox Content="Show most recent task first" IsChecked="{Binding ShowMostRecentTaskFirst}" />
+                    <CheckBox Content="Only show edited workflows" IsChecked="{Binding WorkflowsOnlyShowEdited}" />
+                    <CheckBox Content="Disable uploads application-wide" IsChecked="{Binding DisableUpload}" />
+                    <CheckBox Content="Accept invalid TLS certificates" IsChecked="{Binding AcceptInvalidSslCertificates}" />
+                    <CheckBox Content="Ignore emoji while URL encoding" IsChecked="{Binding UrlEncodeIgnoreEmoji}" />
+                    <CheckBox Content="Show upload warning" IsChecked="{Binding ShowUploadWarning}" />
+                    <CheckBox Content="Show multi-upload warning" IsChecked="{Binding ShowMultiUploadWarning}" />
+                    <Grid ColumnDefinitions="210,*" RowDefinitions="Auto" Margin="0,4,0,0">
+                        <TextBlock VerticalAlignment="Center" Text="Large-file warning (MB)" />
+                        <TextBox Grid.Column="1" Text="{Binding LargeFileWarningText}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsHotkeyPage}">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Global hotkeys" />
+                    <TextBlock Text="{Binding HotkeyPlatformHelp}" TextWrapping="Wrap" />
+                    <CheckBox Content="Enable global hotkeys" IsChecked="{Binding HotkeysEnabled}" />
+                    <CheckBox Content="Disable hotkeys while another window is fullscreen" IsChecked="{Binding DisableHotkeysOnFullscreen}" />
+                    <Grid ColumnDefinitions="210,*" RowDefinitions="Auto">
+                        <TextBlock VerticalAlignment="Center" Text="Hotkey backend" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding HotkeyBackendPreferences}" SelectedItem="{Binding SelectedHotkeyBackendPreference}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource EnumDescConverter}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                    <Grid ColumnDefinitions="210,*" RowDefinitions="Auto">
+                        <TextBlock VerticalAlignment="Center" Text="Repeat limit (milliseconds)" />
+                        <TextBox Grid.Column="1" Text="{Binding HotkeyRepeatLimitText}" />
+                    </Grid>
+                    <TextBlock FontSize="12" Opacity="0.65" Text="Enter a shortcut, such as Ctrl+Shift+A. Select Apply. On Wayland, the desktop controls global shortcuts." TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{Binding HotkeyRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="0,0,0,1" Padding="0,6">
+                                    <Grid ColumnDefinitions="1.4*,1.1*,*,Auto,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6">
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding Action}" />
+                                        <TextBox Grid.Column="1" Text="{Binding ShortcutText, Mode=TwoWay}" KeyDown="HotkeyTextBox_OnKeyDown" Watermark="Ctrl+Shift+A" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Status}" />
+                                        <Button Grid.Column="3" Click="ApplyHotkeyButton_OnClick" Content="Apply" />
+                                        <Button Grid.Column="4" Click="ClearHotkeyButton_OnClick" Content="Clear" />
+                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="5" FontSize="11" Opacity="0.6" Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+                                        <TextBlock Grid.Row="2" Grid.ColumnSpan="5" FontSize="11" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Command="{Binding ResetHotkeysCommand}" Content="Restore default hotkeys" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsIntegrationPage}">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Wayland integration" />
+                    <TextBlock Text="{Binding SessionDescription}" TextWrapping="Wrap" />
+                    <TextBlock FontSize="12" Opacity="0.7" Text="Select Automatic for normal use. Select Portal to use the desktop portal. Select KWin to use the KDE screenshot service. Select X11 fallback only when an X11 display is active." TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="210,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Capture mode" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding WaylandCaptureModes}" SelectedItem="{Binding SelectedWaylandCaptureMode}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource EnumDescConverter}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Current process" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ElevationStatus}" TextWrapping="Wrap" />
+                    </Grid>
+                    <Button Command="{Binding LaunchElevatedCommand}" Content="Request an elevated SnapX process" HorizontalAlignment="Left" />
+                    <TextBlock FontSize="12" Opacity="0.7" Text="This starts the complete SnapX process with administrator rights. It can create root-owned files. Use it only for a system task. Administrator rights do not bypass Wayland portal or compositor permissions." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsWatchFolderPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Watch folders" />
+                    <CheckBox Content="Watch configured folders for new files" IsChecked="{Binding WatchFolderEnabled}" />
+                    <TextBlock Opacity="0.7" Text="Manage these folders in the task watch-folder list. SnapX applies the list to the default task." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsInformationPage}">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding PageTitle}" />
+                    <TextBlock Text="{Binding ConfigNote}" TextWrapping="Wrap" />
+                    <TextBlock Text="This page is connected to the same settings model used by capture, upload, history, and hotkey workflows. Use the controls in the related sections to change behavior." TextWrapping="Wrap" />
+                    <Button Command="{Binding OpenConfigFolderCommand}" Content="Open configuration folder" HorizontalAlignment="Left" IsVisible="{Binding IsConfigFolderPage}" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Command="{Binding SaveSettingsCommand}" Content="Save settings" />
+                <TextBlock VerticalAlignment="Center" Opacity="0.65" Text="SnapX validates text while you type. Select Save settings to write the configuration." TextWrapping="Wrap" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

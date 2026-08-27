@@ -297,7 +297,7 @@
     </ExclusionItems>
   </Settings>
   <PrepareComputer DisableWindowsSearchService="true" DisableWindowsUpdateService="true" />
-  <SaveLocation PackagePath="C:\Users\Brycen\Documents\Coding\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.4.0.0_x64__enwe9x4v0qrtw.msix" TemplatePath="C:\Users\Brycen\Documents\Coding\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.4.0.0_x64__enwe9x4v0qrtw_template.xml" />
-  <Installer Path="C:\Users\Brycen\Documents\Coding\SnapX\packaging\SnapX-Release-Windows-0.4.0-alpha.984+gb1cd64d-X64.msi" />
+  <SaveLocation PackagePath="C:\src\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.4.0.0_x64__enwe9x4v0qrtw.msix" TemplatePath="C:\src\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.4.0.0_x64__enwe9x4v0qrtw_template.xml" />
+  <Installer Path="C:\src\SnapX\packaging\SnapX-Release-Windows-0.4.0-alpha.984+gb1cd64d-X64.msi" />
   <PackageInformation PackageName="SnapX" PackageDisplayName="SnapX" PublisherName="CN=AppModelSamples, OID.2.25.311729368913984317654407730594956997722=1" PublisherDisplayName="SnapXL" Version="0.4.0.0" p4:PackageDescription="Capture, share, and boost productivity. All in one." xmlns:p4="http://schemas.microsoft.com/msix/msixpackagingtool/template/1910" />
 </MsixPackagingToolTemplate>

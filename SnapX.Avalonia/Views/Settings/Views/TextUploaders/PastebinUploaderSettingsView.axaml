@@ -7,73 +7,73 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel Spacing="4">
-        <controls:SettingsExpander
+        <controls:FASettingsExpander
             Header="Account Authentication"
             IconSource="Contact"
             IsExpanded="True">
-            <controls:SettingsExpanderItem Content="Username">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Username">
+                <controls:FASettingsExpanderItem.Footer>
                     <TextBox
                         Watermark="Username/Email"
                         Width="200"
                         x:Name="UsernameTextBox" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-            <controls:SettingsExpanderItem Content="Password">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Password">
+                <controls:FASettingsExpanderItem.Footer>
                     <TextBox
                         PasswordChar="*"
                         Watermark="Password"
                         Width="200"
                         x:Name="PasswordTextBox" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-            <controls:SettingsExpanderItem>
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem>
+                <controls:FASettingsExpanderItem.Footer>
                     <Button
                         Classes="accent"
                         Content="Login"
                         x:Name="LoginButton" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
-            <controls:SettingsExpanderItem Content="Status: ???" Name="LoginStatus" />
-        </controls:SettingsExpander>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
+            <controls:FASettingsExpanderItem Content="Status: ???" Name="LoginStatus" />
+        </controls:FASettingsExpander>
 
-        <controls:SettingsExpander
+        <controls:FASettingsExpander
             Header="Paste Settings"
             IconSource="Document"
             IsExpanded="True">
-            <controls:SettingsExpanderItem Content="Title">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Title">
+                <controls:FASettingsExpanderItem.Footer>
                     <TextBox Name="txtPastebinTitle" Width="200" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-            <controls:SettingsExpanderItem Content="Syntax Highlighting">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Syntax Highlighting">
+                <controls:FASettingsExpanderItem.Footer>
                     <ComboBox Name="cbPastebinSyntax" Width="200" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-            <controls:SettingsExpanderItem Content="Expiration">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Expiration">
+                <controls:FASettingsExpanderItem.Footer>
                     <ComboBox Name="cbPastebinExpiration" Width="200" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-            <controls:SettingsExpanderItem Content="Privacy">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Privacy">
+                <controls:FASettingsExpanderItem.Footer>
                     <ComboBox Name="cbPastebinPrivacy" Width="200" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
             <CheckBox
                 Content="Use Raw URL"
                 Margin="16,10"
                 Name="cbPastebinRaw" />
-        </controls:SettingsExpander>
+        </controls:FASettingsExpander>
 
     </StackPanel>
 </UserControl>

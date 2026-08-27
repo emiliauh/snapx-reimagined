@@ -19,6 +19,25 @@ public static class MimeTypesPlus
             mimeType.Equals(Mappings["tiff"], StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Returns the MIME type for a file path or extension, or
+    /// a generic fallback when the extension is unknown.</summary>
+    public static string GetMimeType(string fileNameOrExt)
+    {
+        if (string.IsNullOrWhiteSpace(fileNameOrExt))
+        {
+            return "application/octet-stream";
+        }
+
+        string ext = Path.GetExtension(fileNameOrExt);
+        if (string.IsNullOrEmpty(ext))
+        {
+            ext = fileNameOrExt;
+        }
+        ext = ext.TrimStart('.').ToLowerInvariant();
+
+        return Mappings.TryGetValue(ext, out string? mime) ? mime : "application/octet-stream";
+    }
+
     // http://svn.apache.org/repos/asf/httpd/httpd/trunk/docs/conf/mime.types
     private static Dictionary<string, string> Mappings = new(StringComparer.OrdinalIgnoreCase)
     {

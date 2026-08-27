@@ -9,38 +9,38 @@
 
     <ScrollViewer>
         <StackPanel Margin="12" Spacing="12">
-            <controls:InfoBar
+            <controls:FAInfoBar
                 IsClosable="True"
                 IsOpen="True"
                 Margin="0,0,0,8"
-                Message="The FTP code here works great, however, you may need to restart SnapX if the accounts list gets out of sync"
+                Message="Restart SnapX if the FTP account list does not show the latest changes."
                 Severity="Informational"
                 Title="Updates may not be visible until restart" />
 
-            <controls:SettingsExpander
+            <controls:FASettingsExpander
                 Header="Destinations"
                 IconSource="Globe"
                 IsExpanded="True">
 
-                <controls:SettingsExpanderItem Content="Image">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Image">
+                    <controls:FASettingsExpanderItem.Footer>
                         <ComboBox Name="ImageAccountsComboBox" Width="300" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Text">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Text">
+                    <controls:FASettingsExpanderItem.Footer>
                         <ComboBox Name="TextAccountsComboBox" Width="300" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="File">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="File">
+                    <controls:FASettingsExpanderItem.Footer>
                         <ComboBox Name="FileAccountsComboBox" Width="300" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-            </controls:SettingsExpander>
+            </controls:FASettingsExpander>
 
             <StackPanel
                 HorizontalAlignment="Right"
@@ -51,7 +51,7 @@
                 <Button
                     Click="RemoveFtpAccountButtonClick"
                     Content="Remove"
-                    ToolTip.Tip="Warning: Errors when removing the last FTP Account are expected. We are working on it, sorry! 🥸" />
+                    ToolTip.Tip="SnapX can show an error when you remove the last FTP account." />
                 <Button Click="DuplicateFtpAccountButtonClick" Content="Duplicate" />
                 <Button Click="TestFTPAccountClick" Content="Test" />
 
@@ -86,34 +86,34 @@
 
 
             </StackPanel>
-            <controls:SettingsExpander
+            <controls:FASettingsExpander
                 Header="Account"
                 IconSource="Contact"
                 IsExpanded="True">
 
-                <controls:SettingsExpanderItem Content="Name">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Name">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox Text="{Binding Account.Name, Mode=TwoWay}" Width="300" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Protocol">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Protocol">
+                    <controls:FASettingsExpanderItem.Footer>
                         <ComboBox
                             Name="ProtocolComboBox"
                             SelectedItem="{Binding Account.Protocol, Mode=TwoWay}"
                             Width="200" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Host">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Host">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox Text="{Binding Account.Host, Mode=TwoWay}" Width="300" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Port">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Port">
+                    <controls:FASettingsExpanderItem.Footer>
                         <NumericUpDown
                             FormatString="F0"
                             HorizontalAlignment="Left"
@@ -125,47 +125,47 @@
                             Value="{Binding Account.Port, Mode=TwoWay}"
                             Width="120" />
 
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
 
-                <controls:SettingsExpanderItem Content="Username">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Username">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox Text="{Binding Account.Username, Mode=TwoWay}" Width="250" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Password">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Password">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox
                             PasswordChar="*"
                             Text="{Binding Account.Password, Mode=TwoWay}"
                             Width="250" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Transfer Mode">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Transfer Mode">
+                    <controls:FASettingsExpanderItem.Footer>
                         <ComboBox Name="TransferModeComboBox" Width="200" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Remote Directory">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Remote Directory">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox Text="{Binding Account.SubFolderPath, Mode=TwoWay}" Width="400" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-            </controls:SettingsExpander>
+            </controls:FASettingsExpander>
 
 
-            <controls:SettingsExpander
+            <controls:FASettingsExpander
                 Header="URL Configuration"
                 IconSource="PreviewLink"
                 IsExpanded="True">
 
-                <controls:SettingsExpanderItem Content="URL Path">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="URL Path">
+                    <controls:FASettingsExpanderItem.Footer>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ComboBox
                                 Name="BrowserProtocolComboBox"
@@ -173,52 +173,52 @@
                                 Width="120" />
                             <TextBox Text="{Binding Account.HttpHomePath, Mode=TwoWay}" Width="400" />
                         </StackPanel>
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="Options">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Options">
+                    <controls:FASettingsExpanderItem.Footer>
                         <StackPanel Spacing="6">
                             <CheckBox Content="Append remote directory to URL path" IsChecked="{Binding Account.HttpHomePathAutoAddSubFolderPath, Mode=TwoWay}" />
                             <CheckBox Content="Remove file extension from URL path" IsChecked="{Binding Account.HttpHomePathNoExtension, Mode=TwoWay}" />
                         </StackPanel>
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
 
-                <controls:SettingsExpanderItem Content="URL Preview">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="URL Preview">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox
                             IsReadOnly="True"
                             Text="{Binding Account.PreviewHttpPath}"
                             Width="600" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
-            </controls:SettingsExpander>
-            <controls:SettingsExpander
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
+            </controls:FASettingsExpander>
+            <controls:FASettingsExpander
                 Header="SFTP"
                 IconSource="Earth"
                 IsExpanded="True"
                 IsVisible="{Binding Account.IsSftp}">
-                <controls:SettingsExpanderItem Content="Key location">
-                    <controls:SettingsExpanderItem.Footer>
+                <controls:FASettingsExpanderItem Content="Key location">
+                    <controls:FASettingsExpanderItem.Footer>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBox
                                 Text="{Binding Account.Keypath, Mode=TwoWay}"
                                 ToolTip.Tip="Optional. If left empty, the SSH client will automatically search your home directory for private keys (Tmds.Ssh handles this)."
                                 Width="500" />
-                            <Button Click="Button_OnClick" Content="Browse..." />
+                            <Button Click="Button_OnClick" Content="Browse" />
                         </StackPanel>
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
-                <controls:SettingsExpanderItem Content="Key passphrase">
-                    <controls:SettingsExpanderItem.Footer>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
+                <controls:FASettingsExpanderItem Content="Key passphrase">
+                    <controls:FASettingsExpanderItem.Footer>
                         <TextBox
                             PasswordChar="*"
                             Text="{Binding Account.Passphrase, Mode=TwoWay}"
                             Width="600" />
-                    </controls:SettingsExpanderItem.Footer>
-                </controls:SettingsExpanderItem>
-            </controls:SettingsExpander>
+                    </controls:FASettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem>
+            </controls:FASettingsExpander>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

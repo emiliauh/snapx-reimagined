@@ -18,6 +18,44 @@ namespace SnapX.Avalonia.Views.Settings.Views;
 public partial class SettingsMainView : UserControl
 {
     private readonly SettingsMainViewVM? _vm;
+
+    /// <summary>
+    /// When true (in-app embedded host), hides the FANavigationView's own back
+    /// button, pane-toggle ("hamburger") and empty search box, the decorative
+    /// "Control Panel" header, and auto-selects the Application category.
+    /// The standalone SettingsWindow keeps the default (false) look.
+    /// </summary>
+    public bool IsEmbedded
+    {
+        get => _isEmbedded;
+        set
+        {
+            _isEmbedded = value;
+            if (!value) return;
+            ApplyEmbeddedChrome();
+            SelectApplicationCategory();
+        }
+    }
+    private bool _isEmbedded;
+
+    private void ApplyEmbeddedChrome()
+    {
+        SettingsNavigationView.IsBackButtonVisible = false;
+        SettingsNavigationView.IsPaneToggleButtonVisible = false;
+        SettingsNavigationView.OpenPaneLength = 200;
+        NavViewSearchBox.IsVisible = false;
+        ControlPanelHeader.IsVisible = false;
+    }
+
+    public void SelectApplicationCategory()
+    {
+        var applicationItem = SettingsNavigationView.MenuItems
+            .OfType<FANavigationViewItem>()
+            .FirstOrDefault(item => item.Tag as string == "Application");
+        if (applicationItem is not null)
+            SettingsNavigationView.SelectedItem = applicationItem;
+    }
+
     public SettingsMainView() : this(new SettingsMainViewVM()) { }
     public SettingsMainView(SettingsMainViewVM viewModel)
     {
@@ -108,11 +146,11 @@ public partial class SettingsMainView : UserControl
 
         foreach (var item in flyout.Items)
         {
-            if (item is MenuFlyoutSubItem category)
+            if (item is FAMenuFlyoutSubItem category)
             {
                 foreach (var subObject in category.Items)
                 {
-                    if (subObject is ToggleMenuFlyoutItem subItem && subItem.Tag != null)
+                    if (subObject is FAToggleMenuFlyoutItem subItem && subItem.Tag != null)
                     {
                         bool isSelected = subItem.Tag switch
                         {
@@ -153,10 +191,10 @@ public partial class SettingsMainView : UserControl
         }
     }
 
-    private MenuFlyoutSubItem CreateCategory<TKey, TService>(string header, Dictionary<TKey, TService> services) where TKey : Enum
+    private FAMenuFlyoutSubItem CreateCategory<TKey, TService>(string header, Dictionary<TKey, TService> services) where TKey : Enum
     {
 
-        var category = new MenuFlyoutSubItem { Text = header};
+        var category = new FAMenuFlyoutSubItem { Text = header};
         var settings = SnapXL.Settings?.DefaultTaskSettings;
 
         if (settings == null)
@@ -173,7 +211,7 @@ public partial class SettingsMainView : UserControl
         foreach (var kvp in services)
         {
             var description = kvp.Key.GetDescription();
-            var item = new ToggleMenuFlyoutItem
+            var item = new FAToggleMenuFlyoutItem
             {
                 Text = description,
                 Tag = kvp.Key
@@ -199,13 +237,13 @@ public partial class SettingsMainView : UserControl
         return category;
     }
 
-    private NavigationViewItem? GetParentItem(IEnumerable? items, NavigationViewItem target)
+    private FANavigationViewItem? GetParentItem(IEnumerable? items, FANavigationViewItem target)
     {
         if (items == null) return null;
 
         foreach (var obj in items)
         {
-            if (obj is not NavigationViewItem parent) continue;
+            if (obj is not FANavigationViewItem parent) continue;
             if (parent.MenuItems.Cast<object>().Contains(target))
             {
                 return parent;
@@ -216,13 +254,13 @@ public partial class SettingsMainView : UserControl
 
         return null;
     }
-    private void NavigationView_OnSelectionChanged(object? Sender, NavigationViewSelectionChangedEventArgs E)
+    private void NavigationView_OnSelectionChanged(object? Sender, FANavigationViewSelectionChangedEventArgs E)
     {
         try
         {
-            if (Sender is not NavigationView navigationView) return;
+            if (Sender is not FANavigationView navigationView) return;
             navigationView.IsBackEnabled = _vm?.CanGoBack ?? true;
-            if (E.SelectedItem is not NavigationViewItem item)
+            if (E.SelectedItem is not FANavigationViewItem item)
             {
                 DebugHelper.WriteLine("NavigationView_OnSelectionChanged.Sender.SelectedItem is null");
                 return;
@@ -248,16 +286,16 @@ public partial class SettingsMainView : UserControl
         }
     }
 
-    private void NavigationView_OnBackRequested(object? Sender, NavigationViewBackRequestedEventArgs E)
+    private void NavigationView_OnBackRequested(object? Sender, FANavigationViewBackRequestedEventArgs E)
     {
         _vm?.Back();
-        if (Sender is not NavigationView MyNavigationView) return;
+        if (Sender is not FANavigationView MyNavigationView) return;
 
         if (_vm?.CurrentPage is not null &&
             _vm.TryGetPage(_vm.CurrentPage.GetType().Name, out var targetType))
         {
             var item = MyNavigationView.MenuItems
-                .OfType<NavigationViewItem>()
+                .OfType<FANavigationViewItem>()
                 .FirstOrDefault(x =>
                     x.Tag is string tag &&
                     _vm.TryGetPage(tag, out var type) &&
@@ -278,9 +316,9 @@ public partial class SettingsMainView : UserControl
 
         var focus = topLevel?.FocusManager?.GetFocusedElement() as Control;
 
-        if (focus is MenuItem or MenuFlyoutItemBase)
+        if (focus is MenuItem or FAMenuFlyoutItemBase)
         {
-            var isOwnItem = fb.Target?.GetVisualRoot() == focus.GetVisualRoot();
+            var isOwnItem = TopLevel.GetTopLevel(fb.Target) == TopLevel.GetTopLevel(focus);
             var tag = focus.Tag?.ToString();
 
             if (isOwnItem && !string.IsNullOrWhiteSpace(tag))
@@ -312,7 +350,7 @@ public partial class SettingsMainView : UserControl
     {
         try
         {
-            if (sender is not ToggleMenuFlyoutItem toggle) return;
+            if (sender is not FAToggleMenuFlyoutItem toggle) return;
             var key = toggle.Tag?.ToString();
             if (string.IsNullOrWhiteSpace(key)) return;
             if (key.StartsWith('!')) key = key[1..];
@@ -421,7 +459,7 @@ public partial class SettingsMainView : UserControl
     {
         switch (item)
         {
-            case ToggleMenuFlyoutItem toggle:
+            case FAToggleMenuFlyoutItem toggle:
                 {
                     var key = toggle.Tag?.ToString();
                     if (key?.StartsWith('!') ?? false) key = key[1..];
@@ -492,4 +530,3 @@ public class ChangeWindowTitleRequest(string? Title)
 {
     public string? Title { get; set; } = Title;
 }
-

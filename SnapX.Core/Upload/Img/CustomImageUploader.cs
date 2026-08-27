@@ -7,6 +7,7 @@ using SnapX.Core.Upload.BaseUploaders;
 using SnapX.Core.Upload.Custom;
 using SnapX.Core.Upload.Utils;
 using SnapX.Core.Utils.Extensions;
+using SnapX.Core.Utils.Miscellaneous;
 
 namespace SnapX.Core.Upload.Img;
 
@@ -57,7 +58,7 @@ public sealed class CustomImageUploader : ImageUploader
         }
         else if (uploader.Body == CustomUploaderBody.Binary)
         {
-            ur.Response = SendRequest(uploader.RequestMethod, uploader.GetRequestURL(input), stream, MimeTypes.GetMimeType(fileName),
+            ur.Response = SendRequest(uploader.RequestMethod, uploader.GetRequestURL(input), stream, MimeTypesPlus.GetMimeType(fileName),
                 null, uploader.GetHeaders(input));
         }
         else

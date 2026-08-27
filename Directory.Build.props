@@ -14,6 +14,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TargetFramework>net10.0</TargetFramework>
+    <!-- Force single-process project builds. On the current dotnet SDK the
+         parallel build silently fails during cross-project GetTargetFrameworks
+         resolution (reports 0 errors but aborts), so this keeps a plain
+         `dotnet build` deterministic. -->
+    <BuildInParallel>false</BuildInParallel>
     <GitVersionTargetFramework>$(TargetFramework)</GitVersionTargetFramework>
     <WriteVersionInfoToBuildLog>true</WriteVersionInfoToBuildLog>
     <RollForward>LatestMajor</RollForward>

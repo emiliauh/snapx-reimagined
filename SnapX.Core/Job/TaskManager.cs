@@ -16,6 +16,9 @@ public static class TaskManager
 {
     public static List<WorkerTask> Tasks { get; } = [];
 
+    /// <summary>Raised after a history item is committed to the history store.</summary>
+    public static event Action<HistoryItem>? HistoryItemAdded;
+
     public static HistoryManager History { get; set; }
     public static bool IsBusy => Tasks.Count > 0 && Tasks.Any(task => task.IsBusy);
 
@@ -170,6 +173,16 @@ public static class TaskManager
                             }
                             DebugHelper.WriteLine(title);
                         }
+
+                        // A capture/save can succeed even when the upload step that
+                        // failed the task never ran or timed out. Losing the local
+                        // file from history just because the upload failed hides a
+                        // result the user already has on disk.
+                        if (SnapXL.Settings.HistorySaveTasks && !string.IsNullOrEmpty(info.FilePath))
+                        {
+                            HistoryItem historyItem = info.GetHistoryItem();
+                            AppendHistoryItem(historyItem);
+                        }
                     }
                     else
                     {
@@ -183,7 +196,7 @@ public static class TaskManager
                                (!string.IsNullOrEmpty(info.Result.URL) || !string.IsNullOrEmpty(info.Result.ShortenedURL))))
                             {
                                 HistoryItem historyItem = info.GetHistoryItem();
-                                AppendHistoryItemAsync(historyItem);
+                                AppendHistoryItem(historyItem);
                             }
 
 
@@ -201,6 +214,13 @@ public static class TaskManager
                                 {
                                     task.KeepImage = true;
 
+                                    SnapXL.EventAggregator.Publish(new NeedToastNotificationEvent(
+                                        task.Image,
+                                        info.FileName ?? SnapXL.AppName,
+                                        result,
+                                        info.Result?.URL,
+                                        info.FilePath,
+                                        info.TaskSettings.GeneralSettings.ToastWindowLeftClickAction));
 
                                     if (info.TaskSettings.AfterUploadJob.HasFlag(AfterUploadTasks.ShowAfterUploadWindow) && info.IsUploadJob)
                                     {
@@ -225,13 +245,30 @@ public static class TaskManager
     }
 
 
-    private static void AppendHistoryItemAsync(HistoryItem historyItem)
+    private static void AppendHistoryItem(HistoryItem historyItem)
     {
         DebugHelper.Logger.Debug("Appending history item {historyItem} to task list", historyItem.FilePath);
-        Task.Run(() =>
+
+        if (!History.AppendHistoryItem(historyItem))
         {
-            History.AppendHistoryItem(historyItem);
-        });
+            DebugHelper.WriteLine($"Could not add the completed task to history: {historyItem.FilePath ?? historyItem.FileName}");
+            return;
+        }
+
+        // A handler must not be able to fail task completion or prevent another
+        // history view from receiving the committed item.
+        foreach (Action<HistoryItem> handler in HistoryItemAdded?.GetInvocationList()
+                     .Cast<Action<HistoryItem>>() ?? [])
+        {
+            try
+            {
+                handler(historyItem);
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex);
+            }
+        }
     }
 
     public static void InitHistoryManager()

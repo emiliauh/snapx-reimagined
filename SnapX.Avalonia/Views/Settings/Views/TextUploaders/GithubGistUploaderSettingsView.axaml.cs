@@ -50,7 +50,7 @@ public partial class GithubGistUploaderSettingsView : UserControl
         var Config = SnapX.Core.SnapXL.UploadersConfig;
         var oAuthSuccess = OAuth2Info.CheckOAuth(Config.GistOAuth2Info);
 
-        ConnectButton.Content = oAuthSuccess ? "Disconnect" : "Connect...";
+        ConnectButton.Content = oAuthSuccess ? "Disconnect" : "Connect";
         LoginStatus.Text = oAuthSuccess ? "Status: Logged in." : $"Status: {OAuthLoginStatus.LoginRequired}";
         LoginStatus.Foreground = oAuthSuccess ? Brushes.LawnGreen : Brushes.Red;
     }
@@ -69,12 +69,12 @@ public partial class GithubGistUploaderSettingsView : UserControl
             var success = await Task.Run(() => gist!.GetAccessToken(code));
             if (success) config.GistOAuth2Info = gist!.AuthInfo;
             CalculateAccessibility();
-            var dialog = new ContentDialog
+            var dialog = new FAContentDialog
             {
                 Title = success ? "Success" : "Login Failed",
                 Content = success ? "Login successful!" : "Please check your username and password.",
                 CloseButtonText = "OK",
-                DefaultButton = ContentDialogButton.Close
+                DefaultButton = FAContentDialogButton.Close
             };
 
             PasswordTextBox.Text = code;

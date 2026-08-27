@@ -1,4 +1,4 @@
-<windowing:AppWindow
+<windowing:FAAppWindow
     ClosingBehavior="OwnerWindowOnly"
     Icon="{Binding LogoResourcePath}"
     MinHeight="200"
@@ -19,6 +19,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <views:MainView />
 
-</windowing:AppWindow>
+</windowing:FAAppWindow>
 
 

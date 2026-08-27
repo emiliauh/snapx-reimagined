@@ -1,4 +1,4 @@
-<windowing:AppWindow
+<windowing:FAAppWindow
     Height="600"
     Loaded="Control_OnLoaded"
     Title="OCR Result"
@@ -41,7 +41,7 @@
                     ItemsSource="{Binding LanguageDisplayNames}"
                     SelectedIndex="{Binding SelectedLanguageIndex}"
                     SelectionChanged="LanguageSelector_SelectionChanged"
-                    ToolTip.Tip="Select the language for OCR..."
+                    ToolTip.Tip="Select the language for OCR."
                     x:Name="LanguageSelector" />
             </StackPanel>
             <Label
@@ -67,7 +67,7 @@
                     Padding="8"
                     ToolTip.Tip="Activates image mode with drawn on boundary boxes"
                     x:Name="ShowImageBtn">
-                    <controls:SymbolIcon FontSize="18" Symbol="Image" />
+                    <controls:FASymbolIcon FontSize="18" Symbol="Image" />
                 </Button>
                 <Button
                     Click="OnToggleView"
@@ -160,9 +160,9 @@
                 ToolTip.Tip="Only supports one file/paste at once.">
                 <SplitButton.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
-                        <MenuItem Click="OcrFile_Click" Header="Select Image File...">
+                        <MenuItem Click="OcrFile_Click" Header="Select an image file">
                             <MenuItem.Icon>
-                                <controls:SymbolIcon Symbol="OpenFile" />
+                                <controls:FASymbolIcon Symbol="OpenFile" />
                             </MenuItem.Icon>
                         </MenuItem>
                     </MenuFlyout>
@@ -180,7 +180,7 @@
                             CommandParameter="Default"
                             Header="Select with Configured Delay">
                             <MenuItem.Icon>
-                                <controls:SymbolIcon Symbol="Clock" />
+                                <controls:FASymbolIcon Symbol="Clock" />
                             </MenuItem.Icon>
                         </MenuItem>
                         <Separator />
@@ -206,4 +206,4 @@
         </StackPanel>
 
     </Grid>
-</windowing:AppWindow>
+</windowing:FAAppWindow>

@@ -48,7 +48,12 @@ public partial class ApplicationPathSettingsVM : ViewModelBase
         _windowSubFolderPattern = _config.SaveImageSubFolderPatternWindow;
     }
 
-    partial void OnPersonalFolderPathChanged(string value) => SnapXL.CustomPersonalPath = value;
+    partial void OnPersonalFolderPathChanged(string value)
+    {
+        SnapXL.CustomPersonalPath = value;
+        SnapXL.WritePersonalPathConfig(value);
+        OnPropertyChanged(nameof(SubFolderPreviewPath));
+    }
     partial void OnUseCustomScreenshotsFolderChanged(bool value)
     {
         _config.UseCustomScreenshotsPath = value;
@@ -81,7 +86,9 @@ public partial class ApplicationPathSettingsVM : ViewModelBase
     [RelayCommand]
     private void ApplyPersonalFolder()
     {
-        // idk
+        SnapXL.CustomPersonalPath = PersonalFolderPath;
+        SnapXL.WritePersonalPathConfig(PersonalFolderPath);
+        OnPropertyChanged(nameof(SubFolderPreviewPath));
     }
 
     [RelayCommand]

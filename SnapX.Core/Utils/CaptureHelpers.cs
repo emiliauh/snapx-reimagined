@@ -4,6 +4,7 @@
 
 
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using SnapX.Core.Utils.Native;
 
 
@@ -66,7 +67,18 @@ public static class CaptureHelpers
 
     public static Color GetPixelColor(int x, int y)
     {
-        throw new NotImplementedException("GetPixelColor is not implemented");
+        Point position = new(x, y);
+        Rectangle screenBounds = Methods.GetScreenBounds(position);
+        using Image? screenshot = Methods.CaptureScreen(position).GetAwaiter().GetResult();
+        if (screenshot is null)
+        {
+            throw new InvalidOperationException("The screen capture backend returned no image.");
+        }
+
+        int pixelX = Math.Clamp(x - screenBounds.X, 0, screenshot.Width - 1);
+        int pixelY = Math.Clamp(y - screenBounds.Y, 0, screenshot.Height - 1);
+        using Image<Rgba64> rgba = screenshot.CloneAs<Rgba64>();
+        return Color.FromPixel(rgba[pixelX, pixelY]);
     }
 
     public static Color GetPixelColor(Point position)
@@ -76,14 +88,18 @@ public static class CaptureHelpers
 
     public static bool CheckPixelColor(int x, int y, Color color)
     {
-        Color targetColor = GetPixelColor(x, y);
-
-        throw new NotImplementedException("CheckPixelColor is not implemented");
+        Rgba32 actual = GetPixelColor(x, y).ToPixel<Rgba32>();
+        Rgba32 expected = color.ToPixel<Rgba32>();
+        return actual.R == expected.R && actual.G == expected.G && actual.B == expected.B;
     }
 
     public static bool CheckPixelColor(int x, int y, Color color, byte variation)
     {
-        throw new NotImplementedException("CheckPixelColor is not implemented");
+        Rgba32 actual = GetPixelColor(x, y).ToPixel<Rgba32>();
+        Rgba32 expected = color.ToPixel<Rgba32>();
+        return Math.Abs(actual.R - expected.R) <= variation
+            && Math.Abs(actual.G - expected.G) <= variation
+            && Math.Abs(actual.B - expected.B) <= variation;
     }
 
     public static Rectangle CreateRectangle(int x, int y, int x2, int y2)
@@ -278,4 +294,3 @@ public static class CaptureHelpers
         return rect;
     }
 }
-

@@ -1,8 +1,11 @@
 ﻿using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
+using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using FluentAvalonia.UI.Controls;
 using SnapX.Avalonia.ViewModels;
 using SnapX.Avalonia.Views.Controls;
@@ -21,6 +24,7 @@ public partial class MainView : UserControl
 {
     private string? selectedAction;
     private TimeSpan? delay;
+    private bool _isVideoMode;
 
     public MainView()
     {
@@ -30,7 +34,7 @@ public partial class MainView : UserControl
         {
             foreach (var item in _flyout.MenuItems)
             {
-                if (item is NavigationViewItem menuItem)
+                if (item is FANavigationViewItem menuItem)
                 {
                     if (menuItem.Tag != null)
                         return;
@@ -53,42 +57,56 @@ public partial class MainView : UserControl
         {
             [Lang.UI_Capture_Fullscreen] = async () =>
             {
-                img = await Task.Run(
-                    () =>
-                        TaskHelpers
-                            .GetScreenshot(TaskSettings.GetDefaultTaskSettings())
-                            .CaptureFullscreen()
-                );
+                if (_isVideoMode)
+                {
+                    DebugHelper.WriteLine("ExecuteSelectedCaptureAction: starting screen recording (Fullscreen).");
+                    TaskHelpers.StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.Fullscreen);
+                    return;
+                }
+                await TaskHelpers.ExecuteJob(TaskSettings.GetDefaultTaskSettings(), HotkeyType.PrintScreen);
             },
             [Lang.UI_Dropdown_Region] = async () =>
             {
-                new RegionSelectorWindow(new RegionSelectorViewModel()).Show();
+                DebugHelper.WriteLine($"ExecuteSelectedCaptureAction: Region clicked, _isVideoMode={_isVideoMode}.");
+                if (_isVideoMode)
+                {
+                    DebugHelper.WriteLine("ExecuteSelectedCaptureAction: starting screen recording (Region).");
+                    TaskHelpers.StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.Region);
+                    return;
+                }
+                await TaskHelpers.ExecuteJob(TaskSettings.GetDefaultTaskSettings(), HotkeyType.RectangleRegion);
             },
             [Lang.UI_Dropdown_RegionLight] = async () =>
             {
-                new RegionSelectorWindow(new RegionSelectorViewModel()).Show();
+                await TaskHelpers.ExecuteJob(TaskSettings.GetDefaultTaskSettings(), HotkeyType.RectangleLight);
             },
             [Lang.UI_Dropdown_RegionTransparent] = async () =>
             {
-                new RegionSelectorWindow(new RegionSelectorViewModel()).Show();
+                await TaskHelpers.ExecuteJob(TaskSettings.GetDefaultTaskSettings(), HotkeyType.RectangleTransparent);
             },
             [Lang.UI_Dropdown_Window] = async () =>
             {
-                img = await Task.Run(
-                    () =>
-                        TaskHelpers
-                            .GetScreenshot(TaskSettings.GetDefaultTaskSettings())
-                            .CaptureActiveWindow()
-                );
+                if (_isVideoMode)
+                {
+                    await SelectWindowForRecordingAsync();
+                    return;
+                }
+                // The hotkey/CLI HotkeyType.ActiveWindow path still grabs
+                // whichever window currently has focus, which is what a
+                // scripted invocation expects. The sidebar button is
+                // interactive, so let the user hover to pick which window
+                // instead of guessing which one was "active".
+                new SnapX.Core.Capture.CaptureWindowPicker().Capture(TaskSettings.GetDefaultTaskSettings());
+                return;
             },
-            [Lang.UI_Dropdown_Monitor] = async () =>
+            [Lang.UI_Dropdown_Monitor] = () =>
             {
-                img = await Task.Run(
-                    () =>
-                        TaskHelpers
-                            .GetScreenshot(TaskSettings.GetDefaultTaskSettings())
-                            .CaptureActiveMonitor()
-                );
+                if (_isVideoMode)
+                {
+                    return SelectMonitorForRecordingAsync();
+                }
+                new SnapX.Core.Capture.CaptureMonitorPicker().Capture(TaskSettings.GetDefaultTaskSettings());
+                return Task.CompletedTask;
             },
             [Lang.UI_Dropdown_ScreenRecording] = async () =>
             {
@@ -113,6 +131,92 @@ public partial class MainView : UserControl
 
         if (img != null)
             UploadManager.RunImageTask(img, TaskSettings.GetDefaultTaskSettings());
+    }
+
+    private void CaptureModeToggle_OnClick(object? sender, RoutedEventArgs e)
+    {
+        _isVideoMode = CaptureModeToggle.IsChecked == true;
+        CaptureModeIcon.Symbol = _isVideoMode ? FluentIcons.Common.Symbol.Video : FluentIcons.Common.Symbol.Camera;
+        CaptureModeLabel.Text = _isVideoMode ? "Video" : "Photo";
+        DebugHelper.WriteLine($"CaptureModeToggle_OnClick: mode is now {(_isVideoMode ? "Video" : "Photo")}.");
+    }
+
+    /// <summary>
+    /// Selects a recording window interactively. The compositor-native picker
+    /// highlights the window under the pointer before a click commits it, so
+    /// Video > Window never starts recording whichever window merely happens
+    /// to be focused at the time the menu item is pressed.
+    /// </summary>
+    private static async Task SelectWindowForRecordingAsync()
+    {
+        TaskSettings taskSettings = TaskSettings.GetDefaultTaskSettings();
+        RegionCaptureOptions options = RegionCaptureTasks.GetRegionCaptureOptions(
+            taskSettings.CaptureSettings.SurfaceOptions);
+        options.WindowPickerMode = true;
+
+        RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
+            options,
+            RegionCaptureType.Default,
+            captureImage: false);
+        if (selection is null || selection.Rectangle.IsEmpty)
+        {
+            DebugHelper.WriteLine("Video window selection was cancelled before recording started.");
+            return;
+        }
+
+        taskSettings.CaptureSettings.CaptureCustomRegion = selection.Rectangle;
+        TaskHelpers.StartScreenRecording(
+            ScreenRecordOutput.FFmpeg,
+            ScreenRecordStartMethod.CustomRegion,
+            taskSettings);
+    }
+
+    /// <summary>
+    /// Selects a recording monitor interactively. The compositor-native
+    /// monitor picker highlights the output under the pointer before a click
+    /// commits it, so Video > Monitor never starts recording whichever
+    /// monitor merely happens to be focused at the time the menu item is
+    /// pressed. Mirrors <see cref="SelectWindowForRecordingAsync"/>.
+    /// </summary>
+    private static async Task SelectMonitorForRecordingAsync()
+    {
+        TaskSettings taskSettings = TaskSettings.GetDefaultTaskSettings();
+        RegionCaptureOptions options = RegionCaptureTasks.GetRegionCaptureOptions(
+            taskSettings.CaptureSettings.SurfaceOptions);
+        options.MonitorPickerMode = true;
+
+        RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
+            options,
+            RegionCaptureType.Default,
+            captureImage: false);
+        if (selection is null || selection.Rectangle.IsEmpty)
+        {
+            DebugHelper.WriteLine("Video monitor selection was cancelled before recording started.");
+            return;
+        }
+
+        taskSettings.CaptureSettings.CaptureCustomRegion = selection.Rectangle;
+        TaskHelpers.StartScreenRecording(
+            ScreenRecordOutput.FFmpeg,
+            ScreenRecordStartMethod.CustomRegion,
+            taskSettings);
+    }
+
+    private void AfterCaptureUploadItem_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is FAToggleMenuFlyoutItem toggle && SnapX.Avalonia.Utils.TaskFlagMenuHelper.Toggle(toggle))
+        {
+            SnapXL.Settings?.SaveAsync();
+        }
+    }
+
+    private void AfterCaptureUploadFlyout_OnOpening(object? sender, EventArgs e)
+    {
+        if (sender is not FAMenuFlyout flyout) return;
+        foreach (var item in flyout.Items)
+        {
+            if (item is FAToggleMenuFlyoutItem toggle) SnapX.Avalonia.Utils.TaskFlagMenuHelper.SyncCheckState(toggle);
+        }
     }
 
     [RelayCommand]
@@ -145,7 +249,7 @@ public partial class MainView : UserControl
     private void DelayOption_Checked(object? sender, RoutedEventArgs e)
     {
         DebugHelper.WriteLine("DelayOption_Checked");
-        if (sender is not NavigationViewItem item)
+        if (sender is not FANavigationViewItem item)
             return;
         if (item.Tag is null)
             return;
@@ -153,13 +257,13 @@ public partial class MainView : UserControl
         delay = TimeSpan.FromSeconds(long.Parse(item.Tag as string));
         Core.SnapXL.Settings.DefaultTaskSettings.CaptureSettings.ScreenshotDelay = (decimal)
             delay.Value.TotalSeconds;
-        var DelayMenuItem = this.FindControl<NavigationViewItem>("DelayMenuItem");
+        var DelayMenuItem = this.FindControl<FANavigationViewItem>("DelayMenuItem");
         if (DelayMenuItem == null || DelayMenuItem.MenuItems == null)
             return;
 
         long targetSeconds = (long)delay.Value.TotalSeconds;
 
-        foreach (var menuItem in DelayMenuItem.MenuItems.Cast<NavigationViewItem>())
+        foreach (var menuItem in DelayMenuItem.MenuItems.Cast<FANavigationViewItem>())
         {
             if (menuItem.Tag is string tag && long.TryParse(tag, out long tagValue))
             {
@@ -198,7 +302,8 @@ public partial class MainView : UserControl
 
     private void SettingsItem_Pressed(object? Sender, PointerPressedEventArgs E)
     {
-        App.CreateOrOpenSettingsWindowStatic();
+        if (DataContext is MainViewModel mainViewModel)
+            mainViewModel.CurrentPage = Ioc.Default.GetRequiredService<InAppSettingsHostVM>();
     }
 
     private void FindURLOnDescendant(ILogical control)
@@ -287,7 +392,7 @@ public partial class MainView : UserControl
             (long)Core.SnapXL.Settings.DefaultTaskSettings.CaptureSettings.ScreenshotDelay
         );
 
-        var MainNavView = this.FindControl<NavigationView>("MainNavView");
+        var MainNavView = this.FindControl<FANavigationView>("MainNavView");
         if (MainNavView != null)
         {
             MainNavView.Loaded -= MainNavView_Loaded_SetSelection;
@@ -297,18 +402,18 @@ public partial class MainView : UserControl
 
     private void MainNavView_Loaded_SetSelection(object? sender, RoutedEventArgs e)
     {
-        if (sender is not NavigationView MainNavView)
+        if (sender is not FANavigationView MainNavView)
             return;
 
         MainNavView.Loaded -= MainNavView_Loaded_SetSelection;
 
-        var DelayMenuItem = MainNavView.FindControl<NavigationViewItem>("DelayMenuItem");
+        var DelayMenuItem = MainNavView.FindControl<FANavigationViewItem>("DelayMenuItem");
         if (DelayMenuItem == null || DelayMenuItem.MenuItems == null)
             return;
 
         long targetSeconds = (long)delay.Value.TotalSeconds;
 
-        foreach (var item in DelayMenuItem.MenuItems.Cast<NavigationViewItem>())
+        foreach (var item in DelayMenuItem.MenuItems.Cast<FANavigationViewItem>())
         {
             if (item.Tag is string tag && long.TryParse(tag, out long tagValue))
             {
@@ -326,7 +431,7 @@ public partial class MainView : UserControl
     private void DonateButtonPressed(object? sender, PointerPressedEventArgs e)
     {
         var donationMenu = new Donation();
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
             Title = Lang.KeepSnapXOpenAndFree,
             Content = donationMenu,
@@ -334,7 +439,7 @@ public partial class MainView : UserControl
             PrimaryButtonText = Lang.CountMeIn,
             IsSecondaryButtonEnabled = true,
             SecondaryButtonText = Lang.MaybeLater,
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
             PrimaryButtonCommand = donationMenu.PrimaryClickCommand,
             FullSizeDesired = true,
         };
@@ -348,7 +453,7 @@ public partial class MainView : UserControl
     {
         try
         {
-            if (Sender is not NavigationViewItem navigationViewItem)
+            if (Sender is not FANavigationViewItem navigationViewItem)
                 return;
             var target = navigationViewItem.Content as string;
             if (string.IsNullOrEmpty(target))
@@ -402,6 +507,6 @@ public partial class MainView : UserControl
 
     private void ToolClicked(object? Sender, PointerPressedEventArgs E)
     {
-        ExecuteSelectedToolCommand.Execute((Sender as NavigationViewItem).Content);
+        ExecuteSelectedToolCommand.Execute((Sender as FANavigationViewItem).Content);
     }
 }

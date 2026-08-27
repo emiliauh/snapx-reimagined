@@ -35,12 +35,12 @@ public partial class ImageShackUploaderSettingsView : UserControl
             {
                 var success = await Task.Run(imageShackUploader.GetAccessToken);
 
-                var dialog = new ContentDialog
+                var dialog = new FAContentDialog
                 {
                     Title = success ? "Success" : "Login Failed",
                     Content = success ? "Login successful!" : "Please check your username and password.",
                     CloseButtonText = "OK",
-                    DefaultButton = ContentDialogButton.Close
+                    DefaultButton = FAContentDialogButton.Close
                 };
 
                 var topLevel = TopLevel.GetTopLevel(this);
@@ -55,7 +55,7 @@ public partial class ImageShackUploaderSettingsView : UserControl
             }
             catch (Exception ex)
             {
-                ContentDialog errorDialog = new ContentDialog
+                FAContentDialog errorDialog = new FAContentDialog
                 {
                     Title = "Error",
                     Content = ex.ToString(),

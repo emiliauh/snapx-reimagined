@@ -12,10 +12,24 @@ public class NeedFileOpenerEvent
     public string? Title { get; set; } = SnapXL.AppName;
     public bool Multiselect { get; set; } = false;
     public bool FolderPicker { get; set; }
+    public bool IndexFolder { get; set; }
+    public bool HashCheck { get; set; }
+    public bool VideoThumbnailer { get; set; }
+    public bool VideoConverter { get; set; }
     public TaskSettings TaskSettings { get; set; }
 }
 
 public record ErrorMessageEvent(Exception Exception, string Context, bool FullError);
+
+/// <summary>Raised after a task finishes, so the frontend can show a
+/// dismissible thumbnail preview (matching ShareX's classic toast).</summary>
+public record NeedToastNotificationEvent(
+    Image? Image,
+    string Title,
+    string Message,
+    string? Url,
+    string? FilePath,
+    ToastClickAction ClickAction);
 
 public class NeedMainWindowHandle
 {
@@ -27,6 +41,10 @@ public class NeedRegionCaptureEvent { }
 
 public class NeedClipboardCopyEvent
 {
+    private readonly TaskCompletionSource<bool> _completion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
+
     public string? Text { get; set; }
 
     public NeedClipboardCopyEvent(string text)
@@ -44,6 +62,14 @@ public class NeedClipboardCopyEvent
         FileName = filename;
     }
 
+    /// <summary>
+    /// Places one or more local files on the clipboard as a real file object.
+    /// </summary>
+    public NeedClipboardCopyEvent(IReadOnlyList<string> filePaths)
+    {
+        FilePaths = filePaths;
+    }
+
 
     public Image? Image { get; set; }
     public string FileName { get; set; }
@@ -53,11 +79,34 @@ public class NeedClipboardCopyEvent
     public bool HasText => !string.IsNullOrEmpty(Text);
     public bool HasImage => Image != null;
 
+    /// <summary>
+    /// One or more local file paths to place on the clipboard as a real file
+    /// object (e.g. so a file manager or chat app's "paste" adds the actual
+    /// file, not just its path as text). Used by
+    /// <see cref="AfterCaptureTasks.CopyFileToClipboard"/>.
+    /// </summary>
+    public IReadOnlyList<string>? FilePaths { get; set; }
+
+    public bool HasFiles => FilePaths is { Count: > 0 };
+
     public bool Handled { get; set; }
+
+    /// <summary>
+    /// Completes only after the active frontend has finished handing this data
+    /// to its native clipboard backend. Capture workers use this to retain the
+    /// source image until the frontend has made its independent bitmap copy.
+    /// </summary>
+    public Task<bool> Completion => _completion.Task;
 
     public void MarkAsHandled()
     {
         Handled = true;
+        _completion.TrySetResult(true);
+    }
+
+    public void MarkAsFailed()
+    {
+        _completion.TrySetResult(false);
     }
 }
 public class NeedOCRWindowEvent(Image Image, TaskSettings Settings)

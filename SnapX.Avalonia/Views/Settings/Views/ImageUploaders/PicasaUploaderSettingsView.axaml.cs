@@ -35,7 +35,7 @@ public partial class PicasaUploaderSettingsView : UserControl
                 var oauth = new OAuth2Info(config.GooglePhotosOAuth2Info?.Client_ID, config.GooglePhotosOAuth2Info?.Client_Secret);
                 IOAuth2Loopback oauthLoopback = new GooglePhotos(oauth).OAuth2;
                 var listenerView = new OAuth2ListenerView();
-                var dialog = new ContentDialog
+                var dialog = new FAContentDialog
                 {
                     Title = "External Authentication",
                     Content = listenerView,

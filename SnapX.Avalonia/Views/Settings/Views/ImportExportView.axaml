@@ -15,7 +15,7 @@
         <viewModels:ImportExportVM />
     </Design.DataContext>
     <StackPanel>
-        <controls:InfoBar
+        <controls:FAInfoBar
             FontWeight="Black"
             IsClosable="False"
             IsOpen="True"
@@ -23,13 +23,13 @@
             Message="This configuration contains passwords, account details, and upload history. Do not share it with someone you do not trust."
             Severity="Warning"
             Title="Warning">
-            <controls:InfoBar.IconSource>
+            <controls:FAInfoBar.IconSource>
                 <fluent:FluentIconSource
                     Icon="ShieldPerson"
                     IconSize="Size48"
                     IconVariant="Regular" />
-            </controls:InfoBar.IconSource>
-        </controls:InfoBar>
+            </controls:FAInfoBar.IconSource>
+        </controls:FAInfoBar>
         <StackPanel
             HorizontalAlignment="Center"
             Margin="16"

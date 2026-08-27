@@ -1,0 +1,34 @@
+<UserControl
+    x:Class="SnapX.Avalonia.Views.Settings.InAppSettingsHost"
+    x:DataType="viewModels:InAppSettingsHostVM"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:fluent="clr-namespace:FluentIcons.Avalonia.Fluent;assembly=FluentIcons.Avalonia.Fluent"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:viewModels="clr-namespace:SnapX.Avalonia.ViewModels"
+    xmlns:views="clr-namespace:SnapX.Avalonia.Views.Settings.Views"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    d:DesignHeight="700"
+    d:DesignWidth="1100"
+    mc:Ignorable="d">
+    <Grid RowDefinitions="Auto,*">
+        <Border
+            Background="{DynamicResource SolidBackgroundFillColorBase}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="12,8">
+            <Button
+                Click="BackButton_OnClick"
+                HorizontalAlignment="Left"
+                HorizontalContentAlignment="Left"
+                Padding="10,6"
+                ToolTip.Tip="Back to Home">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fluent:FluentIcon Icon="ArrowLeft" />
+                    <TextBlock Text="Back" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </Border>
+        <views:SettingsMainView Grid.Row="1" IsEmbedded="True" />
+    </Grid>
+</UserControl>

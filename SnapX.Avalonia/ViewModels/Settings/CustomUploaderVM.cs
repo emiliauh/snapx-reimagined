@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Notifications;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -129,18 +130,18 @@ public partial class CustomUploaderVM : ViewModelBase
         var vm = new CustomUploaderCatalogVM();
         await vm.LoadCatalogAsync();
 
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
             Title = "Uploader Catalog",
             Content = new CustomUploaderCatalogView(vm) { DataContext = vm },
             PrimaryButtonText = "Import Selected",
             CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary
+            DefaultButton = FAContentDialogButton.Primary
         };
 
         var result = await dialog.ShowAsync();
 
-        if (result == ContentDialogResult.Primary)
+        if (result == FAContentDialogResult.Primary)
         {
             var selectedItems = vm.AvailableUploaders.Where(x => x.IsSelected).ToList();
             IsLoading = true;
@@ -197,7 +198,7 @@ public partial class CustomUploaderVM : ViewModelBase
         try
         {
             IsLoading = true;
-            DebugHelper.WriteLine("Propagating custom uploader data...");
+            DebugHelper.WriteLine("Propagating custom uploader data.");
             var UploadersConfig = App.SnapX.GetUploadersConfig();
             var oldIndex = Uploaders.IndexOf(SelectedUploader!);
             var oldCount = Uploaders.Count;
@@ -384,7 +385,7 @@ public partial class CustomUploaderVM : ViewModelBase
         catch (Exception e)
         {
             DebugHelper.WriteException(e);
-            var dialog = new ContentDialog
+            var dialog = new FAContentDialog
             {
                 Title = $"{nameof(CustomUploaderVM)} - Initialization Error",
                 Content = new SelectableTextBlock
@@ -403,7 +404,7 @@ public partial class CustomUploaderVM : ViewModelBase
             TaskHelpers.PlayNotificationSoundAsync(NotificationSound.Error);
             var result = await dialog.ShowAsync();
 
-            if (result == ContentDialogResult.Primary)
+            if (result == FAContentDialogResult.Primary)
             {
                 var topLevel = TopLevel.GetTopLevel(
                     App.MyMainWindow is not null ? App.MyMainWindow : dialog
@@ -489,7 +490,7 @@ public partial class CustomUploaderVM : ViewModelBase
     {
         if (Core.SnapXL.CloseSequenceStarted || IsInitializing)
             return;
-        DebugHelper.WriteLine("CustomUploaderVM detected settings saved, re-propagating data...");
+        DebugHelper.WriteLine("CustomUploaderVM detected saved settings and is propagating the data.");
         await PropagateData();
     }
 
@@ -556,7 +557,7 @@ public partial class CustomUploaderVM : ViewModelBase
         catch (Exception ex)
         {
             DebugHelper.WriteException(ex);
-            var dialog = new ContentDialog
+            var dialog = new FAContentDialog
             {
                 Title = "SnapX - Import Error",
                 Content = new SelectableTextBlock
@@ -586,7 +587,7 @@ public partial class CustomUploaderVM : ViewModelBase
         if (string.IsNullOrWhiteSpace(item.RequestURL))
         {
             DebugHelper.Logger?.Error("Cannot export uploader with null RequestURL.");
-            var dialog = new ContentDialog
+            var dialog = new FAContentDialog
             {
                 Title = "Invalid Uploader",
                 Content = "This uploader cannot be exported because the Request URL is empty.",
@@ -600,7 +601,7 @@ public partial class CustomUploaderVM : ViewModelBase
         if (item.DestinationType == CustomUploaderDestinationType.None)
         {
             DebugHelper.Logger?.Error("Cannot export uploader with None destination type.");
-            var dialog = new ContentDialog
+            var dialog = new FAContentDialog
             {
                 Title = "Invalid Uploader",
                 Content =
@@ -656,7 +657,7 @@ public partial class CustomUploaderVM : ViewModelBase
         catch (Exception e)
         {
             DebugHelper.WriteException(e);
-            var dialog = new ContentDialog
+            var dialog = new FAContentDialog
             {
                 Title = "SnapX - Export Error",
                 Content = new SelectableTextBlock
@@ -701,7 +702,7 @@ public partial class CustomUploaderVM : ViewModelBase
         var testSummary = new List<(CustomUploaderDestinationType Type, UploadResult Result)>();
         DebugHelper.WriteLine($"Testing {item.Name ?? item.GetFileName()} ({DestinationType})");
         WeakReferenceMessenger.Default.Send(
-            new NotificationMessage("Test Started", "Bombs away!", NotificationType.Information)
+            new NotificationMessage("Test started", "SnapX started the uploader test.", NotificationType.Information)
         );
 
         try
@@ -736,22 +737,22 @@ public partial class CustomUploaderVM : ViewModelBase
                                 AcceptsReturn = true,
                                 TextWrapping = TextWrapping.Wrap,
                                 Height = 200,
-                                Text = "This is a test text upload from SnapX!",
-                                Watermark = "Enter text to upload..."
+                                Text = "This is a test text upload from SnapX.",
+                                Watermark = "Enter text to upload."
                             };
 
-                            var TextUploadDialog = new ContentDialog
+                            var TextUploadDialog = new FAContentDialog
                             {
                                 Title = "SnapX text upload test",
                                 Content = textBox,
                                 PrimaryButtonText = "OK",
                                 CloseButtonText = "Cancel",
-                                DefaultButton = ContentDialogButton.Primary
+                                DefaultButton = FAContentDialogButton.Primary
                             };
 
                             var dialogResult = await TextUploadDialog.ShowAsync();
 
-                            if (dialogResult == ContentDialogResult.Primary)
+                            if (dialogResult == FAContentDialogResult.Primary)
                             {
                                 var text = textBox.Text;
 
@@ -833,9 +834,9 @@ public partial class CustomUploaderVM : ViewModelBase
             var sectionStack = new StackPanel { Spacing = 4 };
 
             var headerStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            headerStack.Children.Add(new SymbolIcon
+            headerStack.Children.Add(new FASymbolIcon
             {
-                Symbol = isSuccess ? Symbol.Checkmark : Symbol.Dismiss,
+                Symbol = isSuccess ? FASymbol.Checkmark : FASymbol.Dismiss,
                 Foreground = isSuccess ? Brushes.LightGreen : Brushes.OrangeRed,
                 FontSize = 18
             });
@@ -873,12 +874,12 @@ public partial class CustomUploaderVM : ViewModelBase
             }
         }
 
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
             Title = "Test Upload Summary",
             Content = new ScrollViewer { MaxHeight = 600, Content = mainStack },
             CloseButtonText = "Close",
-            DefaultButton = ContentDialogButton.Close
+            DefaultButton = FAContentDialogButton.Close
         };
 
         await dialog.ShowAsync();

@@ -17,14 +17,14 @@ internal class CustomUploaderFunctionOutputBox : CustomUploaderFunction
         string? text;
         string? title = null;
 
-        if (parameters.Length > 1)
+        if (parameters is { Length: > 1 })
         {
             title = parameters[0];
             text = parameters[1];
         }
         else
         {
-            text = parameters[0];
+            text = parameters is { Length: > 0 } ? parameters[0] : null;
         }
 
         if (!string.IsNullOrEmpty(text))
@@ -33,7 +33,7 @@ internal class CustomUploaderFunctionOutputBox : CustomUploaderFunction
             {
                 title = "Output";
             }
-            throw new NotImplementedException("Custom uploader function outputbox function parameters are not implemented.");
+            parser.Interaction.ShowOutput(title, text);
         }
 
         return null;

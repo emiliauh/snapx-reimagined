@@ -18,7 +18,10 @@ public enum ImageDestination
     [Description("vgy.me")]
     Vgyme,
     CustomImageUploader, // Localized
-    FileUploader // Localized
+    FileUploader, // Localized
+    // Appended to preserve the numeric values of existing persisted settings.
+    [Description("Photobucket")]
+    Photobucket = 8
 }
 
 [Description("Text uploaders"), DefaultValue(Hastebin)]
@@ -37,7 +40,16 @@ public enum TextDestination
     [Description("OneTimeSecret")]
     OneTimeSecret,
     CustomTextUploader, // Localized
-    FileUploader // Localized
+    FileUploader, // Localized
+    // Appended to preserve the numeric values of existing persisted settings.
+    [Description("Slexy")]
+    Slexy = 8,
+    [Description("uPaste")]
+    Upaste = 9,
+    [Description("Pastie")]
+    Pastie = 10,
+    [Description("PrivateBin")]
+    PrivateBin = 11
 }
 
 [Description("File uploaders"), DefaultValue(Mega)]
@@ -97,7 +109,12 @@ public enum FileDestination
     Vault_ooo,
     SharedFolder, // Localized
     Email, // Localized
-    CustomFileUploader // Localized
+    CustomFileUploader, // Localized
+    // Appended to preserve the numeric values of existing persisted settings.
+    [Description("Lambda")]
+    Lambda = 29,
+    [Description("transfer.sh")]
+    Transfersh = 30
 }
 
 [Description("URL shorteners"), DefaultValue(YOURLS)]
@@ -125,7 +142,12 @@ public enum UrlShortenerType
     Kutt,
     [Description("Zero Width Shortener")]
     ZeroWidthShortener,
-    CustomURLShortener // Localized
+    CustomURLShortener, // Localized
+    // Appended to preserve the numeric values of existing persisted settings.
+    [Description("bit.ly")]
+    BITLY = 12,
+    [Description("turl.ca")]
+    TURL = 13
 }
 
 [Description("URL sharing services"), DefaultValue(Reddit)]

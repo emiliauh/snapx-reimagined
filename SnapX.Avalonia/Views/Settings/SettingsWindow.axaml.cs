@@ -8,7 +8,7 @@ namespace SnapX.Avalonia.Views.Settings;
 
 public record NotificationMessage(string Title, string Message, NotificationType Type);
 
-public partial class SettingsWindow : AppWindow
+public partial class SettingsWindow : FAAppWindow
 {
     public SettingsWindow()
     {

@@ -22,6 +22,11 @@ public class Build(IBuildLogger Logger, ICommandRunner CommandRunner, IFileSyste
 
         await CommandRunner.RunAsync("dotnet", $"publish \"{project}\" --configuration {config.Configuration} --nologo -o \"{Path.Combine(config.OutputDir, assemblyName)}\" {ridArg} {config.ExtraArgs}");
 
+        if (OperatingSystem.IsLinux() && assemblyName == "snapx-ui")
+        {
+            await HandleWaylandOutlineCopy(config.RootDirectory, config.OutputDir, assemblyName);
+        }
+
         if (project.Contains("NativeMessagingHost"))
         {
             await HandleNativeMessagingHost(assemblyName, config.OutputDir, config.LibDir, config.projectsToBuild.Where(p => !p.Contains("NativeMessagingHost")));
@@ -90,4 +95,76 @@ public class Build(IBuildLogger Logger, ICommandRunner CommandRunner, IFileSyste
 
         return Task.CompletedTask;
     }
+
+    private async Task HandleWaylandOutlineCopy(string rootDirectory, string outputDir, string assemblyName)
+    {
+        const string nativeDir = "Native";
+        string sourceDir = Path.Combine(rootDirectory, "SnapX.Avalonia", nativeDir);
+        string cSrc = Path.Combine(sourceDir, "snapx-outline.c");
+        string pickerSrc = Path.Combine(sourceDir, "snapx-picker.c");
+        string layerCode = Path.Combine(sourceDir, "layer-shell-code.c");
+        string xdgCode = Path.Combine(sourceDir, "xdg-shell-code.c");
+        string relativePointerCode = Path.Combine(sourceDir, "relative-pointer-code.c");
+
+        if (!File.Exists(pickerSrc) || !File.Exists(layerCode) || !File.Exists(xdgCode) ||
+            !File.Exists(relativePointerCode))
+        {
+            Logger.Information($"Skipping snapx-picker: native sources not found in {sourceDir}");
+        }
+        else
+        {
+            string pickerOutputBinary = Path.Combine(outputDir, assemblyName, "snapx-picker");
+            Directory.CreateDirectory(Path.GetDirectoryName(pickerOutputBinary)!);
+
+            string pickerCflags = GetPkgConfigFlags("wayland-client");
+            string pickerCommand = $"gcc \"{pickerSrc}\" \"{layerCode}\" \"{xdgCode}\" \"{relativePointerCode}\" -o \"{pickerOutputBinary}\" -I\"{sourceDir}\" {pickerCflags} -lm";
+            Logger.Information($"Compiling snapx-picker: {pickerCommand}");
+            try
+            {
+                await CommandRunner.RunAsync("bash", $"-c \"{pickerCommand}\"");
+            }
+            catch
+            {
+                Logger.Information("snapx-picker compile failed; native window-or-region selection will be unavailable.");
+            }
+        }
+
+        if (!File.Exists(cSrc) || !File.Exists(layerCode) || !File.Exists(xdgCode) ||
+            !File.Exists(relativePointerCode))
+        {
+            Logger.Information($"Skipping snapx-outline: native sources not found in {sourceDir}");
+            return;
+        }
+
+        string outputBinary = Path.Combine(outputDir, assemblyName, "snapx-outline");
+        Directory.CreateDirectory(Path.GetDirectoryName(outputBinary)!);
+
+        string cflags = GetPkgConfigFlags("wayland-client");
+        string cmd = $"gcc \"{cSrc}\" \"{layerCode}\" \"{xdgCode}\" \"{relativePointerCode}\" -o \"{outputBinary}\" -I\"{sourceDir}\" {cflags} -lm";
+        Logger.Information($"Compiling snapx-outline: {cmd}");
+        try
+        {
+            await CommandRunner.RunAsync("bash", $"-c \"{cmd}\"");
+        }
+        catch
+        {
+            Logger.Information("snapx-outline compile failed; Wayland outline will fall back to Avalonia windows.");
+        }
+    }
+
+    private static string GetPkgConfigFlags(string package)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo { FileName = "pkg-config", RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            psi.ArgumentList.Add("--cflags"); psi.ArgumentList.Add("--libs"); psi.ArgumentList.Add(package);
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc is null) return "";
+            string outp = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit();
+            return outp.Trim();
+        }
+        catch { return ""; }
+    }
+
 }

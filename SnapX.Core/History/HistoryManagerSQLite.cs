@@ -10,14 +10,14 @@ public class HistoryManagerSQLite(SqliteConnection Connection) : HistoryManager(
     [DapperAot]
     protected override List<HistoryItem> Load(string? filePath)
     {
-        const string sql = "SELECT * FROM HistoryItems";
+        const string sql = "SELECT * FROM HistoryItems ORDER BY [DateTime] DESC, Id DESC";
         return Connection.Query<HistoryItem>(sql).AsList();
     }
     [DapperAot]
     public override List<HistoryItem> GetHistoryItems(int Items = int.MaxValue)
     {
         if (Connection.State == ConnectionState.Closed) return [];
-        const string sql = "SELECT * FROM HistoryItems LIMIT @Items";
+        const string sql = "SELECT * FROM HistoryItems ORDER BY [DateTime] DESC, Id DESC LIMIT @Items";
         return Connection.Query<HistoryItem>(sql, new { Items }).AsList();
     }
 
@@ -168,6 +168,10 @@ public class HistoryManagerSQLite(SqliteConnection Connection) : HistoryManager(
                         historyItem,
                         tx
                     );
+                    // Keep the caller's object synchronized with the committed
+                    // row. UI notifications use this database identity.
+                    historyItem.Id = processedHistoryItem.Id;
+                    processedHistoryItem.Tags = historyItem.Tags;
                     processedHistoryItems.Add(processedHistoryItem);
 
                 }

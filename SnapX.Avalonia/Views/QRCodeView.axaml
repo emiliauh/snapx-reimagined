@@ -1,4 +1,4 @@
-<windowing:AppWindow
+<windowing:FAAppWindow
     DragDrop.AllowDrop="True"
     MinHeight="550"
     MinWidth="900"
@@ -46,7 +46,7 @@
                                 CommandParameter="Default"
                                 Header="Select with Configured Delay">
                                 <MenuItem.Icon>
-                                    <controls1:SymbolIcon Symbol="Clock" />
+                                    <controls1:FASymbolIcon Symbol="Clock" />
                                 </MenuItem.Icon>
                             </MenuItem>
                             <Separator />
@@ -72,9 +72,9 @@
                 <SplitButton Click="QrClipboard_Click" ToolTip.Tip="Only supports one file/paste at once.">
                     <SplitButton.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Click="QrFile_Click" Header="Select Image File...">
+                            <MenuItem Click="QrFile_Click" Header="Select an image file">
                                 <MenuItem.Icon>
-                                    <controls1:SymbolIcon Symbol="OpenFile" />
+                                    <controls1:FASymbolIcon Symbol="OpenFile" />
                                 </MenuItem.Icon>
                             </MenuItem>
                         </MenuFlyout>
@@ -96,10 +96,7 @@
                 VerticalAlignment="Stretch">
                 <ToolTip.Tip>
                     <TextBlock MaxWidth="300" TextWrapping="Wrap">
-                        This text box is designed for maximum flexibility and user control.
-                        As such, it allows you to input as much text as you desire.
-                        Warning: Inputting excessive amounts of data or spamming the input may result
-                        in the operating system forcefully terminating the application due to resource exhaustion.
+                        Enter the text or URL for the QR code. Very large input can use a large amount of memory.
                     </TextBlock>
                 </ToolTip.Tip>
             </TextBox>
@@ -135,18 +132,16 @@
                         Value="{Binding DesiredSize, Mode=TwoWay}">
                         <ToolTip.Tip>
                             <StackPanel MaxWidth="350" Spacing="5">
-                                <TextBlock FontWeight="Bold" Text="Resolution Overdrive" />
+                                <TextBlock FontWeight="Bold" Text="Resolution limits" />
                                 <TextBlock TextWrapping="Wrap">
-                                    • Tested Stable: Up to 8192 (8K)
-                                    • Experimental: 8,193 to 16,384
+                                    Tested: up to 8192 pixels (8K).
+                                    Experimental: 8193 to 16384 pixels.
                                 </TextBlock>
                                 <TextBlock
                                     FontSize="11"
                                     FontStyle="Italic"
                                     TextWrapping="Wrap">
-                                    Note: The preview is math-based, but generating a physical image at these scales
-                                    will consume massive amounts of system memory. Pushing toward 8k can
-                                    exceed your RAM capacity and cause a system-enforced "crash".
+                                    Large QR codes need more system memory. A large value can make the application stop.
                                 </TextBlock>
                             </StackPanel>
                         </ToolTip.Tip>
@@ -175,16 +170,16 @@
                             Width="500">
                             <ToolTip.Tip>
                                 <StackPanel Spacing="5">
-                                    <TextBlock FontWeight="Bold" Text="Vector Preview" />
-                                    <TextBlock Text="{Binding DesiredSize, StringFormat='Output Resolution: {0}x{0}px'}" />
+                                    <TextBlock FontWeight="Bold" Text="Vector preview" />
+                                    <TextBlock Text="{Binding DesiredSize, StringFormat='Output size: {0} x {0} pixels'}" />
                                     <TextBlock
                                         FontSize="11"
                                         Opacity="0.7"
-                                        Text="The preview is rendered as a sharp vector for clarity," />
+                                        Text="The preview uses vector rendering for clear edges." />
                                     <TextBlock
                                         FontSize="11"
                                         Opacity="0.7"
-                                        Text="but your exported file will be as you'd expect." />
+                                        Text="The exported file uses the selected output size." />
                                 </StackPanel>
                             </ToolTip.Tip>
                             <Path.Transitions>
@@ -226,7 +221,7 @@
                             Margin="0,0,4,0">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <fluent:SymbolIcon Symbol="SaveImage" />
-                                <TextBlock Text="Save..." />
+                                <TextBlock Text="Save" />
                             </StackPanel>
                         </Button>
                         <Button
@@ -247,4 +242,4 @@
 
     </Grid>
 
-</windowing:AppWindow>
+</windowing:FAAppWindow>

@@ -11,8 +11,42 @@ namespace SnapX.Core.Capture;
 
 public abstract class CaptureBase
 {
+    private static int captureInProgress;
+    private static Task activeCaptureTask = Task.CompletedTask;
+
+    /// <summary>
+    /// Awaits the background capture launched by the most recent <see cref="Capture"/>
+    /// call. A short-lived host (the CLI) must await this before exiting, otherwise
+    /// the process can terminate before the capture has finished decoding the frame
+    /// and handing it off to the upload/save pipeline.
+    /// </summary>
+    public static Task WaitForActiveCaptureAsync() => activeCaptureTask;
+
+    /// <summary>
+    /// Releases the interactive-capture gate immediately. A cancelled or
+    /// failed region selector must not leave the app reporting
+    /// "already in progress" until the background task happens to finish.
+    /// </summary>
+    public static void CancelActiveCapture()
+    {
+        int value = Interlocked.Exchange(ref captureInProgress, 0);
+        if (value != 0)
+        {
+            DebugHelper.WriteLine("Interactive screen capture was cancelled.");
+        }
+    }
+
     public bool AllowAutoHideForm { get; set; } = true;
     public bool AllowAnnotation { get; set; } = true;
+
+    /// <summary>
+    /// Wayland capture is process and image-decoding work.  Keep it off the
+    /// frontend dispatcher so pressing a capture action never freezes the UI
+    /// while grim or the portal returns the frame. Interactive implementations
+    /// can opt in on other platforms as well.
+    /// </summary>
+    protected virtual bool ExecuteOnBackgroundThread =>
+        OperatingSystem.IsLinux() && LinuxAPI.IsWayland();
 
     public void Capture(bool autoHideForm)
     {
@@ -24,13 +58,43 @@ public abstract class CaptureBase
         if (taskSettings == null)
             taskSettings = TaskSettings.GetDefaultTaskSettings();
 
+        // A Wayland capture can take several seconds. Starting a second job
+        // while the first job owns the selector or image backend makes their
+        // results interleave and produces misleading history cards.
+        if (Interlocked.CompareExchange(ref captureInProgress, 1, 0) != 0)
+        {
+            // A dropped request that only writes to the debug log looks
+            // indistinguishable from a hotkey/menu item that silently does
+            // nothing, so also tell the user why through the same channel
+            // CaptureInternal uses for capture failures.
+            DebugHelper.WriteLine("A screen capture is already in progress; ignoring the new request.");
+            SnapXL.EventAggregator.Publish(new ErrorMessageEvent(
+                new InvalidOperationException("A screen capture is already in progress. Wait for it to finish before starting another."),
+                "Screen capture",
+                false));
+            return;
+        }
+
         // TODO: Reimplement taskSettings.GeneralSettings.ToastWindowAutoHide
         // if (taskSettings.GeneralSettings.ToastWindowAutoHide)
         // {
         //     NotificationForm.CloseActiveForm();
         // }
 
-        if (taskSettings.CaptureSettings.ScreenshotDelay > 0)
+        if (ExecuteOnBackgroundThread)
+        {
+            activeCaptureTask = Task.Run(async () =>
+            {
+                if (taskSettings.CaptureSettings.ScreenshotDelay > 0)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds((double)taskSettings.CaptureSettings.ScreenshotDelay))
+                        .ConfigureAwait(false);
+                }
+
+                CaptureInternal(taskSettings, autoHideForm);
+            });
+        }
+        else if (taskSettings.CaptureSettings.ScreenshotDelay > 0)
         {
             int delay = (int)(taskSettings.CaptureSettings.ScreenshotDelay * 1000);
 
@@ -46,7 +110,7 @@ public abstract class CaptureBase
         }
     }
 
-    protected abstract TaskMetadata Execute(TaskSettings taskSettings);
+    protected abstract TaskMetadata? Execute(TaskSettings taskSettings);
 
     private void CaptureInternal(TaskSettings taskSettings, bool autoHideForm)
     {
@@ -56,7 +120,7 @@ public abstract class CaptureBase
             // Thread.Sleep(250);
         }
 
-        TaskMetadata metadata = null;
+        TaskMetadata? metadata = null;
 
         try
         {
@@ -66,19 +130,27 @@ public abstract class CaptureBase
         catch (Exception ex)
         {
             DebugHelper.WriteException(ex);
+            SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Screen capture failed", true));
         }
         finally
         {
-            if (autoHideForm && AllowAutoHideForm)
+            try
             {
-                // SnapX.MainWindow.ForceActivate();
-            }
+                if (autoHideForm && AllowAutoHideForm)
+                {
+                    // SnapX.MainWindow.ForceActivate();
+                }
 
-            AfterCapture(metadata, taskSettings);
+                AfterCapture(metadata, taskSettings);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref captureInProgress, 0);
+            }
         }
     }
 
-    private void AfterCapture(TaskMetadata metadata, TaskSettings taskSettings)
+    private void AfterCapture(TaskMetadata? metadata, TaskSettings taskSettings)
     {
         if (metadata != null && metadata.Image != null)
         {
@@ -123,7 +195,12 @@ public abstract class CaptureBase
     {
         var metadata = new TaskMetadata();
 
-        var windowInfo = Methods.GetForegroundWindow();
+        // Querying the X11 foreground window can block under Wayland/XWayland.
+        // Capture metadata is optional for a full-screen image, so do not let
+        // that legacy lookup hold the screenshot pipeline indefinitely.
+        var windowInfo = OperatingSystem.IsLinux() && LinuxAPI.IsWayland()
+            ? null
+            : Methods.GetForegroundWindow();
         if (windowInfo != null)
         {
             if (

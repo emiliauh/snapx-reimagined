@@ -57,14 +57,16 @@ public partial class ImportExportVM : ViewModelBase
     {
         string message =
 
-            "SnapX needs to restart to propagate changes! The app used to auto restart, until the stupid app developer corrupted his database doing so. So enjoy the auto shutdown! :DDD";
+            "SnapX must close to apply the imported settings. Start SnapX again after it closes.";
 
         var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
+        var dialogOwner = App.MySettingsWindow ?? desktop?.MainWindow ?? App.MyMainWindow;
 
         // Silently murder MyMainWindow 💔
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            desktop.MainWindow = App.MySettingsWindow;
+            if (desktop is not null && dialogOwner is not null)
+                desktop.MainWindow = dialogOwner;
             if (App.MyMainWindow == null) return;
             App.MyMainWindow.Content = null;
             App.MyMainWindow.DataContext = null;
@@ -73,12 +75,12 @@ public partial class ImportExportVM : ViewModelBase
             // App.MyMainWindow.Hide();
         });
 
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
-            Title = "Restart Required",
+            Title = "Restart SnapX",
             Content = message,
             PrimaryButtonText = "OK",
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = FAContentDialogButton.Primary,
         };
 
         if (desktop?.Windows != null)
@@ -95,7 +97,13 @@ public partial class ImportExportVM : ViewModelBase
 
         try
         {
-            await Dispatcher.UIThread.InvokeAsync(async () => { await dialog.ShowAsync(App.MySettingsWindow); });
+            await Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                if (dialogOwner is null)
+                    await dialog.ShowAsync();
+                else
+                    await dialog.ShowAsync(dialogOwner);
+            });
         }
         catch (Exception ex)
         {

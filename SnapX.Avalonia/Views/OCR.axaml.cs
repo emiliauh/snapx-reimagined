@@ -25,7 +25,7 @@ using Point = Avalonia.Point;
 
 namespace SnapX.Avalonia.Views;
 
-public partial class OCR : AppWindow
+public partial class OCR : FAAppWindow
 {
     private OCRViewModel _ocrViewModel;
     private HistoryItem? _item;
@@ -84,7 +84,7 @@ public partial class OCR : AppWindow
         catch (Exception ex)
         {
             DebugHelper.WriteException(ex);
-            await new ContentDialog
+            await new FAContentDialog
             {
                 Title = "Drop Error",
                 Content = ex.Message,
@@ -425,7 +425,7 @@ public partial class OCR : AppWindow
             else
             {
                 DebugHelper.WriteAlways("OCR clipboard did not get back data");
-                await new ContentDialog { Title = "Error", Content = "Clipboard is empty.", CloseButtonText = "OK" }.ShowAsync(this);
+                await new FAContentDialog { Title = "Error", Content = "Clipboard is empty.", CloseButtonText = "OK" }.ShowAsync(this);
                 return;
             }
 
@@ -436,7 +436,7 @@ public partial class OCR : AppWindow
                 if (file is null)
                 {
                     DebugHelper.WriteAlways("OCR clipboard did not get an image file");
-                    await new ContentDialog { Title = "Error", Content = "No image or file found on clipboard.", CloseButtonText = "OK" }.ShowAsync(this);
+                    await new FAContentDialog { Title = "Error", Content = "No image or file found on clipboard.", CloseButtonText = "OK" }.ShowAsync(this);
                     return;
                 }
 
@@ -462,7 +462,7 @@ public partial class OCR : AppWindow
         catch (Exception ex)
         {
             DebugHelper.WriteAlways($"OCR Error: {ex.Message}");
-            await new ContentDialog { Title = "OCR Error", Content = ex.Message, CloseButtonText = "OK" }.ShowAsync(this);
+            await new FAContentDialog { Title = "OCR Error", Content = ex.Message, CloseButtonText = "OK" }.ShowAsync(this);
         }
         finally
         {
@@ -501,7 +501,7 @@ public partial class OCR : AppWindow
         catch (Exception ex)
         {
             DebugHelper.WriteAlways($"OCR File Error: {ex.Message}");
-            await new ContentDialog
+            await new FAContentDialog
             {
                 Title = "OCR Error",
                 Content = ex.Message,
@@ -542,7 +542,7 @@ public partial class OCR : AppWindow
         catch (Exception ex)
         {
             DebugHelper.WriteAlways($"Delay Selection Error: {ex.Message}");
-            await new ContentDialog
+            await new FAContentDialog
             {
                 Title = "Selection Error",
                 Content = ex.Message,

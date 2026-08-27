@@ -29,7 +29,7 @@
             Padding="4,2"
             FontSize="12">
             <ToolTip.Tip>
-                <TextBlock Text="Go give it a star on GitHub!" />
+                <TextBlock Text="Open the source repository on GitHub." />
             </ToolTip.Tip>
         </HyperlinkButton>
     </DockPanel>
@@ -44,7 +44,7 @@
         <ListBox.ItemTemplate>
             <DataTemplate>
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <ui:SymbolIcon Symbol="Document" />
+                    <ui:FASymbolIcon Symbol="Document" />
                     <TextBlock VerticalAlignment="Center" Text="{Binding Name}" />
                 </StackPanel>
             </DataTemplate>

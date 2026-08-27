@@ -35,13 +35,13 @@
             FontSize="14"
             Opacity="0.7"
             TextAlignment="Center">
-            One codebase. Every platform. No compromises.
+            SnapX uses one user interface on all supported platforms.
         </TextBlock>
         <TextBlock
             FontSize="12"
             Opacity="0.5"
             TextAlignment="Center">
-            Cross-platform. GPU-accelerated. Open source.
+            SnapX is open-source software and uses GPU-accelerated rendering.
         </TextBlock>
         <controls:FAComboBox
             IsEditable="True"
@@ -75,4 +75,3 @@
         </controls:FAComboBox>
     </StackPanel>
 </UserControl>
-

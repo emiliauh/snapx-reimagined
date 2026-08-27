@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.Extensions.DependencyInjection;
 using SnapX.Avalonia.Models;
 
 namespace SnapX.Avalonia.ViewModels;
@@ -62,6 +63,6 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void OpenSettingsWindow()
     {
-        App.CreateOrOpenSettingsWindowStatic();
+        CurrentPage = Ioc.Default.GetRequiredService<InAppSettingsHostVM>();
     }
 }

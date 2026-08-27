@@ -16,6 +16,18 @@ namespace SnapX.Core.Upload;
 
 public static class UploadManager
 {
+    private static IMultiUploadConfirmation multiUploadConfirmation = HeadlessMultiUploadConfirmation.Instance;
+
+    /// <summary>
+    /// Injectable confirmation hook for UI hosts. Headless callers safely reject
+    /// warning-triggering batches unless they explicitly provide a policy.
+    /// </summary>
+    public static IMultiUploadConfirmation MultiUploadConfirmation
+    {
+        get => Volatile.Read(ref multiUploadConfirmation);
+        set => Volatile.Write(ref multiUploadConfirmation, value ?? throw new ArgumentNullException(nameof(value)));
+    }
+
     public static void UploadFile(string? filePath, TaskSettings? taskSettings = null)
     {
         if (taskSettings == null) taskSettings = TaskSettings.GetDefaultTaskSettings();
@@ -55,15 +67,23 @@ public static class UploadManager
     {
         if (SnapXL.Settings.ShowMultiUploadWarning)
         {
-            // using (MyMessageBox msgbox = new MyMessageBox(string.Format(Resources.UploadManager_IsUploadConfirmed_Are_you_sure_you_want_to_upload__0__files_, length),
-            //     "SnapX - " + Resources.UploadManager_IsUploadConfirmed_Upload_files,
-            //     MessageBoxButtons.YesNo, Resources.UploadManager_IsUploadConfirmed_Don_t_show_this_message_again_))
-            // {
-            //     msgbox.ShowDialog();
-            //     SnapX.Settings.ShowMultiUploadWarning = !msgbox.IsChecked;
-            //     return msgbox.DialogResult == DialogResult.Yes;
-            // }
-            throw new NotImplementedException("SnapX.Settings.ShowMultiUploadWarning is not implemented");
+            MultiUploadConfirmationResult response;
+            try
+            {
+                response = MultiUploadConfirmation.Confirm(length);
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex);
+                return false;
+            }
+
+            if (response.SuppressFutureWarning)
+            {
+                SnapXL.Settings.ShowMultiUploadWarning = false;
+            }
+
+            return response.Confirmed;
         }
 
         return true;
@@ -228,19 +248,11 @@ public static class UploadManager
     {
         if (taskSettings == null) taskSettings = TaskSettings.GetDefaultTaskSettings();
 
-        string? inputText = null;
+        var candidate = !string.IsNullOrWhiteSpace(url) ? url.Trim() : Clipboard.GetText()?.Trim();
 
-        string? text = Clipboard.GetText();
-
-        if (URLHelpers.IsValidURL(text))
+        if (URLHelpers.IsValidURL(candidate))
         {
-            inputText = text;
-        }
-
-
-        if (!string.IsNullOrEmpty(url))
-        {
-            DownloadAndUploadFile(url, taskSettings);
+            DownloadAndUploadFile(candidate!, taskSettings);
         }
     }
     public static void RunImageTask(Image image, TaskSettings taskSettings)
@@ -442,4 +454,3 @@ public static class UploadManager
         });
     }
 }
-

@@ -6,11 +6,18 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using FluentAvalonia.UI.Controls;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SnapX.Avalonia.ViewModels;
 using SnapX.Core;
 using SnapX.Core.Job;
+using SnapX.Core.Media;
+using SnapX.Core.ScreenCapture;
 using SnapX.Core.Upload;
 using SnapX.Core.Utils;
 using SnapX.Core.Utils.Native;
@@ -23,21 +30,824 @@ namespace SnapX.Avalonia.Views;
 
 public partial class RegionSelectorWindow : Window
 {
+    private const string NativePickerHelperName = "snapx-picker";
+    private static int selectorOpen;
     private Point _startPoint;
     private bool _isSelecting;
+    private bool _selectionCompleted;
+    private bool _captureReady;
+    private bool _ownsSelector;
+    private int _selectorGateReleased;
+    private int _cancellationRequested;
 
     private readonly Rectangle _selectionRect;
     private readonly TextBox _infoBox;
     private readonly Canvas _canvas;
     private Image? _image;
+    private List<WindowInfo> _pickableWindows = [];
+    private WindowInfo? _hoveredWindow;
     private Stream? _imageStream;
     private Rect _imageBounds;
+    private PixelRect _screenBounds;
     private List<Window> windowsHiddenByUs = [];
     private TaskCompletionSource<Image?> _resultImg = new();
     private TaskCompletionSource<SixLabors.ImageSharp.Rectangle?> _resultRect = new();
+    private RegionCaptureOptions _captureOptions = new();
+    private bool _preparedForDisplay;
+    private readonly Lock _preparationLock = new();
+    private Task<bool>? _preparationTask;
     private bool IsSilentMode { get; set; } = false;
 
     private bool TakeScreenshot { get; set; } = true;
+
+    [ModuleInitializer]
+    internal static void RegisterCoreRegionSelector()
+    {
+        RegionCaptureTasks.SetRegionSelector(SelectRegionForCoreAsync);
+    }
+
+    private static async Task<RegionCaptureSelection?> SelectRegionForCoreAsync(
+        RegionCaptureRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        if (IsNativeWayland)
+        {
+            // This is deliberately completed before starting slurp. It removes
+            // an in-window history preview (and its video-frame redraw loop)
+            // without hiding/remapping the main Wayland toplevel.
+            await HistoryPreviewOverlay.CloseForRegionCaptureAsync();
+        }
+
+        try
+        {
+            if (request.Options.WindowOrRegionPickerMode)
+            {
+                var pickerResult = await TrySelectWindowOrRegionNativeAsync(request, cancellationToken);
+                if (pickerResult.Handled)
+                {
+                    return pickerResult.Selection;
+                }
+
+                DebugHelper.WriteLine(
+                    "Native window-or-region picker is unavailable; retaining the existing Wayland region selector behavior.");
+            }
+
+            // slurp is a compositor-native Wayland selector. It displays only
+            // its selection outline, then exits before grim captures the
+            // chosen geometry. This avoids both an XWayland overlay and
+            // mixed-DPI crop calculations on wlroots compositors.
+            var slurpResult = await TrySelectRegionWithSlurpAsync(request, cancellationToken);
+            if (slurpResult.Handled)
+            {
+                return slurpResult.Selection;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cancellation is a terminal selector outcome. Falling back to an
+            // Avalonia overlay after the native selector was cancelled can
+            // unexpectedly put a second selector over the user's desktop.
+            return null;
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine($"Wayland region selection failed; falling back to the Avalonia selector: {ex.Message}");
+        }
+
+        // The Avalonia selector is a full-screen Window.  On native Wayland it
+        // maps an EGL WSI surface, hides the main window, and later maps that
+        // window again.  That is precisely the surface lifecycle we must not
+        // enter on the affected NVIDIA/Hyprland renderer.  slurp is the native
+        // Wayland selector for this application; if it cannot complete, report
+        // a cancelled selection rather than substituting an Avalonia window.
+        if (IsNativeWayland)
+        {
+            DebugHelper.WriteLine(
+                "slurp did not provide a native Wayland selection; the Avalonia RegionSelectorWindow fallback is disabled.");
+            return null;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await SelectRegionForCoreOnUIThreadAsync(request, cancellationToken);
+        }
+
+        return await Dispatcher.UIThread.InvokeAsync(
+            () => SelectRegionForCoreOnUIThreadAsync(request, cancellationToken));
+    }
+
+    private sealed record NativePickerResult(
+        bool Available,
+        bool Cancelled,
+        string? SelectionKind,
+        SixLabors.ImageSharp.Rectangle Rectangle);
+
+    private static async Task<(bool Handled, RegionCaptureSelection? Selection)>
+        TrySelectWindowOrRegionNativeAsync(
+            RegionCaptureRequest request,
+            CancellationToken cancellationToken)
+    {
+        if (!IsNativeWayland)
+        {
+            return (false, null);
+        }
+
+        string? helper = ResolveNativePickerPath();
+        if (helper is null)
+        {
+            DebugHelper.WriteLine("Native window-or-region picker helper was not found.");
+            return (false, null);
+        }
+
+        List<WindowInfo> windows;
+        List<WindowInfo> monitors;
+        try
+        {
+            DebugHelper.WriteLine("Native window-or-region selector phase=query-layout.");
+            (windows, monitors) = await Task.WhenAll(
+                    GetHyprlandClientWindowsAsync(cancellationToken),
+                    GetHyprlandMonitorsAsync(cancellationToken))
+                .ContinueWith(tasks => (tasks.Result[0], tasks.Result[1]), cancellationToken,
+                    TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            DebugHelper.WriteLine($"Native window-or-region selector layout query failed: {ex.Message}");
+            return (false, null);
+        }
+
+        if (monitors.Count == 0)
+        {
+            DebugHelper.WriteLine("Native window-or-region selector found no Hyprland outputs.");
+            return (false, null);
+        }
+
+        DebugHelper.WriteLine(
+            $"Native window-or-region selector phase=launch outputs={monitors.Count} windows={windows.Count}.");
+        using var pickerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var pending = monitors
+            .Select(monitor => RunNativePickerProcessAsync(
+                helper, monitor, windows, pickerCancellation.Token))
+            .ToList();
+
+        NativePickerResult? completedSelection = null;
+        while (pending.Count > 0)
+        {
+            Task<NativePickerResult> completedTask = await Task.WhenAny(pending);
+            pending.Remove(completedTask);
+            NativePickerResult result = await completedTask;
+            if (!result.Available)
+            {
+                continue;
+            }
+
+            if (result.Cancelled || !result.Rectangle.IsEmpty)
+            {
+                completedSelection = result;
+                break;
+            }
+        }
+
+        pickerCancellation.Cancel();
+        try
+        {
+            await Task.WhenAll(pending);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected while removing sibling output overlays.
+        }
+
+        if (cancellationToken.IsCancellationRequested || completedSelection?.Cancelled == true)
+        {
+            DebugHelper.WriteLine("Native window-or-region selector phase=cancelled.");
+            return (true, null);
+        }
+        if (completedSelection is null || completedSelection.Rectangle.IsEmpty)
+        {
+            return (false, null);
+        }
+
+        SixLabors.ImageSharp.Rectangle rectangle = completedSelection.Rectangle;
+        string selectionKind = completedSelection.SelectionKind ?? "region";
+        DebugHelper.WriteLine(
+            $"Native window-or-region selector phase=selected kind={selectionKind} " +
+            $"geometry={rectangle.X},{rectangle.Y} {rectangle.Width}x{rectangle.Height}.");
+
+        Image? image = null;
+        if (request.CaptureImage)
+        {
+            image = await Methods.CaptureRectangle(rectangle).WaitAsync(cancellationToken);
+            if (image is null)
+            {
+                DebugHelper.WriteLine("grim returned no image for the native window-or-region selection.");
+                return (true, null);
+            }
+        }
+
+        WindowInfo? windowInfo = selectionKind == "window"
+            ? windows.LastOrDefault(window => window.Rectangle == rectangle)
+            : null;
+        int left = monitors.Min(monitor => monitor.Rectangle.Left);
+        int top = monitors.Min(monitor => monitor.Rectangle.Top);
+        int right = monitors.Max(monitor => monitor.Rectangle.Right);
+        int bottom = monitors.Max(monitor => monitor.Rectangle.Bottom);
+        return (true, new RegionCaptureSelection
+        {
+            Rectangle = rectangle,
+            CaptureBounds = new SixLabors.ImageSharp.Rectangle(left, top, right - left, bottom - top),
+            Image = image,
+            WindowInfo = windowInfo
+        });
+    }
+
+    private static async Task<NativePickerResult> RunNativePickerProcessAsync(
+        string helper,
+        WindowInfo monitor,
+        IReadOnlyList<WindowInfo> windows,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = helper,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("--output");
+        startInfo.ArgumentList.Add(monitor.ProcessName);
+        startInfo.ArgumentList.Add("--origin");
+        startInfo.ArgumentList.Add(monitor.Rectangle.X.ToString(CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add(monitor.Rectangle.Y.ToString(CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add("--size");
+        startInfo.ArgumentList.Add(monitor.Rectangle.Width.ToString(CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add(monitor.Rectangle.Height.ToString(CultureInfo.InvariantCulture));
+        foreach (WindowInfo window in windows)
+        {
+            startInfo.ArgumentList.Add("--window");
+            startInfo.ArgumentList.Add(
+                $"{window.Rectangle.X},{window.Rectangle.Y} {window.Rectangle.Width}x{window.Rectangle.Height}");
+        }
+
+        Process? process;
+        try
+        {
+            process = Process.Start(startInfo);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
+        {
+            DebugHelper.WriteLine($"Native picker could not start for output {monitor.ProcessName}: {ex.Message}");
+            return new NativePickerResult(false, false, null, SixLabors.ImageSharp.Rectangle.Empty);
+        }
+        if (process is null)
+        {
+            return new NativePickerResult(false, false, null, SixLabors.ImageSharp.Rectangle.Empty);
+        }
+
+        using (process)
+        using (cancellationToken.Register(() =>
+        {
+            try
+            {
+                process.StandardInput.Close();
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
+            {
+                // The helper already exited.
+            }
+        }))
+        {
+            Task<string?> outputTask = process.StandardOutput.ReadLineAsync(cancellationToken).AsTask();
+            Task<string> errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return new NativePickerResult(true, true, null, SixLabors.ImageSharp.Rectangle.Empty);
+            }
+
+            string? output = await outputTask;
+            string error = await errorTask;
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                foreach (string line in error.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    DebugHelper.WriteLine($"Native picker output={monitor.ProcessName} {line}");
+                }
+            }
+
+            if (process.ExitCode != 0)
+            {
+                DebugHelper.WriteLine(
+                    $"Native picker output={monitor.ProcessName} failed with exit code {process.ExitCode}.");
+                return new NativePickerResult(false, false, null, SixLabors.ImageSharp.Rectangle.Empty);
+            }
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                return new NativePickerResult(true, true, null, SixLabors.ImageSharp.Rectangle.Empty);
+            }
+
+            int separator = output.IndexOf(' ');
+            if (separator <= 0 ||
+                !TryParseSlurpGeometry(output[(separator + 1)..], out SixLabors.ImageSharp.Rectangle rectangle))
+            {
+                DebugHelper.WriteLine(
+                    $"Native picker output={monitor.ProcessName} returned invalid selection: {output.Trim()}");
+                return new NativePickerResult(false, false, null, SixLabors.ImageSharp.Rectangle.Empty);
+            }
+
+            return new NativePickerResult(true, false, output[..separator], rectangle);
+        }
+    }
+
+    private static string? ResolveNativePickerPath()
+    {
+        string baseDirectory = AppContext.BaseDirectory;
+        string[] candidates =
+        [
+            Path.Combine(baseDirectory, NativePickerHelperName),
+            Path.Combine(baseDirectory, "native", NativePickerHelperName),
+            Path.Combine(baseDirectory, "lib", "snapx", NativePickerHelperName)
+        ];
+        foreach (string candidate in candidates)
+        {
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        string? path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            foreach (string directory in path.Split(
+                         Path.PathSeparator,
+                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                string candidate = Path.Combine(directory, NativePickerHelperName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<RegionCaptureSelection?> SelectRegionForCoreOnUIThreadAsync(
+        RegionCaptureRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        var selector = new RegionSelectorWindow(true, request.CaptureImage)
+        {
+            _captureOptions = request.Options
+        };
+        // Do not return a completed selection until its window has completely
+        // closed.  The selector gate is released in OnClosed, so returning on
+        // the result task alone leaves a short interval in which an immediate
+        // second hotkey is incorrectly treated as a duplicate selector.
+        var closedTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        selector.Closed += (_, _) => closedTask.TrySetResult();
+        using CancellationTokenRegistration registration = cancellationToken.Register(() =>
+            Dispatcher.UIThread.Post(selector.RequestCancellation));
+        if (!await selector.PrepareAndShowAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        await Task.WhenAny(selector._resultRect.Task, closedTask.Task);
+        if (!selector._resultRect.Task.IsCompletedSuccessfully || selector._resultRect.Task.Result == null)
+        {
+            return null;
+        }
+
+        Image? image = null;
+        if (request.CaptureImage)
+        {
+            await Task.WhenAny(selector._resultImg.Task, closedTask.Task);
+            if (selector._resultImg.Task.IsCompletedSuccessfully)
+                image = selector._resultImg.Task.Result;
+        }
+
+        await closedTask.Task;
+        if (request.CaptureImage && image is null)
+            return null;
+
+        WindowInfo? windowInfo = null;
+        if (request.Options.DetectWindows)
+        {
+            try
+            {
+                SixLabors.ImageSharp.Rectangle selectedRectangle = selector._resultRect.Task.Result.Value;
+                windowInfo = Methods.GetWindowList()
+                    .Where(window => window.IsVisible && !window.Rectangle.IsEmpty)
+                    .OrderByDescending(window => window.IsActive)
+                    .FirstOrDefault(window => window.Rectangle.Contains(selectedRectangle));
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteLine($"Window detection is unavailable for this region capture: {ex.Message}");
+            }
+        }
+
+        return new RegionCaptureSelection
+        {
+            Rectangle = selector._resultRect.Task.Result.Value,
+            CaptureBounds = new SixLabors.ImageSharp.Rectangle(
+                selector._screenBounds.X,
+                selector._screenBounds.Y,
+                selector._screenBounds.Width,
+                selector._screenBounds.Height),
+            Image = image,
+            WindowInfo = windowInfo
+        };
+    }
+
+    private static async Task<(bool Handled, RegionCaptureSelection? Selection)> TrySelectRegionWithSlurpAsync(
+        RegionCaptureRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsLinux() || !LinuxAPI.IsWayland())
+        {
+            return (false, null);
+        }
+
+        bool windowPickerMode = request.Options.WindowPickerMode;
+        bool monitorPickerMode = request.Options.MonitorPickerMode;
+        bool boxPickerMode = windowPickerMode || monitorPickerMode;
+        List<WindowInfo> pickableBoxes = [];
+        if (boxPickerMode)
+        {
+            try
+            {
+                // Methods.GetWindowList() reads window geometry through
+                // XWayland/X11, whose coordinate space does not match
+                // Hyprland's own logical layout that slurp draws in - the
+                // boxes it would produce land on the wrong parts of the
+                // screen. Ask Hyprland directly instead, the same source
+                // slurp's own coordinates come from.
+                pickableBoxes = monitorPickerMode
+                    ? await GetHyprlandMonitorsAsync(cancellationToken)
+                    : await GetHyprlandClientWindowsAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteLine($"{(monitorPickerMode ? "Monitor" : "Window")} list is unavailable for the picker: {ex.Message}");
+            }
+
+            if (pickableBoxes.Count == 0)
+            {
+                // Nothing to pick from; let the caller fall back to its own path.
+                return (false, null);
+            }
+        }
+
+        var slurpArguments = new List<string>
+        {
+            "-b", "#00000000",
+            "-s", boxPickerMode ? "#4c8dff33" : "#00000000",
+            "-c", "#4c8dffff",
+            "-w", "2",
+            "-f", "%x,%y %wx%h"
+        };
+        if (boxPickerMode)
+        {
+            // Restrict the selection to the rectangles fed over stdin below:
+            // slurp highlights whichever one is under the cursor and a click
+            // selects it, instead of a free-form drag.
+            slurpArguments.Add("-r");
+            slurpArguments.Add("-B");
+            slurpArguments.Add("#4c8dff22");
+        }
+
+        // slurp interprets every non-terminal stdin stream as a list of
+        // predefined rectangles. A desktop app launched by a tool host can
+        // inherit JSON-RPC/control input instead, which makes slurp reject it
+        // as an invalid rectangle and immediately cancel region capture. For
+        // free-form selection, run it through `script` so slurp receives a
+        // clean pseudo-terminal rather than the host's control input.
+        bool usePseudoTerminal = !boxPickerMode;
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = usePseudoTerminal ? "script" : "slurp",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        if (usePseudoTerminal)
+        {
+            startInfo.ArgumentList.Add("-q");
+            startInfo.ArgumentList.Add("-e");
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add(BuildSlurpCommand(slurpArguments));
+            startInfo.ArgumentList.Add("/dev/null");
+        }
+        else
+        {
+            foreach (string argument in slurpArguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+        }
+
+        Process? process;
+        try
+        {
+            process = Process.Start(startInfo);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
+        {
+            DebugHelper.WriteLine("slurp is unavailable; falling back to the Avalonia region selector.");
+            return (false, null);
+        }
+
+        if (process is null)
+        {
+            return (false, null);
+        }
+
+        using (process)
+        using (cancellationToken.Register(() =>
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // The selector already exited.
+            }
+        }))
+        {
+            Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+
+            if (boxPickerMode)
+            {
+                foreach (WindowInfo box in pickableBoxes)
+                {
+                    string label = SanitizeSlurpLabel(
+                        string.IsNullOrWhiteSpace(box.Title) ? box.ProcessName : box.Title);
+                    await process.StandardInput.WriteLineAsync(
+                        $"{box.Rectangle.X},{box.Rectangle.Y} {box.Rectangle.Width}x{box.Rectangle.Height} {label}");
+                }
+            }
+            // Do not allow a host's stdin protocol to reach slurp. In
+            // free-form mode `script` gives slurp a pseudo-terminal; in picker
+            // mode this completes the explicit list of allowed rectangles.
+            process.StandardInput.Close();
+
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return (true, null);
+            }
+
+            string output, error;
+            try
+            {
+                output = await outputTask.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+                error = await errorTask.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                DebugHelper.WriteLine("slurp exited but output was not drained in time; treating the selection as cancelled.");
+                return (true, null);
+            }
+
+            if (process.ExitCode != 0 || !TryParseSlurpGeometry(output, out var rectangle))
+            {
+                if (process.ExitCode != 0 && !string.IsNullOrWhiteSpace(error))
+                {
+                    DebugHelper.WriteLine($"slurp exited with code {process.ExitCode}: {error.Trim()}");
+                }
+                return (true, null);
+            }
+
+            Image? image = null;
+            if (request.CaptureImage)
+            {
+                image = await Methods.CaptureRectangle(rectangle).WaitAsync(cancellationToken);
+                if (image is null)
+                {
+                    DebugHelper.WriteLine("grim returned no image for the slurp selection.");
+                    return (true, null);
+                }
+            }
+
+            WindowInfo? windowInfo = null;
+            if (boxPickerMode)
+            {
+                // slurp -r only ever returns one of the boxes it was fed,
+                // so an exact match is reliable here (unlike the heuristic
+                // "smallest window containing an arbitrary point" used for
+                // a free-form region below).
+                windowInfo = pickableBoxes.FirstOrDefault(box => box.Rectangle == rectangle);
+            }
+            else if (request.Options.DetectWindows)
+            {
+                try
+                {
+                    windowInfo = Methods.GetWindowList()
+                        .Where(window => window.IsVisible && !window.Rectangle.IsEmpty)
+                        .OrderByDescending(window => window.IsActive)
+                        .FirstOrDefault(window => window.Rectangle.Contains(rectangle));
+                }
+                catch (Exception ex)
+                {
+                    DebugHelper.WriteLine($"Window detection is unavailable for this region capture: {ex.Message}");
+                }
+            }
+
+            return (true, new RegionCaptureSelection
+            {
+                Rectangle = rectangle,
+                // slurp coordinates are compositor logical coordinates. The
+                // selected rectangle itself is the valid coordinate extent.
+                CaptureBounds = rectangle,
+                Image = image,
+                WindowInfo = windowInfo
+            });
+        }
+    }
+
+    private static async Task<List<WindowInfo>> GetHyprlandClientWindowsAsync(CancellationToken cancellationToken)
+    {
+        var windows = new List<WindowInfo>();
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "hyprctl",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("clients");
+        startInfo.ArgumentList.Add("-j");
+
+        using var process = Process.Start(startInfo);
+        if (process is null) return windows;
+
+        string json = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+        if (process.ExitCode != 0) return windows;
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        int selfPid = Environment.ProcessId;
+        foreach (JsonElement client in document.RootElement.EnumerateArray())
+        {
+            if (!client.TryGetProperty("mapped", out JsonElement mapped) || !mapped.GetBoolean()) continue;
+            if (client.TryGetProperty("hidden", out JsonElement hidden) && hidden.GetBoolean()) continue;
+            if (!client.TryGetProperty("at", out JsonElement at) || !client.TryGetProperty("size", out JsonElement size)) continue;
+            if (at.GetArrayLength() < 2 || size.GetArrayLength() < 2) continue;
+
+            int width = size[0].GetInt32();
+            int height = size[1].GetInt32();
+            if (width <= 0 || height <= 0) continue;
+
+            int pid = client.TryGetProperty("pid", out JsonElement pidElement) ? pidElement.GetInt32() : 0;
+            if (pid == selfPid) continue;
+
+            string title = client.TryGetProperty("title", out JsonElement titleElement) ? titleElement.GetString() ?? "" : "";
+            string cls = client.TryGetProperty("class", out JsonElement classElement) ? classElement.GetString() ?? "" : "";
+
+            windows.Add(new WindowInfo
+            {
+                Rectangle = new SixLabors.ImageSharp.Rectangle(at[0].GetInt32(), at[1].GetInt32(), width, height),
+                Title = string.IsNullOrWhiteSpace(title) ? cls : title,
+                ProcessName = cls,
+                ProcessId = pid,
+                IsVisible = true
+            });
+        }
+
+        return windows;
+    }
+
+    private static async Task<List<WindowInfo>> GetHyprlandMonitorsAsync(CancellationToken cancellationToken)
+    {
+        static bool IsQuarterTurn(int transform) => transform is 1 or 3 or 5 or 7;
+
+        var monitors = new List<WindowInfo>();
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "hyprctl",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("monitors");
+        startInfo.ArgumentList.Add("-j");
+
+        using var process = Process.Start(startInfo);
+        if (process is null) return monitors;
+
+        string json = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+        if (process.ExitCode != 0) return monitors;
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        foreach (JsonElement monitor in document.RootElement.EnumerateArray())
+        {
+            if (!monitor.TryGetProperty("x", out JsonElement xElement) ||
+                !monitor.TryGetProperty("y", out JsonElement yElement) ||
+                !monitor.TryGetProperty("width", out JsonElement widthElement) ||
+                !monitor.TryGetProperty("height", out JsonElement heightElement) ||
+                !monitor.TryGetProperty("scale", out JsonElement scaleElement))
+            {
+                continue;
+            }
+
+            double scale = scaleElement.GetDouble();
+            if (scale <= 0) scale = 1;
+            int transform = monitor.TryGetProperty("transform", out JsonElement transformElement)
+                ? transformElement.GetInt32()
+                : 0;
+            bool rotated = IsQuarterTurn(transform);
+            double physicalWidth = widthElement.GetDouble();
+            double physicalHeight = heightElement.GetDouble();
+            int logicalWidth = (int)Math.Round((rotated ? physicalHeight : physicalWidth) / scale);
+            int logicalHeight = (int)Math.Round((rotated ? physicalWidth : physicalHeight) / scale);
+            if (logicalWidth <= 0 || logicalHeight <= 0) continue;
+
+            string name = monitor.TryGetProperty("name", out JsonElement nameElement) ? nameElement.GetString() ?? "" : "";
+
+            monitors.Add(new WindowInfo
+            {
+                Rectangle = new SixLabors.ImageSharp.Rectangle(xElement.GetInt32(), yElement.GetInt32(), logicalWidth, logicalHeight),
+                Title = name,
+                ProcessName = name,
+                IsVisible = true
+            });
+        }
+
+        return monitors;
+    }
+
+    private static string SanitizeSlurpLabel(string label)
+    {
+        // slurp's predefined-box format is one box per line; a title
+        // containing a newline would otherwise be read as extra boxes.
+        string sanitized = label.Replace("\r", " ").Replace("\n", " ").Trim();
+        return string.IsNullOrEmpty(sanitized) ? "window" : sanitized;
+    }
+
+    private static string BuildSlurpCommand(IEnumerable<string> arguments)
+    {
+        return "exec slurp " + string.Join(' ', arguments.Select(QuoteForPosixShell));
+    }
+
+    private static string QuoteForPosixShell(string argument)
+    {
+        return "'" + argument.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
+    }
+
+    private static bool TryParseSlurpGeometry(string output, out SixLabors.ImageSharp.Rectangle rectangle)
+    {
+        rectangle = SixLabors.ImageSharp.Rectangle.Empty;
+        string[] values = output.Trim().Split([' ', ',', 'x'], StringSplitOptions.RemoveEmptyEntries);
+        if (values.Length != 4 ||
+            !int.TryParse(values[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int x) ||
+            !int.TryParse(values[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y) ||
+            !int.TryParse(values[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int width) ||
+            !int.TryParse(values[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int height) ||
+            width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        rectangle = new SixLabors.ImageSharp.Rectangle(x, y, width, height);
+        return true;
+    }
+
     public RegionSelectorWindow(RegionSelectorViewModel vm, bool IsSilent = false, bool takeScreenshot = true)
     {
         DataContext = vm;
@@ -56,23 +866,49 @@ public partial class RegionSelectorWindow : Window
     protected override async void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
-        await SetupWindowBoundsAsync();
+        if (!_ownsSelector)
+        {
+            Close();
+            return;
+        }
+
+        // A selector must never begin its capture after it is mapped: on
+        // Wayland that would capture the selector itself. All supported entry
+        // points prepare it before Show(); close an unsupported direct Show()
+        // rather than presenting a black or stale overlay.
+        if (!_preparedForDisplay)
+        {
+            await CancelSelection();
+            return;
+        }
+
+        try { await SetupWindowBoundsAsync(); }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Region selector could not determine its display bounds");
+            await CancelSelection();
+            return;
+        }
         IsVisible = true;
-        Opacity = 1;
+        Activate();
+        Focus();
     }
     public static async Task<Image?> SelectRegionAsync()
     {
-        var selector = new RegionSelectorWindow(true);
-        var windowClosedTask = new TaskCompletionSource<Image?>();
-
-        selector.Closing += (s, e) => windowClosedTask.TrySetResult(null);
-        try
+        if (IsNativeWayland)
         {
-            selector.Show();
+            return (await SelectRegionForCoreAsync(new RegionCaptureRequest
+            {
+                CaptureImage = true
+            }, CancellationToken.None))?.Image;
         }
-        catch (Exception ex)
+
+        var selector = new RegionSelectorWindow(true);
+        var windowClosedTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        selector.Closed += (_, _) => windowClosedTask.TrySetResult();
+        if (!await selector.PrepareAndShowAsync())
         {
-            DebugHelper.WriteLine($"RegionSelectorWindow: Show() failed or aborted: {ex.Message}");
             return null;
         }
 
@@ -80,24 +916,30 @@ public partial class RegionSelectorWindow : Window
 
         if (selector._resultImg.Task.IsCompleted)
         {
-            return await selector._resultImg.Task;
+            await windowClosedTask.Task;
+            return selector._resultImg.Task.IsCompletedSuccessfully
+                ? await selector._resultImg.Task
+                : null;
         }
 
         return null;
     }
     public static async Task<SixLabors.ImageSharp.Rectangle?> SelectRegionRectAsync()
     {
-        var selector = new RegionSelectorWindow(true, false);
-        var windowClosedTask = new TaskCompletionSource<SixLabors.ImageSharp.Rectangle?>();
-
-        selector.Closing += (s, e) => windowClosedTask.TrySetResult(null);
-        try
+        if (IsNativeWayland)
         {
-            selector.Show();
+            return (await SelectRegionForCoreAsync(new RegionCaptureRequest
+            {
+                CaptureImage = false
+            }, CancellationToken.None))?.Rectangle;
         }
-        catch (Exception ex)
+
+        var selector = new RegionSelectorWindow(true, false);
+        var windowClosedTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        selector.Closed += (_, _) => windowClosedTask.TrySetResult();
+        if (!await selector.PrepareAndShowAsync())
         {
-            DebugHelper.WriteLine($"RegionSelectorWindow: Show() failed or aborted: {ex.Message}");
             return null;
         }
 
@@ -105,11 +947,15 @@ public partial class RegionSelectorWindow : Window
 
         if (selector._resultRect.Task.IsCompleted)
         {
-            return await selector._resultRect.Task;
+            await windowClosedTask.Task;
+            return selector._resultRect.Task.IsCompletedSuccessfully
+                ? await selector._resultRect.Task
+                : null;
         }
 
         return null;
     }
+
     private async Task SetupWindowBoundsAsync()
     {
 
@@ -143,11 +989,14 @@ public partial class RegionSelectorWindow : Window
             }
 
             Position = new PixelPoint(bounds.X, bounds.Y);
+            _screenBounds = bounds;
             Width = bounds.Width;
             Height = bounds.Height;
 
             _canvas.Width = bounds.Width;
             _canvas.Height = bounds.Height;
+            _imageBounds = new Rect(0, 0, bounds.Width, bounds.Height);
+            WindowState = OperatingSystem.IsMacOS() ? WindowState.Maximized : WindowState.Normal;
 
             if (_canvas.Parent is Viewbox viewBox)
             {
@@ -162,21 +1011,59 @@ public partial class RegionSelectorWindow : Window
     public RegionSelectorWindow(bool IsSilent, bool takeScreenShot = true) : this(new RegionSelectorViewModel(), IsSilent, takeScreenShot) { }
     private void OnPointerPressed(object? Sender, PointerPressedEventArgs E)
     {
-        _startPoint = E.GetPosition(this);
+        if (_selectionCompleted || !_captureReady)
+        {
+            if (!_captureReady)
+            {
+                DebugHelper.WriteLine("The region selector is still preparing its screenshot; ignoring pointer input.");
+            }
+            return;
+        }
+
+        if (_captureOptions.WindowPickerMode)
+        {
+            // Nothing under the cursor is pickable at this point; ignore the
+            // click rather than falling back to an unrelated drag-selection.
+            if (_hoveredWindow is { } window)
+            {
+                double x = window.Rectangle.X - _screenBounds.X;
+                double y = window.Rectangle.Y - _screenBounds.Y;
+                _selectionRect.Width = window.Rectangle.Width;
+                _selectionRect.Height = window.Rectangle.Height;
+                _selectionRect.Margin = new Thickness(x, y, 0, 0);
+                _isSelecting = true;
+                E.Pointer.Capture(_canvas);
+                OnPointerReleased(this, null);
+            }
+            return;
+        }
+
+        _startPoint = E.GetPosition(_canvas);
         _isSelecting = true;
+        E.Pointer.Capture(_canvas);
 
         _selectionRect.Width = 0;
         _selectionRect.Height = 0;
         _selectionRect.Margin = new Thickness(_startPoint.X, _startPoint.Y, 0, 0);
 
-        _infoBox.IsVisible = true;
+        _infoBox.IsVisible = _captureOptions.ShowInfo;
     }
     private static void ShowErrorDialog(Exception ex, string? userMessage = null)
     {
         DebugHelper.WriteException(ex);
         TaskHelpers.PlayNotificationSoundAsync(NotificationSound.Error);
 
-        var dialog = new ContentDialog
+        // FAContentDialog is hosted in Avalonia's overlay/popup machinery.
+        // Do not create that transient EGL surface on native Wayland while a
+        // failed selector is restoring the main window. The desktop
+        // notification is compositor-native and keeps the failure visible.
+        if (OperatingSystem.IsLinux() && LinuxAPI.IsWayland())
+        {
+            App.SendDesktopNotification(Lang.Error, userMessage ?? Lang.FailedToScreenshot);
+            return;
+        }
+
+        var dialog = new FAContentDialog
         {
             Title = Lang.Error,
             Width = 800,
@@ -247,41 +1134,80 @@ public partial class RegionSelectorWindow : Window
             dialog.ShowAsync();
         }
     }
-    private async void OnPointerReleased(object? Sender, PointerReleasedEventArgs E)
+    private async void OnPointerReleased(object? Sender, PointerReleasedEventArgs? E)
     {
+        if (_selectionCompleted || !_isSelecting)
+        {
+            return;
+        }
+
         _isSelecting = false;
+        E?.Pointer.Capture(null);
         _selectionRect.IsVisible = false;
         _infoBox.IsVisible = false;
         if (_selectionRect.Bounds.Width <= 0 || _selectionRect.Bounds.Height <= 0)
+        {
             await CancelSelection();
+            return;
+        }
 
         var selectedRegion = _imageBounds.Intersect(_selectionRect.Bounds);
 
         if (selectedRegion.Width <= 0 || selectedRegion.Height <= 0 ||
             selectedRegion.Width > _imageBounds.Width || selectedRegion.Height > _imageBounds.Height)
+        {
             await CancelSelection();
-        var sixLaborsRect = new SixLabors.ImageSharp.Rectangle(
-            (int)selectedRegion.X, (int)selectedRegion.Y,
-            (int)selectedRegion.Width, (int)selectedRegion.Height);
-        _resultRect.TrySetResult(sixLaborsRect);
+            return;
+        }
+
+        if (selectedRegion.Width < Math.Max(1, _captureOptions.MinimumSize) ||
+            selectedRegion.Height < Math.Max(1, _captureOptions.MinimumSize))
+        {
+            await CancelSelection();
+            return;
+        }
+
+        var localRect = new SixLabors.ImageSharp.Rectangle(
+            (int)Math.Floor(selectedRegion.X),
+            (int)Math.Floor(selectedRegion.Y),
+            (int)Math.Ceiling(selectedRegion.Width),
+            (int)Math.Ceiling(selectedRegion.Height));
+        var screenRect = new SixLabors.ImageSharp.Rectangle(
+            _screenBounds.X + localRect.X,
+            _screenBounds.Y + localRect.Y,
+            localRect.Width,
+            localRect.Height);
+        _selectionCompleted = true;
+        _resultRect.TrySetResult(screenRect);
         DebugHelper.WriteLine($"RegionSelectorWindow.OnPointerReleased: Region: {selectedRegion}");
-        if (!TakeScreenshot) return;
+        if (!TakeScreenshot)
+        {
+            Close();
+            return;
+        }
         try
         {
             await Task.Run(() =>
             {
-                if (_imageStream == null)
-                {
-                    DebugHelper.WriteLine("RegionSelectorWindow.OnPointerReleased: _imageStream is null");
-                    return;
-                }
-
                 if (_image is null)
                 {
-                    DebugHelper.WriteLine("RegionSelectorWindow.OnPointerReleased: _image is null");
-                    return;
+                    throw new InvalidOperationException("The selector screenshot is unavailable.");
                 }
-                _image.Mutate(Context => Context.Crop(sixLaborsRect));
+
+                double scaleX = _image.Width / _imageBounds.Width;
+                double scaleY = _image.Height / _imageBounds.Height;
+                var imageRect = new SixLabors.ImageSharp.Rectangle(
+                    (int)Math.Floor(localRect.X * scaleX),
+                    (int)Math.Floor(localRect.Y * scaleY),
+                    Math.Min(_image.Width, (int)Math.Ceiling(localRect.Width * scaleX)),
+                    Math.Min(_image.Height, (int)Math.Ceiling(localRect.Height * scaleY)));
+                imageRect = SixLabors.ImageSharp.Rectangle.Intersect(imageRect, _image.Bounds);
+                if (imageRect.IsEmpty)
+                {
+                    throw new InvalidOperationException("The selected region does not intersect the captured image.");
+                }
+
+                _image.Mutate(Context => Context.Crop(imageRect));
                 _resultImg.TrySetResult(_image);
                 if (IsSilentMode) return;
                 DebugHelper.WriteLine("Running image task");
@@ -296,25 +1222,81 @@ public partial class RegionSelectorWindow : Window
         App.MyMainWindow?.Show();
         Close();
     }
-    private async Task CancelSelection()
+    private Task CancelSelection()
     {
+        if (_selectionCompleted)
+        {
+            return Task.CompletedTask;
+        }
+
+        _selectionCompleted = true;
+        _isSelecting = false;
         _resultRect.TrySetResult(null);
         _resultImg.TrySetResult(null);
         App.MyMainWindow?.Show();
         Close();
+        return Task.CompletedTask;
     }
+    private void UpdateWindowHover(Point canvasPoint)
+    {
+        var screenPoint = new SixLabors.ImageSharp.Point(
+            (int)(_screenBounds.X + canvasPoint.X),
+            (int)(_screenBounds.Y + canvasPoint.Y));
+
+        WindowInfo? hovered = _pickableWindows.FirstOrDefault(window => window.Rectangle.Contains(screenPoint));
+
+        if (ReferenceEquals(hovered, _hoveredWindow)) return;
+        _hoveredWindow = hovered;
+
+        if (hovered is null)
+        {
+            _selectionRect.IsVisible = false;
+            _infoBox.IsVisible = false;
+            return;
+        }
+
+        double x = hovered.Rectangle.X - _screenBounds.X;
+        double y = hovered.Rectangle.Y - _screenBounds.Y;
+        _selectionRect.Width = hovered.Rectangle.Width;
+        _selectionRect.Height = hovered.Rectangle.Height;
+        _selectionRect.Margin = new Thickness(x, y, 0, 0);
+        _selectionRect.IsVisible = true;
+
+        string title = string.IsNullOrWhiteSpace(hovered.Title) ? hovered.ProcessName : hovered.Title;
+        _infoBox.Text = $"{title} ({hovered.Rectangle.Width:0}x{hovered.Rectangle.Height:0})";
+        _infoBox.Margin = new Thickness(x, Math.Max(0, y - 30), 0, 0);
+        _infoBox.IsVisible = true;
+    }
+
     private async void OnPointerMoved(object? Sender, PointerEventArgs E)
     {
+        if (_captureOptions.WindowPickerMode)
+        {
+            if (!_isSelecting) UpdateWindowHover(E.GetPosition(_canvas));
+            return;
+        }
         if (!_isSelecting) return;
-        var endPoint = E.GetPosition(this);
+        var endPoint = E.GetPosition(_canvas);
         var x = Math.Min(_startPoint.X, endPoint.X);
         var y = Math.Min(_startPoint.Y, endPoint.Y);
         var width = Math.Abs(_startPoint.X - endPoint.X);
         var height = Math.Abs(_startPoint.Y - endPoint.Y);
+        if (_captureOptions.IsFixedSize && _captureOptions.FixedSize.Width > 0 && _captureOptions.FixedSize.Height > 0)
+        {
+            width = _captureOptions.FixedSize.Width;
+            height = _captureOptions.FixedSize.Height;
+            x = endPoint.X < _startPoint.X ? _startPoint.X - width : _startPoint.X;
+            y = endPoint.Y < _startPoint.Y ? _startPoint.Y - height : _startPoint.Y;
+        }
+
+        x = Math.Clamp(x, 0, Math.Max(0, _imageBounds.Width - width));
+        y = Math.Clamp(y, 0, Math.Max(0, _imageBounds.Height - height));
+        width = Math.Min(width, _imageBounds.Width);
+        height = Math.Min(height, _imageBounds.Height);
         _selectionRect.Width = width;
         _selectionRect.Height = height;
         _selectionRect.Margin = new Thickness(x, y, 0, 0);
-        var infoText = $"X: {x}, Y: {y}, Width: {width}, Height: {height}";
+        var infoText = $"X: {_screenBounds.X + x:0}, Y: {_screenBounds.Y + y:0}, Width: {width:0}, Height: {height:0}";
         if (_infoBox.Text != infoText)
             _infoBox.Text = infoText;
         _infoBox.Margin = new Thickness(x, y - 30, 0, 0);
@@ -325,82 +1307,241 @@ public partial class RegionSelectorWindow : Window
         switch (e.Key)
         {
             case Key.Enter:
-                OnPointerReleased(this, null);
+                if (_isSelecting)
+                {
+                    OnPointerReleased(this, null);
+                }
                 break;
             case Key.Escape:
-                Close();
+                _ = CancelSelection();
                 break;
         }
     }
     private readonly Dictionary<Window, WindowBase?> _ownershipMap = new();
 
-    private async void OnInit(object? Sender, RoutedEventArgs Args)
+    private async Task<bool> PrepareAndShowAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsSilentMode)
+        // Every supported native-Wayland caller is routed through slurp above.
+        // Keep this guard here as well so a future direct construction cannot
+        // silently reintroduce this full-screen Avalonia WSI surface.
+        if (IsNativeWayland)
         {
-            foreach (var win in App.MyMainWindow?.OwnedWindows.Where(w => w != this && w.IsVisible) ?? [])
-            {
-                _ownershipMap[win] = win.Owner; // Save original owner
-                win.Hide();
-                windowsHiddenByUs.Add(win);
-            }
-
-            if (App.MyMainWindow != null && App.MyMainWindow.IsVisible)
-            {
-                _ownershipMap[App.MyMainWindow] = App.MyMainWindow.Owner;
-                App.MyMainWindow.Hide(); // Hide makes it lose relationship with child windows.
-                windowsHiddenByUs.Add(App.MyMainWindow);
-            }
+            DebugHelper.WriteLine("RegionSelectorWindow is disabled on native Wayland; use slurp instead.");
+            return false;
         }
 
-        if (!TakeScreenshot) return;
-        // Screenshotting can sometimes take time and block the UI thread.
-        // It can also fail, so we have to handle it gracefully.
+        // Reject duplicate requests before they hide windows or ask grim for a
+        // frame.  Preparing a rejected selector captures the active selector
+        // overlay, which produces a recursively dark/outlined screenshot.
+        if (!TryAcquireSelectorGate())
+        {
+            DebugHelper.WriteLine("A region selector is already active; ignoring the duplicate request.");
+            return false;
+        }
+
+        if (cancellationToken.IsCancellationRequested || IsCancellationRequested)
+        {
+            ReleaseSelectorGate();
+            return false;
+        }
+
+        if (!await PrepareForDisplayAsync())
+        {
+            RestoreHiddenWindows();
+            ReleaseSelectorGate();
+            return false;
+        }
+
+        // A token may be cancelled while the compositor screenshot is in
+        // flight. Never map a selector after that cancellation; doing so can
+        // leave a hidden-window/selector combination with no caller waiting
+        // to close it.
+        if (cancellationToken.IsCancellationRequested || IsCancellationRequested)
+        {
+            RestoreHiddenWindows();
+            ReleaseSelectorGate();
+            return false;
+        }
+
         try
         {
+            Show();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine($"RegionSelectorWindow: Show() failed or aborted: {ex.Message}");
+            RestoreHiddenWindows();
+            ReleaseSelectorGate();
+            return false;
+        }
+    }
+
+    private Task<bool> PrepareForDisplayAsync()
+    {
+        // Avalonia can raise the window setup path more than once while the
+        // first await is in flight. Coalesce that work: a second grim request
+        // would capture this selector's own overlay instead of the desktop.
+        lock (_preparationLock)
+        {
+            return _preparationTask ??= PrepareForDisplayCoreAsync();
+        }
+    }
+
+    private async Task<bool> PrepareForDisplayCoreAsync()
+    {
+        if (!_ownsSelector)
+        {
+            return false;
+        }
+
+        if (_preparedForDisplay)
+        {
+            return _captureReady;
+        }
+
+        HideSnapXWindows();
+
+        try
+        {
+            if (IsCancellationRequested)
+            {
+                RestoreHiddenWindows();
+                return false;
+            }
+
+            // Hiding a window is asynchronous from the compositor's point of
+            // view. Give Hyprland a frame to remove SnapX before grim captures
+            // the desktop that will become the selector's background.
+            await Task.Delay(100);
+            if (IsCancellationRequested)
+            {
+                RestoreHiddenWindows();
+                return false;
+            }
             var captureTask = Task.Factory.StartNew(
                 async () => await TaskHelpers.GetScreenshot().CaptureActiveMonitor(),
                 TaskCreationOptions.LongRunning).Unwrap();
-
-
-            if (!captureTask.Wait(TimeSpan.FromSeconds(10)))
+            _image = await captureTask.WaitAsync(TimeSpan.FromSeconds(10));
+            if (IsCancellationRequested)
             {
-                throw new TimeoutException("Screenshot capture timed out after 10 seconds.");
+                _image?.Dispose();
+                _image = null;
+                RestoreHiddenWindows();
+                return false;
+            }
+            if (_image is null)
+            {
+                DebugHelper.WriteLine("RegionSelectorWindow: capture returned no image.");
+                RestoreHiddenWindows();
+                return false;
             }
 
-            _image = await captureTask;
-        }
-        catch (Exception ex)
-        {
-            ShowErrorDialog(ex);
-        }
+            // On NVIDIA-backed Hyprland (and some other compositors) grim can
+            // return an all-black frame immediately after the SnapX windows are
+            // hidden. Showing that as the selector background produces a
+            // full-screen black overlay that looks like the machine crashed.
+            if (IsLikelyBlackFrame(_image))
+            {
+                _image.Dispose();
+                _image = null;
 
-        if (_image == null)
-        {
-            DebugHelper.WriteLine("RegionSelectorWindow.OnOpened: _image is null");
-            await CancelSelection();
-            return;
-        }
+                // Give the compositor one more frame, then retry the capture.
+                // A second attempt is cheap and usually returns the actual
+                // desktop once the hide has been committed to the output.
+                await Task.Delay(250);
+                if (IsCancellationRequested)
+                {
+                    RestoreHiddenWindows();
+                    return false;
+                }
+                captureTask = Task.Factory.StartNew(
+                    async () => await TaskHelpers.GetScreenshot().CaptureActiveMonitor(),
+                    TaskCreationOptions.LongRunning).Unwrap();
+                _image = await captureTask.WaitAsync(TimeSpan.FromSeconds(10));
+                if (IsCancellationRequested)
+                {
+                    _image?.Dispose();
+                    _image = null;
+                    RestoreHiddenWindows();
+                    return false;
+                }
+                if (_image is null || IsLikelyBlackFrame(_image))
+                {
+                    _image?.Dispose();
+                    _image = null;
+                    DebugHelper.WriteLine(
+                        "RegionSelectorWindow: captured background is black; aborting the selector instead of showing a black overlay.");
+                    RestoreHiddenWindows();
+                    return false;
+                }
+            }
 
-        _imageStream = new MemoryStream();
-        await _image.SaveAsPngAsync(_imageStream);
-        _imageStream.Position = 0;
-        _imageBounds = new Rect(_image.Bounds.X, _image.Bounds.Y, _image.Bounds.Width, _image.Bounds.Height);
-        DebugHelper.WriteLine(
-            $"_imageStream {_imageStream.Length} (Readable? {_imageStream.CanRead}) bytes raw image bounds {_image.Bounds}");
-        try
-        {
+            // The selector background is only ever shown, never re-read as a
+            // file, so the PNG encode/decode round trip this used to do
+            // (SaveAsPngAsync + new Bitmap(stream)) was pure overhead on top
+            // of every region/window selector open.
+            var backgroundBitmap = App.SnapX.ConvertImageSharpImgToAvalonia(_image);
+            DebugHelper.WriteLine(
+                $"Selector background: {backgroundBitmap.PixelSize} from raw image bounds {_image.Bounds}");
             Background = new ImageBrush
             {
-                Source = new Bitmap(_imageStream),
+                Source = backgroundBitmap,
                 Stretch = Stretch.UniformToFill,
             };
-            WindowState = OperatingSystem.IsMacOS() ? WindowState.Maximized :  WindowState.Normal;
+            if (_captureOptions.WindowPickerMode)
+            {
+                var screenRect = new SixLabors.ImageSharp.Rectangle(
+                    _screenBounds.X, _screenBounds.Y, _screenBounds.Width, _screenBounds.Height);
+                _pickableWindows = Methods.GetWindowList()
+                    .Where(window => window.IsVisible && !window.Rectangle.IsEmpty && window.Rectangle.IntersectsWith(screenRect))
+                    .OrderBy(window => window.Rectangle.Width * (long)window.Rectangle.Height)
+                    .ToList();
+            }
+
+            _preparedForDisplay = true;
+            _captureReady = true;
+            Opacity = 1;
+            return true;
         }
         catch (Exception ex)
         {
             ShowErrorDialog(ex);
+            RestoreHiddenWindows();
+            return false;
         }
+    }
+
+    private void HideSnapXWindows()
+    {
+        foreach (var win in App.MyMainWindow?.OwnedWindows.Where(w => w != this && w.IsVisible) ?? [])
+        {
+            _ownershipMap[win] = win.Owner;
+            win.Hide();
+            windowsHiddenByUs.Add(win);
+        }
+
+        if (App.MyMainWindow is { IsVisible: true } mainWindow)
+        {
+            _ownershipMap[mainWindow] = mainWindow.Owner;
+            mainWindow.Hide();
+            windowsHiddenByUs.Add(mainWindow);
+        }
+    }
+
+    private void RestoreHiddenWindows()
+    {
+        var sortedWindows = TopoSortWindows(windowsHiddenByUs);
+        foreach (var win in sortedWindows)
+        {
+            if (_ownershipMap.TryGetValue(win, out var owner) && owner?.IsVisible == true)
+                win.Show(owner as Window);
+            else
+                win.Show();
+        }
+
+        _ownershipMap.Clear();
+        windowsHiddenByUs.Clear();
     }
     List<Window> TopoSortWindows(IEnumerable<Window> windows)
     {
@@ -429,33 +1570,103 @@ public partial class RegionSelectorWindow : Window
     }
     private void OnClosed(object? Sender, EventArgs E)
     {
+        _isSelecting = false;
+        _captureReady = false;
         _resultRect.TrySetResult(null);
         _resultImg.TrySetResult(null);
         _imageStream?.Dispose();
         _imageStream = null;
-        if (!IsSilentMode)
-        {
-            var sortedWindows = TopoSortWindows(windowsHiddenByUs);
+        RestoreHiddenWindows();
 
-            foreach (var win in sortedWindows)
+        ReleaseSelectorGate();
+    }
+
+    private bool IsCancellationRequested => Volatile.Read(ref _cancellationRequested) != 0;
+
+    private static bool IsNativeWayland => OperatingSystem.IsLinux() && LinuxAPI.IsWayland();
+
+    private void RequestCancellation()
+    {
+        Interlocked.Exchange(ref _cancellationRequested, 1);
+        _isSelecting = false;
+        _selectionCompleted = true;
+        _resultRect.TrySetResult(null);
+        _resultImg.TrySetResult(null);
+
+        if (IsVisible)
+        {
+            Close();
+        }
+    }
+
+    private void ReleaseSelectorGate()
+    {
+        if (_ownsSelector && Interlocked.Exchange(ref _selectorGateReleased, 1) == 0)
+        {
+            Interlocked.Exchange(ref selectorOpen, 0);
+        }
+    }
+
+    private bool TryAcquireSelectorGate()
+    {
+        if (_ownsSelector)
+        {
+            return true;
+        }
+
+        if (Interlocked.CompareExchange(ref selectorOpen, 1, 0) != 0)
+        {
+            return false;
+        }
+
+        _ownsSelector = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Detects an all-black (or nearly all-black) selector background. A black
+    /// frame means grim captured the output before the hidden SnapX windows
+    /// left the compositor, so showing the selector would make the whole
+    /// screen appear black until the user happens to close the window.
+    /// </summary>
+    private static bool IsLikelyBlackFrame(Image image)
+    {
+        if (image is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            // Sample a grid of 9 points. This is deliberately cheap and does
+            // not need to be pixel-perfect; any bright pixel means the frame is
+            // a real desktop/application frame rather than an empty black one.
+            int[] samples = { 1, 4, 7 };
+            using Image<Rgba32> rgba = image as Image<Rgba32> ?? image.CloneAs<Rgba32>();
+            int bright = 0;
+            foreach (int xStep in samples)
             {
-                if (_ownershipMap.TryGetValue(win, out var owner) && owner?.IsVisible == true)
+                foreach (int yStep in samples)
                 {
-                    win.Show(owner as Window);
-                }
-                else
-                {
-                    win.Show();
+                    int x = Math.Clamp(rgba.Width * xStep / 8, 0, rgba.Width - 1);
+                    int y = Math.Clamp(rgba.Height * yStep / 8, 0, rgba.Height - 1);
+                    Rgba32 pixel = rgba[x, y];
+                    if (pixel.R > 24 || pixel.G > 24 || pixel.B > 24)
+                    {
+                        bright++;
+                    }
                 }
             }
 
-            _ownershipMap.Clear();
-            windowsHiddenByUs.Clear();
+            // Treat the frame as black only when every sampled pixel is dark.
+            return bright == 0;
+        }
+        catch
+        {
+            // If sampling fails, don't take the risk of showing a presumed
+            // black overlay, but we cannot prove black either. Prefer aborting
+            // the selector to a blank screen.
+            return true;
         }
     }
-    private void OnLostFocus(object? Sender, RoutedEventArgs E)
-    {
-        if (Sender is Window window) window.Focus();
-    }
 }
-

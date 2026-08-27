@@ -27,8 +27,7 @@
             TextAlignment="Center"
             TextWrapping="Wrap"
             VerticalAlignment="Center">
-            SnapX is free to use, but the work that goes into it isn't.
-            Your support propels SnapX forward, whether it's for new features or a pack of breakfast burritos!
+            SnapX is free to use. Donations support development and maintenance.
         </SelectableTextBlock>
         <controls:FAComboBox
             Height="40"
@@ -69,4 +68,3 @@
         </controls:FAComboBox>
     </StackPanel>
 </UserControl>
-

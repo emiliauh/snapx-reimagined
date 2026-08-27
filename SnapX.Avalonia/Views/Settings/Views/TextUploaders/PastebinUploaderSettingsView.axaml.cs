@@ -66,12 +66,12 @@ public partial class PastebinUploaderSettingsView : UserControl
             {
                 var success = await Task.Run(pasteBinUploader.Login);
 
-                var dialog = new ContentDialog
+                var dialog = new FAContentDialog
                 {
                     Title = success ? "Success" : "Login Failed",
                     Content = success ? "Login successful!" : "Please check your username and password.",
                     CloseButtonText = "OK",
-                    DefaultButton = ContentDialogButton.Close
+                    DefaultButton = FAContentDialogButton.Close
                 };
                 LoginStatus.Content = success ? $"Status: {OAuthLoginStatus.LoginSuccessful}" : $"Status: {OAuthLoginStatus.LoginFailed}";
 
@@ -88,7 +88,7 @@ public partial class PastebinUploaderSettingsView : UserControl
             }
             catch (Exception ex)
             {
-                ContentDialog errorDialog = new ContentDialog
+                FAContentDialog errorDialog = new FAContentDialog
                 {
                     Title = "Error",
                     Content = ex.ToString(),

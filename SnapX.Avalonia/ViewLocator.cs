@@ -20,14 +20,16 @@ public class ViewLocator : IDataTemplate
         RegisterViewFactory<MainViewModel, MainWindow>();
         RegisterViewFactory<HomePageViewModel, HomePageView>();
         RegisterViewFactory<RegionSelectorViewModel, RegionSelectorWindow>();
+        RegisterViewFactory<InAppSettingsHostVM, InAppSettingsHost>();
         RegisterViewFactory<SettingsMainViewVM, SettingsWindow>();
         RegisterViewFactory<CustomUploaderVM, CustomUploaderView>();
         RegisterViewFactory<ImportExportVM, ImportExportView>();
-        // RegisterViewFactory<ScreenRecordOptionsVM, ScreenRecordOptionsView>();
+        RegisterViewFactory<ScreenRecordOptionsVM, ScreenRecordOptionsView>();
         RegisterViewFactory<DatabaseVM, DatabaseView>();
         RegisterViewFactory<CoreUploaderVM, BuiltInUploaderSettingsView>();
         RegisterViewFactory<SettingsHomePageViewVM, SettingsHomePageView>();
         RegisterViewFactory<NotImplementedVM, NotImplemented>();
+        RegisterViewFactory<SettingsCategoryVM, SettingsCategoryView>();
         RegisterViewFactory<GeneralSettingsVM, GeneralSettingsView>();
         RegisterViewFactory<ApplicationUploadSettingsVM, ApplicationUploadSettingsView>();
         RegisterViewFactory<ApplicationPathSettingsVM, ApplicationPathSettingsView>();
@@ -44,7 +46,7 @@ public class ViewLocator : IDataTemplate
 
         _locator.TryGetValue(data.GetType(), out var factory);
 
-        return factory?.Invoke() ?? new TextBlock { Text = $"VM Not Registered: {data.GetType()}" };
+        return factory?.Invoke() ?? new TextBlock { Text = "SnapX cannot open this page." };
     }
 
     public bool Match(object? data)
@@ -59,5 +61,15 @@ public class ViewLocator : IDataTemplate
             typeof(TViewModel),
             Design.IsDesignMode
                 ? Activator.CreateInstance<TView>
-                : Ioc.Default.GetService<TView>);
+                : ResolveView<TView>);
+
+    private static TView? ResolveView<TView>()
+        where TView : Control
+    {
+        // DI remains the preferred path because some views may gain dependencies
+        // over time.  The parameterless fallback keeps a missed registration from
+        // turning an otherwise valid settings page into a misleading error card.
+        return Ioc.Default.GetService<TView>()
+            ?? Activator.CreateInstance<TView>();
+    }
 }

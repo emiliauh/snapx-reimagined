@@ -1,4 +1,4 @@
-<windowing:AppWindow
+<windowing:FAAppWindow
     Height="600"
     Initialized="AboutWindow_OnInitialized"
     MinHeight="560"
@@ -288,4 +288,4 @@
             </Grid>
         </StackPanel>
     </ScrollViewer>
-</windowing:AppWindow>
+</windowing:FAAppWindow>

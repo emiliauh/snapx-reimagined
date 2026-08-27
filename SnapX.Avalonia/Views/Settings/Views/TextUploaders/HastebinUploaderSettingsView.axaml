@@ -7,27 +7,27 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel Spacing="4">
-        <controls:SettingsExpanderItem Content="Custom Domain" Description="Use a different API if you need, otherwise leave default. Hastebin Topal is NOT supported.">
-            <controls:SettingsExpanderItem.Footer>
+        <controls:FASettingsExpanderItem Content="Custom Domain" Description="Use a different API if you need, otherwise leave default. Hastebin Topal is NOT supported.">
+            <controls:FASettingsExpanderItem.Footer>
                 <TextBox
                     Name="txtCustomURL"
                     Watermark="https://pastie.io"
                     Width="200" />
-            </controls:SettingsExpanderItem.Footer>
-        </controls:SettingsExpanderItem>
+            </controls:FASettingsExpanderItem.Footer>
+        </controls:FASettingsExpanderItem>
 
-        <controls:SettingsExpanderItem Content="Syntax highlighting">
-            <controls:SettingsExpanderItem.Footer>
+        <controls:FASettingsExpanderItem Content="Syntax highlighting">
+            <controls:FASettingsExpanderItem.Footer>
                 <TextBox
                     Name="txtSyntaxHightlight"
                     Watermark="hs"
                     Width="200" />
-            </controls:SettingsExpanderItem.Footer>
-        </controls:SettingsExpanderItem>
-        <controls:SettingsExpanderItem Content="Paste Options">
-            <controls:SettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem.Footer>
+        </controls:FASettingsExpanderItem>
+        <controls:FASettingsExpanderItem Content="Paste Options">
+            <controls:FASettingsExpanderItem.Footer>
                 <CheckBox Content="Use file extension for syntax highlighting (except .txt)" Name="cbUseFileExtension" />
-            </controls:SettingsExpanderItem.Footer>
-        </controls:SettingsExpanderItem>
+            </controls:FASettingsExpanderItem.Footer>
+        </controls:FASettingsExpanderItem>
     </StackPanel>
 </UserControl>

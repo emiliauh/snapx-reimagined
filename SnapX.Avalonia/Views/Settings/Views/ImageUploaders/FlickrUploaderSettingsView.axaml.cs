@@ -62,12 +62,12 @@ public partial class FlickrUploaderSettingsView : UserControl
                 if (string.IsNullOrWhiteSpace(code) || Config.FlickrOAuthInfo == null) return;
                 var result = await Task.Run(() => new FlickrUploader(Config.FlickrOAuthInfo).GetAccessToken(code));
 
-                var dialog = new ContentDialog
+                var dialog = new FAContentDialog
                 {
                     Title = result ? "Success" : "Login Failed",
                     Content = result ? "Login Successful" : "Login Failed",
                     CloseButtonText = "OK",
-                    DefaultButton = ContentDialogButton.Close
+                    DefaultButton = FAContentDialogButton.Close
                 };
 
                 LoginStatus.Content = result ? $"Status: {OAuthLoginStatus.LoginSuccessful}" : $"Status: {OAuthLoginStatus.LoginFailed}";
@@ -82,7 +82,7 @@ public partial class FlickrUploaderSettingsView : UserControl
             }
             catch (Exception ex)
             {
-                var errorDialog = new ContentDialog
+                var errorDialog = new FAContentDialog
                 {
                     Title = "Error",
                     Content = ex.Message,

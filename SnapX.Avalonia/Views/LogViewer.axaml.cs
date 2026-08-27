@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Interactivity;
+using Avalonia.Input.Platform;
 using Avalonia.Media;
 using Avalonia.Threading;
 using FluentAvalonia.UI.Windowing;
@@ -13,7 +14,7 @@ using SnapX.Core.Utils;
 
 namespace SnapX.Avalonia.Views;
 
-public partial class LogViewer : AppWindow
+public partial class LogViewer : FAAppWindow
 {
     private ScrollViewer? _scrollViewer;
     private SelectableTextBlock? _logTextBlock;

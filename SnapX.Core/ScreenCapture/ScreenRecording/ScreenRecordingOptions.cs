@@ -72,7 +72,8 @@ public class ScreenRecordingOptions
         {
             if (FFmpeg.IsVideoSourceSelected)
             {
-                if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase))
+                if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase)
+                    && !OperatingSystem.IsLinux())
                 {
                     if (FFmpeg.IsAudioSourceSelected)
                     {
@@ -94,6 +95,36 @@ public class ScreenRecordingOptions
                     args.Append($"-video_size {width}x{height} ");
                     args.Append($"-draw_mouse {cursor} ");
                     args.Append("-i desktop ");
+                }
+                else if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.X11Grab.Value, StringComparison.OrdinalIgnoreCase)
+                    || OperatingSystem.IsLinux()
+                    && FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (FFmpeg.IsAudioSourceSelected)
+                    {
+                        throw new PlatformNotSupportedException(
+                            "X11 recording does not currently have a portable audio-input configuration. Use custom FFmpeg commands for audio capture.");
+                    }
+
+                    string x = isCustom ? "$area_x$" : CaptureArea.X.ToString(CultureInfo.InvariantCulture);
+                    string y = isCustom ? "$area_y$" : CaptureArea.Y.ToString(CultureInfo.InvariantCulture);
+                    string width = isCustom ? "$area_width$" : CaptureArea.Width.ToString(CultureInfo.InvariantCulture);
+                    string height = isCustom ? "$area_height$" : CaptureArea.Height.ToString(CultureInfo.InvariantCulture);
+                    string display = Environment.GetEnvironmentVariable("DISPLAY") ?? string.Empty;
+
+                    if (!isCustom && string.IsNullOrWhiteSpace(display))
+                    {
+                        throw new PlatformNotSupportedException("X11 recording requires the DISPLAY environment variable.");
+                    }
+
+                    AppendInputDevice(args, "x11grab", false);
+                    args.Append($"-framerate {framerate} ");
+                    args.Append($"-video_size {width}x{height} ");
+                    args.Append($"-draw_mouse {(DrawCursor ? 1 : 0)} ");
+                    string input = isCustom
+                        ? $"{display}+$area_x$,$area_y$"
+                        : $"{display}{(CaptureArea.X >= 0 ? "+" : string.Empty)}{x},{y}";
+                    args.Append($"-i {Core.Utils.Helpers.EscapeCLIText(input)} ");
                 }
                 else if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.DDAGrab.Value, StringComparison.OrdinalIgnoreCase))
                 {

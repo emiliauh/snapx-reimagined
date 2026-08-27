@@ -1,4 +1,4 @@
-<windowing:AppWindow
+<windowing:FAAppWindow
     Closed="AppWindow_OnClosed"
     Height="800"
     Loaded="AppWindow_OnLoaded"
@@ -41,4 +41,4 @@
             </StackPanel>
         </ScrollViewer>
     </DockPanel>
-</windowing:AppWindow>
+</windowing:FAAppWindow>

@@ -16,11 +16,13 @@ using SnapX.Core;
 using SnapX.Core.Job;
 using SnapX.Core.Upload;
 using SnapX.Core.Utils;
+using SnapX.Core.Utils.Native;
+using SnapX.Core.Utils.Cryptographic;
 using Color = Avalonia.Media.Color;
 using Size = SixLabors.ImageSharp.Size;
 namespace SnapX.Avalonia.Views;
 
-public partial class MainWindow : AppWindow
+public partial class MainWindow : FAAppWindow
 {
     public static string MainWindowName => Core.SnapXL.Title + " " + Core.SnapXL.VersionText;
 
@@ -30,6 +32,20 @@ public partial class MainWindow : AppWindow
     public MainWindow(MainViewModel vm)
     {
         DataContext = vm;
+
+        // Avalonia ToolTips are Popup-backed. A history card's declared
+        // ToolTip.Tip can therefore remain as a native xdg_popup while a
+        // region capture hands focus to slurp. The native Wayland EGL popup
+        // surface is then redrawn on return and can fail eglMakeCurrent on
+        // NVIDIA/Hyprland. Disable automatic tooltips for this window before
+        // its content/template is materialized; the attached property is
+        // inherited by MainView, FANavigationView and all history cards.
+        // Context menus and explicit Flyouts are unaffected.
+        if (OperatingSystem.IsLinux() && LinuxAPI.IsWayland())
+        {
+            ToolTip.SetServiceEnabled(this, false);
+        }
+
         var config = App.SnapX.GetConfiguration();
         if (config.RememberMainFormSize && !config.MainFormSize.IsEmpty)
         {
@@ -98,6 +114,9 @@ public partial class MainWindow : AppWindow
                 AllowMultiple = @event.Multiselect,
                 SuggestedFileName = @event.FileName,
                 SuggestedStartLocation = await StorageProvider.TryGetFolderFromPathAsync(@event.Directory),
+                FileTypeFilter = @event.AcceptedExtensions is { Count: > 0 }
+                    ? [new FilePickerFileType("Accepted files") { Patterns = @event.AcceptedExtensions }]
+                    : null
             });
         }
 
@@ -106,7 +125,64 @@ public partial class MainWindow : AppWindow
             var itemPaths = items.Select(item => item.Path.LocalPath).ToArray();
             var itemPathsAsString = string.Join(", ", itemPaths);
             DebugHelper.WriteLine(itemPathsAsString);
-            UploadManager.UploadFile(itemPaths, @event.TaskSettings);
+
+            if (@event.IndexFolder)
+            {
+                UploadManager.IndexFolder(itemPaths.FirstOrDefault(), @event.TaskSettings);
+            }
+            else if (@event.HashCheck)
+            {
+                string? filePath = itemPaths.FirstOrDefault(File.Exists);
+                if (!string.IsNullOrEmpty(filePath))
+                {
+                    var checker = new HashChecker();
+                    string? checksum = await checker.Start(filePath, HashType.SHA256);
+                    if (!string.IsNullOrEmpty(checksum))
+                    {
+                        Core.SnapXL.EventAggregator.Publish(
+                            new NeedClipboardCopyEvent($"{checksum}  {Path.GetFileName(filePath)}"));
+                    }
+                }
+            }
+            else if (@event.VideoThumbnailer)
+            {
+                foreach (string filePath in itemPaths.Where(File.Exists))
+                {
+                    try
+                    {
+                        await Task.Run(() => TaskHelpers.CreateVideoThumbnails(filePath, @event.TaskSettings));
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugHelper.WriteException(ex, $"Unable to create video thumbnails for {filePath}");
+                        Core.SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Video thumbnail generation failed", true));
+                    }
+                }
+            }
+            else if (@event.VideoConverter)
+            {
+                foreach (string filePath in itemPaths.Where(File.Exists))
+                {
+                    try
+                    {
+                        string outputPath = await Task.Run(() => TaskHelpers.ConvertVideo(filePath, @event.TaskSettings));
+                        ToastNotificationWindow.ShowToast(
+                            null,
+                            "Video converted",
+                            outputPath,
+                            () => FileHelpers.OpenFile(outputPath));
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugHelper.WriteException(ex, $"Unable to convert video {filePath}");
+                        Core.SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Video conversion failed", true));
+                    }
+                }
+            }
+            else
+            {
+                UploadManager.UploadFile(itemPaths, @event.TaskSettings);
+            }
         }
         else
         {
@@ -192,9 +268,14 @@ public partial class MainWindow : AppWindow
     private void TopLevel_OnOpened(object? Sender, EventArgs E)
     {
         DebugHelper.WriteLine("MainWindow Opened");
+        // FAContentDialog is hosted through Avalonia's popup/overlay path.
+        // Do not create that additional transient surface when this top-level
+        // is remapped in a native Wayland session.
+        if (OperatingSystem.IsLinux() && LinuxAPI.IsWayland()) return;
+
         if (Core.SnapXL.Settings.FirstTimeRunDate != DateTime.MinValue &&
             Core.SnapXL.Settings.FirstTimeRunDate != null) return;
-        var changelogDialog = new ContentDialog
+        var changelogDialog = new FAContentDialog
         {
             Title = Title,
             Content = new ChangelogControl()

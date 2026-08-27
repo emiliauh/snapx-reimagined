@@ -1,22 +1,28 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-
 using SnapX.Core.Job;
+using SnapX.Core.ScreenCapture;
 
 namespace SnapX.Core.Capture;
 
 public class CaptureLastRegion : CaptureRegion
 {
-    protected override TaskMetadata Execute(TaskSettings taskSettings)
+    protected override TaskMetadata? Execute(TaskSettings taskSettings)
     {
-        switch (lastRegionCaptureType)
+        if (!RegionCaptureTasks.TryGetLastRegion(out var rectangle, out var captureType))
         {
-            default:
-            case RegionCaptureType.Default: return ExecuteRegionCapture(taskSettings);
-            case RegionCaptureType.Light: return ExecuteRegionCaptureLight(taskSettings);
-            case RegionCaptureType.Transparent: return ExecuteRegionCaptureTransparent(taskSettings);
+            return base.Execute(taskSettings);
         }
+
+        var image = TaskHelpers.GetScreenshot(taskSettings).CaptureRectangle(rectangle);
+        if (image == null)
+        {
+            throw new InvalidOperationException($"Capturing the last region {rectangle} returned no image.");
+        }
+
+        lastRegionCaptureType = captureType;
+        var metadata = CreateMetadata(rectangle);
+        metadata.Image = image;
+        return metadata;
     }
 }
-

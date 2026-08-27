@@ -50,19 +50,19 @@ public partial class BuiltInUploaderSettingsView : UserControl
                 Children =
                 {
                     new TextBlock {
-                        Text = "🖱️",
+                        Text = "Select",
                         FontSize = 44,
                         HorizontalAlignment = HorizontalAlignment.Center,
                         Margin = new Thickness(0, 0, 0, 10)
                     },
                     new TextBlock {
-                        Text = "Ready to Configure",
+                        Text = "Select an uploader.",
                         FontSize = 18,
                         FontWeight = FontWeight.Bold,
                         HorizontalAlignment = HorizontalAlignment.Center
                     },
                     new TextBlock {
-                        Text = "Select an uploader from the list to get started.",
+                        Text = "Select an uploader to view its settings.",
                         Foreground = Brushes.Gray,
                         TextAlignment = TextAlignment.Center,
                         HorizontalAlignment = HorizontalAlignment.Center
@@ -94,18 +94,18 @@ public partial class BuiltInUploaderSettingsView : UserControl
                 Children =
                 {
                     new TextBlock {
-                        Text = "🛠️",
+                        Text = "Settings",
                         FontSize = 48,
                         HorizontalAlignment = HorizontalAlignment.Center
                     },
                     new SelectableTextBlock {
-                        Text = $"{instance.GetType().Name} Settings",
+                        Text = "Uploader settings",
                         FontSize = 20,
                         FontWeight = FontWeight.Bold,
                         HorizontalAlignment = HorizontalAlignment.Center
                     },
                     new TextBlock {
-                        Text = "This uploader doesn't have a configuration view yet.",
+                        Text = "SnapX does not provide settings for this uploader.",
                         Foreground = Brushes.Gray,
                         HorizontalAlignment = HorizontalAlignment.Center
                     },
@@ -117,14 +117,14 @@ public partial class BuiltInUploaderSettingsView : UserControl
                         Padding = new Thickness(10, 5),
                         Margin = new Thickness(0, 10, 0, 0),
                         Child = new TextBlock {
-                            Text = "Pull Requests Welcome!",
+                            Text = "No settings are available.",
                             Foreground = Brushes.DodgerBlue,
                             HorizontalAlignment = HorizontalAlignment.Center,
                             FontWeight = FontWeight.SemiBold
                         }
                     },
                     new TextBlock {
-                        Text = "Adding a view is simple: create a UserControl and link it in the BuiltInUploaderSettingsView.",
+                        Text = "Select another uploader to view its settings.",
                         FontSize = 12,
                         FontStyle = FontStyle.Italic,
                         Foreground = Brushes.DimGray,
@@ -139,4 +139,3 @@ public partial class BuiltInUploaderSettingsView : UserControl
         SettingsContainer.Child = newView;
     }
 }
-

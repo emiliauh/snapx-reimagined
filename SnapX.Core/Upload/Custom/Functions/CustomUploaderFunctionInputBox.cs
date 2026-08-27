@@ -15,6 +15,15 @@ internal class CustomUploaderFunctionInputBox : CustomUploaderFunction
 
     public override string? Call(ShareXCustomUploaderSyntaxParser parser, string?[] parameters)
     {
-        throw new System.NotImplementedException();
+        var title = "Input";
+        var defaultText = "";
+
+        if (parameters is { Length: > 0 })
+        {
+            if (!string.IsNullOrWhiteSpace(parameters[0])) title = parameters[0]!;
+            if (parameters.Length > 1) defaultText = parameters[1] ?? "";
+        }
+
+        return parser.Interaction.RequestInput(title, defaultText);
     }
 }

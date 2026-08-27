@@ -1,4 +1,7 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -10,6 +13,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.DependencyInjection;
@@ -25,7 +29,10 @@ using SnapX.Avalonia.ViewModels.Settings;
 // using SnapX.Avalonia.ViewModels.Settings;
 using SnapX.Avalonia.Views;
 using SnapX.Avalonia.Views.Settings;
+using SnapX.Core.Media;
+using SnapX.Core.ScreenCapture;
 using SnapX.Avalonia.Views.Settings.Views;
+using SnapX.Avalonia.Utils;
 using SnapX.Core;
 using SnapX.Core.Capture;
 using SnapX.Core.Job;
@@ -33,6 +40,7 @@ using SnapX.Core.Upload;
 using SnapX.Core.Utils;
 using SnapX.Core.Utils.Extensions;
 using SnapX.Core.Utils.Native;
+using SixLabors.ImageSharp.Formats.Png;
 
 namespace SnapX.Avalonia;
 
@@ -52,6 +60,24 @@ public partial class App : Application
     public static string TrayTitle => $"SnapX v{SimpleVersion()}";
 
     private static Lock _windowLock = new();
+    private static readonly Lock ClipboardBitmapLock = new();
+    private static readonly Lock WaylandClipboardProcessLock = new();
+    private static readonly SemaphoreSlim ClipboardWriteGate = new(1, 1);
+    // Avalonia's native clipboard backends can encode a Bitmap lazily, after
+    // SetBitmapAsync returns. Keep the current bitmap alive until another
+    // clipboard write replaces it (or the application exits).
+    private static Bitmap? _clipboardBitmap;
+    // wl-copy stays alive to own a Wayland selection. Keep the current owner
+    // process handle so it cannot be collected while SnapX is running; the
+    // compositor releases the previous owner when a later copy replaces it.
+    private static Process? _waylandClipboardProcess;
+    private int _shutdownStarted;
+    // Do not invoke Core shutdown if startup failed before SnapX.start completed.
+    private bool _coreStarted;
+    private RecordingTrayController? _recordingTrayController;
+    private static DesktopNotificationService? DesktopNotifications { get; set; }
+    private SingleInstanceManager? _singleInstance;
+    private readonly List<IDisposable> _signalRegistrations = [];
 
     private static string SimpleVersion()
     {
@@ -72,7 +98,9 @@ public partial class App : Application
             ShowErrorDialog(Lang.UnhandledException, Args.ExceptionObject as Exception);
         };
 #if DEBUG
-        Current.AttachDevTools();
+        // Avalonia 12 removed the in-process AttachDevTools() extension; dev
+        // tooling now runs as a separate process via AvaloniaUI.DiagnosticsSupport.
+        // Keep this hook empty so Debug builds compile without the legacy API.
 #endif
 
         // Default logic doesn't auto-detect windows theme anymore in designer
@@ -197,7 +225,7 @@ public partial class App : Application
         stackPanel.Children.Add(buttonPanel);
 
         // Create and show the error dialog with the formatted message
-        var dialog = new AppWindow
+        var dialog = new FAAppWindow
         {
             Title = title,
             Content = stackPanel,
@@ -232,7 +260,10 @@ public partial class App : Application
             return;
         }
 
-        topLevel.Clipboard?.SetTextAsync(errorMessage);
+        if (topLevel.Clipboard is { } clipboard && !string.IsNullOrEmpty(errorMessage))
+        {
+            _ = SetClipboardTextAsync(clipboard, errorMessage);
+        }
     }
 
     private async void OnReportErrorClicked(Button button, Exception ex)
@@ -285,9 +316,40 @@ public partial class App : Application
 
     private void Shutdown()
     {
+        ShutdownCore();
+        if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            desktop.Shutdown();
+        }
+    }
+
+    private void ShutdownCore()
+    {
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
+            return;
+
+        // The recording outline is supplied by small native layer-shell
+        // helper processes. Stop the recording UI before the dispatcher is
+        // torn down so closing SnapX cannot leave a red outline (or a control
+        // popup) behind on the desktop.
         try
         {
-            if (SnapX != null)
+            // Stop the active encoder before stopping generic worker tasks.
+            // ScreenRecordManager owns child ffmpeg/wf-recorder processes that
+            // do not belong to the Avalonia window lifetime, so this explicit
+            // abort is what guarantees they exit with SnapX.
+            TaskHelpers.AbortScreenRecording();
+            RecordingControlWindow.HideRecording();
+            RecordingRegionOutline.Hide();
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to close recording UI during shutdown");
+        }
+
+        try
+        {
+            if (_coreStarted && SnapX != null)
             {
                 _pollingCts?.Cancel();
                 var shutdownTask = Task.Run(() => SnapX.shutdown());
@@ -306,10 +368,275 @@ public partial class App : Application
             Console.Error.WriteLine("Error shutting down SnapX.Core, continuing shut down.");
         }
 
-        MyMainWindow?.Close();
+        _recordingTrayController?.Dispose();
+        _recordingTrayController = null;
+        if (DesktopNotifications is not null)
+        {
+            _ = DesktopNotifications.DisposeAsync();
+            DesktopNotifications = null;
+        }
+        _singleInstance?.Dispose();
+        _singleInstance = null;
+        foreach (IDisposable registration in _signalRegistrations)
+        {
+            registration.Dispose();
+        }
+        _signalRegistrations.Clear();
+        StopWaylandClipboardProcess();
+        ReplaceClipboardBitmap(null);
         MyMainWindow = null;
+    }
 
-        Environment.Exit(0);
+    /// <summary>
+    /// Places a bitmap on the native clipboard and transfers its ownership to
+    /// the application. X11 can request the bitmap later, so it must remain
+    /// valid until a later clipboard write replaces it.
+    /// </summary>
+    public static async Task SetClipboardBitmapAsync(IClipboard clipboard, Bitmap bitmap)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+        ArgumentNullException.ThrowIfNull(bitmap);
+
+        await ClipboardWriteGate.WaitAsync();
+        try
+        {
+            // Avalonia uses its X11 clipboard implementation in this
+            // application. Under a Wayland session the XWayland bridge
+            // truncates a large PNG selection (a dual-monitor capture was cut
+            // off at 192 KiB). Feed the compositor's native clipboard directly
+            // instead.
+            if (await TrySetWaylandClipboardBitmapAsync(bitmap))
+            {
+                bitmap.Dispose();
+                ReplaceClipboardBitmap(null);
+                return;
+            }
+
+            StopWaylandClipboardProcess();
+            await clipboard.SetBitmapAsync(bitmap);
+            ReplaceClipboardBitmap(bitmap);
+        }
+        catch
+        {
+            bitmap.Dispose();
+            throw;
+        }
+        finally
+        {
+            ClipboardWriteGate.Release();
+        }
+    }
+
+    private static async Task SetClipboardImageSharpAsync(
+        IClipboard clipboard,
+        SixLabors.ImageSharp.Image image)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+        ArgumentNullException.ThrowIfNull(image);
+
+        await ClipboardWriteGate.WaitAsync();
+        try
+        {
+            if (await TrySetWaylandClipboardImageAsync(image))
+            {
+                ReplaceClipboardBitmap(null);
+                return;
+            }
+
+            Bitmap bitmap = SnapX.ConvertImageSharpImgToAvalonia(image);
+            try
+            {
+                StopWaylandClipboardProcess();
+                await clipboard.SetBitmapAsync(bitmap);
+                ReplaceClipboardBitmap(bitmap);
+            }
+            catch
+            {
+                bitmap.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            ClipboardWriteGate.Release();
+        }
+    }
+
+    private static async Task<bool> TrySetWaylandClipboardImageAsync(SixLabors.ImageSharp.Image image)
+    {
+        if (!IsWaylandSession()) return false;
+
+        await using var png = new MemoryStream();
+        image.Save(png, new PngEncoder());
+        png.Position = 0;
+        return await TrySetWaylandClipboardPngAsync(png);
+    }
+
+    private static async Task<bool> TrySetWaylandClipboardBitmapAsync(Bitmap bitmap)
+    {
+        if (!IsWaylandSession()) return false;
+
+        await using var png = new MemoryStream();
+        bitmap.Save(png);
+        png.Position = 0;
+        return await TrySetWaylandClipboardPngAsync(png);
+    }
+
+    private static bool IsWaylandSession() =>
+        OperatingSystem.IsLinux()
+        && string.Equals(
+            Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"),
+            "wayland",
+            StringComparison.OrdinalIgnoreCase
+        );
+
+    private static async Task<bool> TrySetWaylandClipboardPngAsync(Stream png)
+    {
+        try
+        {
+            Process? process = Process.Start(
+                new ProcessStartInfo
+                {
+                    FileName = "wl-copy",
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    ArgumentList = { "--foreground", "--type", "image/png" }
+                }
+            );
+
+            if (process is null)
+            {
+                throw new InvalidOperationException("Could not start wl-copy.");
+            }
+
+            await png.CopyToAsync(process.StandardInput.BaseStream);
+            await process.StandardInput.DisposeAsync();
+
+            // In --foreground mode a successful wl-copy remains alive to own
+            // the selection, so waiting for its exit would make every capture
+            // time out. Give immediate startup failures a small window, then
+            // retain the live owner process for the selection lifetime.
+            Task exited = process.WaitForExitAsync();
+            if (await Task.WhenAny(exited, Task.Delay(100)) == exited)
+            {
+                string error = await process.StandardError.ReadToEndAsync();
+                if (process.ExitCode != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"wl-copy exited with status {process.ExitCode}: {error.Trim()}"
+                    );
+                }
+
+                process.Dispose();
+                return true;
+            }
+
+            RetainWaylandClipboardProcess(process);
+            return true;
+        }
+        catch (Win32Exception)
+        {
+            // wl-copy is optional. X11 and non-Wayland sessions retain the
+            // existing Avalonia clipboard implementation.
+            return false;
+        }
+    }
+
+    private static void RetainWaylandClipboardProcess(Process process)
+    {
+        Process? previous;
+        lock (WaylandClipboardProcessLock)
+        {
+            previous = _waylandClipboardProcess;
+            _waylandClipboardProcess = process;
+        }
+
+        // Do not kill the old owner: Wayland selection replacement tells it to
+        // exit cleanly. Releasing our process handle is sufficient.
+        previous?.Dispose();
+    }
+
+    private static void StopWaylandClipboardProcess()
+    {
+        Process? process;
+        lock (WaylandClipboardProcessLock)
+        {
+            process = _waylandClipboardProcess;
+            _waylandClipboardProcess = null;
+        }
+
+        if (process is null) return;
+
+        try
+        {
+            if (!process.HasExited) process.Kill();
+        }
+        catch (InvalidOperationException)
+        {
+            // The compositor already released the selection and wl-copy exited.
+        }
+        finally
+        {
+            process.Dispose();
+        }
+    }
+
+    public static async Task SetClipboardDataObjectAsync(
+        IClipboard clipboard,
+        DataTransfer dataTransfer,
+        Bitmap? retainedBitmap = null)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+        ArgumentNullException.ThrowIfNull(dataTransfer);
+
+        await ClipboardWriteGate.WaitAsync();
+        try
+        {
+            StopWaylandClipboardProcess();
+            await clipboard.SetDataAsync(dataTransfer);
+            ReplaceClipboardBitmap(retainedBitmap);
+        }
+        catch
+        {
+            retainedBitmap?.Dispose();
+            throw;
+        }
+        finally
+        {
+            ClipboardWriteGate.Release();
+        }
+    }
+
+    public static async Task SetClipboardTextAsync(IClipboard clipboard, string text)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+        ArgumentNullException.ThrowIfNull(text);
+
+        await ClipboardWriteGate.WaitAsync();
+        try
+        {
+            StopWaylandClipboardProcess();
+            await clipboard.SetTextAsync(text);
+            ReplaceClipboardBitmap(null);
+        }
+        finally
+        {
+            ClipboardWriteGate.Release();
+        }
+    }
+
+    private static void ReplaceClipboardBitmap(Bitmap? bitmap)
+    {
+        Bitmap? previous;
+        lock (ClipboardBitmapLock)
+        {
+            previous = _clipboardBitmap;
+            _clipboardBitmap = bitmap;
+        }
+
+        if (!ReferenceEquals(previous, bitmap)) previous?.Dispose();
     }
 
     public void ListenForEvents()
@@ -318,6 +645,7 @@ public partial class App : Application
         Core.SnapXL.EventAggregator.Subscribe<ErrorMessageEvent>(HandleErrorMessageEvent);
         Core.SnapXL.EventAggregator.Subscribe<NeedOCRWindowEvent>(HandleOCRWindowRequestEvent);
         Core.SnapXL.EventAggregator.Subscribe<NeedScanQRCodeEvent>(HandleScanQRCodeEvent);
+        Core.SnapXL.EventAggregator.Subscribe<NeedToastNotificationEvent>(HandleToastNotificationEvent);
     }
     void HandleOCRWindowRequestEvent(NeedOCRWindowEvent @event)
     {
@@ -337,63 +665,231 @@ public partial class App : Application
             else qrView.QRText.Text = @event.Text;
         });
     }
-    private async void HandleClipboardCopyEvent(NeedClipboardCopyEvent @event)
+
+    void HandleToastNotificationEvent(NeedToastNotificationEvent @event)
+    {
+        // WorkerTask releases its source Image as soon as task completion
+        // handlers return. Convert the preview while it is still owned by the
+        // event, rather than dereferencing a disposed Image later from the UI
+        // dispatcher. This is especially visible for completed recordings,
+        // whose preview is an FFmpeg-extracted frame.
+        bool nativeWayland = OperatingSystem.IsLinux() && LinuxAPI.IsWayland();
+        Bitmap? thumbnail = !nativeWayland && @event.Image is not null
+            ? SnapX.ConvertImageSharpImgToAvalonia(@event.Image)
+            : null;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            Action? onClick = @event.ClickAction switch
+            {
+                ToastClickAction.OpenUrl when !string.IsNullOrEmpty(@event.Url) => () => URLHelpers.OpenURL(@event.Url),
+                ToastClickAction.OpenFile when !string.IsNullOrEmpty(@event.FilePath) => () => FileHelpers.OpenFile(@event.FilePath),
+                ToastClickAction.OpenFolder when !string.IsNullOrEmpty(@event.FilePath) => () => FileHelpers.OpenFolderWithFile(@event.FilePath),
+                ToastClickAction.CopyUrl when !string.IsNullOrEmpty(@event.Url) => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(@event.Url)),
+                ToastClickAction.CopyFile when !string.IsNullOrEmpty(@event.FilePath) => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(new[] { @event.FilePath })),
+                ToastClickAction.CopyFilePath when !string.IsNullOrEmpty(@event.FilePath) => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(@event.FilePath)),
+                ToastClickAction.CopyImageToClipboard when @event.Image is not null => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(@event.Image)),
+                ToastClickAction.CloseNotification => null,
+                _ => null
+            };
+
+            SendDesktopNotification(@event.Title, @event.Message);
+            if (!nativeWayland)
+            {
+                ToastNotificationWindow.ShowToast(thumbnail, @event.Title, @event.Message, onClick);
+            }
+        });
+    }
+
+    internal static void SendDesktopNotification(string title, string message)
+    {
+        // Fire-and-forget the freedesktop notification. The D-Bus call is
+        // isolated so a busy or missing notification daemon never blocks the
+        // capture workflow or surfaces an error to the user.
+        if (DesktopNotifications is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await DesktopNotifications.NotifyAsync(title, message);
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Failed to send desktop notification");
+            }
+        });
+    }
+
+    private void HandleClipboardCopyEvent(NeedClipboardCopyEvent @event)
+    {
+        _ = HandleClipboardCopyEventAsync(@event);
+    }
+
+    private async Task HandleClipboardCopyEventAsync(NeedClipboardCopyEvent @event)
     {
         try
         {
-            DebugHelper.WriteLine("HandleClipboardCopyEvent called");
-            var clipboard = await GetClipboardAsync();
-
-            var dataObject = new DataObject();
-
-            if (@event.HasText)
-            {
-                dataObject.Set(DataFormats.Text, @event.Text!);
-            }
-
-            if (@event.HasImage)
-            {
-                dataObject.Set(
-                    DataFormat.Bitmap.Identifier,
-                    SnapX.ConvertImageSharpImgToAvalonia(@event.Image!)
-                );
-            }
-
-            foreach (var format in @event.AdditionalFormats)
-            {
-                if (format.Value is string strValue)
-                {
-                    dataObject.Set(format.Key, strValue);
-                }
-                else if (format.Value is IImage imageValue)
-                {
-                    dataObject.Set(format.Key, imageValue);
-                }
-                else
-                {
-                    dataObject.Set(format.Key, format.Value.ToString());
-                }
-            }
-
-            if (@event.CustomData != null)
-            {
-                if (@event.CustomData is string customString)
-                {
-                    dataObject.Set("CustomData", customString);
-                }
-                else
-                {
-                    var json = JsonHelpers.SerializeToString(@event.CustomData);
-                    dataObject.Set("CustomData", json);
-                }
-            }
-
-            await clipboard.SetDataObjectAsync(dataObject);
+            // The worker that publishes capture results is not Avalonia's UI
+            // thread. X11 and Wayland clipboard implementations share the UI
+            // dispatcher's native connection, so run the complete operation on
+            // that dispatcher and only then complete the producer's event.
+            await Dispatcher.UIThread.InvokeAsync(() => CopyToClipboardAsync(@event));
             @event.MarkAsHandled();
         }
         catch (Exception ex)
         {
-            // Silent fail - core will handle fallback
+            DebugHelper.WriteException(ex, "Failed to copy data to the native clipboard");
+            SendDesktopNotification("SnapX", "Clipboard copy failed: " + ex.Message);
+            @event.MarkAsFailed();
+        }
+    }
+
+    private static async Task CopyToClipboardAsync(NeedClipboardCopyEvent @event)
+    {
+        DebugHelper.WriteLine("HandleClipboardCopyEvent called");
+        var clipboard = await GetClipboardAsync();
+
+        bool hasAdditionalFormats = @event.AdditionalFormats.Count > 0 || @event.CustomData != null;
+
+        if (@event.HasFiles && !hasAdditionalFormats && !@event.HasImage)
+        {
+                // Places real file objects on the clipboard, matching the
+                // pattern already used successfully by the history view's own
+                // "copy file" action: a DataObject with DataFormats.Files
+                // backed by StorageProvider.TryGetFileFromPathAsync is the
+                // format file managers, chat apps, and editors actually
+                // recognize on a paste, unlike a bare text path.
+            var storageProvider = TopLevel.GetTopLevel(MyMainWindow)?.StorageProvider;
+            var storageItems = new List<IStorageItem>();
+            if (storageProvider is not null)
+            {
+                foreach (string path in @event.FilePaths!.Where(File.Exists))
+                {
+                    var item = await storageProvider.TryGetFileFromPathAsync(path);
+                    if (item is not null) storageItems.Add(item);
+                }
+            }
+
+            var fileDataTransfer = new DataTransfer();
+            var fileItem = new DataTransferItem();
+            if (storageItems.Count > 0)
+            {
+                foreach (var storageItem in storageItems)
+                {
+                    fileItem.SetFile(storageItem);
+                }
+            }
+                // Always also offer the path(s) as text: some paste targets
+                // (terminals, plain text fields) only understand text, and a
+                // file-manager StorageItem set that ends up empty (e.g. the
+                // storage provider is unavailable) must not silently copy
+                // nothing at all.
+            fileItem.SetText(string.Join(Environment.NewLine, @event.FilePaths!));
+            fileDataTransfer.Add(fileItem);
+            await SetClipboardDataObjectAsync(clipboard, fileDataTransfer);
+        }
+        else if (@event.HasImage && !hasAdditionalFormats)
+        {
+                // SetBitmapAsync is the reliable cross-platform (X11/Wayland) path for
+                // placing an image on the clipboard. A DataObject + SetDataObjectAsync
+                // with DataFormat.Bitmap does not translate to the native image formats
+                // on every backend (notably Wayland), so a paste into another app
+                // produced nothing even though this call reported success. This is the
+                // primary path for every screenshot capture entry point's after-capture
+                // "copy to clipboard" task, so it must actually place image bytes that
+                // other applications can paste.
+            await SetClipboardImageSharpAsync(clipboard, @event.Image!);
+
+            if (@event.HasText)
+            {
+                    // Every Set*Async call clears the clipboard (including
+                    // SetDataObjectAsync), so writing text after the native bitmap
+                    // would silently discard the image. There are currently no
+                    // image-and-text producers; preserve the image if one is added
+                    // later, because it is the explicit after-capture request.
+                DebugHelper.WriteLine("Clipboard event contained both image and text; copied the image.");
+            }
+        }
+        else if (@event.HasText && !hasAdditionalFormats && !@event.HasImage)
+        {
+            await SetClipboardTextAsync(clipboard, @event.Text!);
+        }
+        else
+        {
+            var dataTransfer = new DataTransfer();
+            var dataItem = new DataTransferItem();
+
+            if (@event.HasText)
+            {
+                dataItem.SetText(@event.Text!);
+            }
+
+            Bitmap? bitmap = null;
+            if (@event.HasImage)
+            {
+                bitmap = SnapX.ConvertImageSharpImgToAvalonia(@event.Image!);
+                dataItem.SetBitmap(bitmap);
+            }
+
+            foreach (var format in @event.AdditionalFormats)
+            {
+                var item = new DataTransferItem();
+                if (format.Value is string strValue)
+                {
+                    item.SetText(strValue);
+                }
+                else if (format.Value is IImage imageValue)
+                {
+                    if (imageValue is Bitmap bmp)
+                    {
+                        item.SetBitmap(bmp);
+                    }
+                    else
+                    {
+                        // Render an arbitrary IImage to a Bitmap so it can be
+                        // placed on the clipboard. RenderTargetBitmap re-draws
+                        // the source image into a skia-backed bitmap.
+                        var size = imageValue.Size;
+                        var rtb = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height));
+                        using (var ctx = rtb.CreateDrawingContext())
+                        {
+                            ctx.DrawImage(imageValue, new Rect(size));
+                        }
+                        item.SetBitmap(rtb);
+                    }
+                }
+                else
+                {
+                    item.SetText(format.Value.ToString());
+                }
+                dataTransfer.Add(item);
+            }
+
+            if (@event.CustomData != null)
+            {
+                var customItem = new DataTransferItem();
+                if (@event.CustomData is string customString)
+                {
+                    customItem.SetText(customString);
+                }
+                else
+                {
+                    var json = JsonHelpers.SerializeToString(@event.CustomData);
+                    customItem.SetText(json);
+                }
+                dataTransfer.Add(customItem);
+            }
+
+            dataTransfer.Add(dataItem);
+            await SetClipboardDataObjectAsync(clipboard, dataTransfer, bitmap);
         }
     }
 
@@ -401,6 +897,20 @@ public partial class App : Application
     {
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
+            // FAContentDialog is implemented with Avalonia's popup/overlay
+            // machinery. On native Wayland that creates the transient EGL
+            // WSI surface which can fail while a capture or recording is
+            // completing or reporting an error. Use the compositor-native
+            // notification path instead, matching the toast guard above.
+            if (OperatingSystem.IsLinux() && LinuxAPI.IsWayland())
+            {
+                TaskHelpers.PlayNotificationSoundAsync(NotificationSound.Error);
+                SendDesktopNotification(
+                    $"Error in {@event.Context}",
+                    @event.Exception.Message);
+                return;
+            }
+
             try
             {
                 var textBlock = new SelectableTextBlock
@@ -419,29 +929,32 @@ public partial class App : Application
                     HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
                 };
 
-                var dialog = new ContentDialog
+                var dialog = new FAContentDialog
                 {
                     Title = $"Error in {@event.Context}",
                     Content = scrollViewer,
                     CloseButtonText = "Close",
-                    DefaultButton = ContentDialogButton.Close,
+                    DefaultButton = FAContentDialogButton.Close,
                     PrimaryButtonText = @event.FullError ? "Copy" : null
                 };
                 TaskHelpers.PlayNotificationSoundAsync(NotificationSound.Error);
                 var result = await dialog.ShowAsync();
 
-                if (result == ContentDialogResult.Primary)
+                if (result == FAContentDialogResult.Primary)
                 {
                     var topLevel = TopLevel.GetTopLevel(
                         MyMainWindow is not null ? MyMainWindow : dialog
                     );
-                    await topLevel?.Clipboard?.SetTextAsync(@event.Exception.ToString());
+                    if (topLevel?.Clipboard is { } clipboard)
+                    {
+                        await SetClipboardTextAsync(clipboard, @event.Exception.ToString());
+                    }
                 }
             }
             catch (Exception ex)
             {
                 // Fallback to console if the UI is in a state where dialogs can't open
-                DebugHelper.Logger?.Error("Critical: Could not open FluentAvalonia ContentDialog.");
+                DebugHelper.Logger?.Error("Critical: Could not open FluentAvalonia FAContentDialog.");
                 DebugHelper.Logger?.Error(ex.ToString());
             }
         });
@@ -523,7 +1036,10 @@ public partial class App : Application
         TaskScheduler.UnobservedTaskException += (s, e) =>
         {
             e.SetObserved();
-            e.Exception.ShowError(true, "Unobserved Task Exception");
+            // Background integrations (notably optional Wayland portal calls)
+            // must never interrupt capture with a modal dialog. The failure is
+            // retained in the log for diagnosis and the task is marked observed.
+            DebugHelper.WriteException(e.Exception, "Unobserved background task exception");
         };
         var locator = new ViewLocator();
         DataTemplates.Add(locator);
@@ -547,8 +1063,7 @@ public partial class App : Application
                         if (sigintReceived)
                             return;
                         sigintReceived = true;
-                        SnapX.shutdown();
-                        _pollingCts?.Cancel();
+                        ShutdownCore();
 
                         // desktop.Shutdown();
                     };
@@ -560,7 +1075,7 @@ public partial class App : Application
                             return;
                         ea.Cancel = true;
                         sigintReceived = true;
-                        SnapX.shutdown();
+                        ShutdownCore();
                         try
                         {
                             desktop.Shutdown();
@@ -569,8 +1084,51 @@ public partial class App : Application
                         {
                             // Silence at once
                         }
-                        _pollingCts?.Cancel();
                     };
+                    // Clean up the GlobalShortcuts portal session and the tray
+                    // on SIGTERM/SIGHUP too (systemd, logout, or a direct kill).
+                    // Without this, an unclean termination leaves stale global
+                    // shortcut registrations in Hyprland that accumulate across
+                    // restarts and can make a single key press fire more than
+                    // once.
+                    _signalRegistrations.Add(PosixSignalRegistration.Create(
+                        PosixSignal.SIGTERM, ctx =>
+                        {
+                            DebugHelper.WriteLine("Received SIGTERM");
+                            if (!sigintReceived)
+                            {
+                                sigintReceived = true;
+                                ShutdownCore();
+                                try
+                                {
+                                    desktop.Shutdown();
+                                }
+                                catch
+                                {
+                                    // Silence at once
+                                }
+                            }
+                            ctx.Cancel = true;
+                        }));
+                    _signalRegistrations.Add(PosixSignalRegistration.Create(
+                        PosixSignal.SIGHUP, ctx =>
+                        {
+                            DebugHelper.WriteLine("Received SIGHUP");
+                            if (!sigintReceived)
+                            {
+                                sigintReceived = true;
+                                ShutdownCore();
+                                try
+                                {
+                                    desktop.Shutdown();
+                                }
+                                catch
+                                {
+                                    // Silence at once
+                                }
+                            }
+                            ctx.Cancel = true;
+                        }));
                     // AppDomain.CurrentDomain.ProcessExit += (o, _) =>
                     // {
                     //     if (!sigintReceived)
@@ -585,10 +1143,17 @@ public partial class App : Application
                     //     }
                     // };
                     var errorStarting = false;
+                    // Forwarding now happens before Avalonia starts, so secondary
+                    // processes exit immediately without entering this lifetime.
+                    _singleInstance = Program.ForwardedPrimaryInstance;
+                    // Drain anything received while Avalonia was starting and
+                    // make future arrivals dispatch immediately.
+                    _singleInstance?.MarkDispatchReady();
                     // DebugHelper.Logger.Debug($"Avalonia Args: {desktop.Args}");
                     try
                     {
                         SnapX.start(desktop.Args ?? []);
+                        _coreStarted = true;
                         var CLIManager = SnapX.GetCLIManager();
                         CLIManager.UseCommandLineArgs().GetAwaiter().GetResult();
                     }
@@ -602,18 +1167,50 @@ public partial class App : Application
                     if (errorStarting)
                         return;
                     ListenForEvents();
+                    DesktopNotifications ??= new DesktopNotificationService();
                     DebugHelper.WriteLine("Internal Startup time: {0} ms", SnapX.getStartupTime());
 
                     var logoBitmap = new Bitmap(
                         AssetLoader.Open(new Uri("avares://snapx-ui/SnapX_Logo.png"))
                     );
-                    if (SnapX.GetConfiguration().ShowTray)
+                    // The tray is what makes SnapX show up as an app in a
+                    // Quickshell-style system bar: that widget is a
+                    // StatusNotifierItem host, not a window-list or a
+                    // notification-source list, so an app without a
+                    // StatusNotifierItem is simply absent from it.
+                    //
+                    // The XEmbed crash this used to guard against belongs to
+                    // the X11 backend: Avalonia.X11 carries both
+                    // XEmbedTrayIconImpl and DBusTrayIconImpl and picks XEmbed
+                    // when the X server has no StatusNotifier host, which on
+                    // an Xwayland session aborts the process with
+                    // X_GetProperty(BadAtom). Avalonia.Wayland has no XEmbed
+                    // path at all - its CreateTrayIcon only ever builds a
+                    // DBusTrayIconImpl - so blanket-disabling the tray for
+                    // "IsWayland" also disabled the one implementation that
+                    // is safe here, and did so precisely on the sessions where
+                    // the native backend is in use.
+                    //
+                    // Gate on the backend actually in use rather than on the
+                    // session type: native Wayland gets the D-Bus item, an
+                    // Xwayland/X11 session keeps the previous behaviour.
+                    if (SnapX.GetConfiguration().ShowTray
+                        && (!LinuxAPI.IsWayland() || Program.IsNativeWaylandBackend))
                     {
                         var trayIcon = new TrayIcon
                         {
                             Icon = new WindowIcon(logoBitmap),
-                            ToolTipText = Core.SnapXL.AppName,
-                            Command = OpenSnapXCommand
+                            ToolTipText = Core.SnapXL.AppName
+                        };
+                        trayIcon.Clicked += async (_, _) =>
+                        {
+                            if (ScreenRecordManager.IsRecording)
+                            {
+                                TaskHelpers.StopScreenRecording();
+                                return;
+                            }
+
+                            await TaskHelpers.ExecuteJob(HotkeyType.RectangleRegion);
                         };
 
                         var menu = new NativeMenu();
@@ -797,12 +1394,12 @@ public partial class App : Application
                             StartPolling(windowMenu, screenMenu);
                         capture.Menu.Items.Add(monitorPicker);
                         var regionCaptureMenuItem = new NativeMenuItem(Lang.UI_Dropdown_Region);
-                        regionCaptureMenuItem.Click += (_, _) => { new RegionSelectorWindow().Show(); };
+                        regionCaptureMenuItem.Click += async (_, _) => await TaskHelpers.ExecuteJob(HotkeyType.RectangleRegion);
                         capture.Menu.Items.Add(regionCaptureMenuItem);
                         // capture.Menu.Items.Add(new NativeMenuItem("Region (Light)"));
                         // capture.Menu.Items.Add(new NativeMenuItem("Region (Transparent)"));
                         menu.Items.Add(capture);
-                        var uploadFile = new NativeMenuItem("Upload File...");
+                        var uploadFile = new NativeMenuItem("Upload file");
                         uploadFile.Click += (_, _) =>
                         {
                             Core.SnapXL.EventAggregator.Publish(
@@ -813,7 +1410,7 @@ public partial class App : Application
                                 }
                             );
                         };
-                        var uploadFolder = new NativeMenuItem("Upload Folder...");
+                        var uploadFolder = new NativeMenuItem("Upload folder");
                         uploadFolder.Click += (_, _) =>
                         {
                             Core.SnapXL.EventAggregator.Publish(
@@ -825,7 +1422,7 @@ public partial class App : Application
                                 }
                             );
                         };
-                        var uploadText = new NativeMenuItem("Upload text...");
+                        var uploadText = new NativeMenuItem("Upload text");
                         uploadText.Click += (_, _) =>
                         {
                             var textBoxWindow = new Window();
@@ -859,7 +1456,7 @@ public partial class App : Application
                             textBoxWindow.Show();
                         };
                         // new NativeMenuItem("Upload from clipboard..."),
-                        var shortenURL = new NativeMenuItem("Shorten URL...");
+                        var shortenURL = new NativeMenuItem("Shorten URL");
                         menu.Items.Add(
                             new NativeMenuItem("Upload")
                             {
@@ -892,6 +1489,39 @@ public partial class App : Application
 
                         menu.Items.Add(workflows);
 
+                        // State-aware recording controls. While a recording is
+                        // active, Stop/Pause/Resume/Abort are prominent; while
+                        // idle, the start actions are prominent. This mirrors a
+                        // ShareX-style tray/task-view presence. The submenu is
+                        // rebuilt each time it opens so the actions always
+                        // reflect ScreenRecordManager.CurrentState.
+                        var recordingMenu = new NativeMenu();
+                        recordingMenu.Opening += (_, _) => RebuildRecordingMenu(recordingMenu);
+                        var recordingMenuItem = new NativeMenuItem("Recording")
+                        {
+                            Menu = recordingMenu
+                        };
+                        menu.Items.Add(recordingMenuItem);
+                        RebuildRecordingMenu(recordingMenu);
+
+                        menu.Items.Add(new NativeMenuItemSeparator());
+
+                        var historyItem = new NativeMenuItem("History");
+                        historyItem.Click += (_, _) => NativeMenuItem_Open_History_OnClick();
+                        menu.Items.Add(historyItem);
+
+                        var latestImage = new NativeMenuItem("Open latest screenshot");
+                        latestImage.Click += (_, _) => OpenLatestHistoryItem("Image");
+                        menu.Items.Add(latestImage);
+
+                        var latestVideo = new NativeMenuItem("Open latest video");
+                        latestVideo.Click += (_, _) => OpenLatestHistoryItem("Video");
+                        menu.Items.Add(latestVideo);
+
+                        var settingsItem = new NativeMenuItem("Settings");
+                        settingsItem.Click += (_, _) => CreateOrOpenSettingsWindowStatic();
+                        menu.Items.Add(settingsItem);
+
                         menu.Items.Add(new NativeMenuItemSeparator());
 
                         var open = new NativeMenuItem("Open");
@@ -904,7 +1534,34 @@ public partial class App : Application
 
                         trayIcon.Menu = menu;
 
-                        TrayIcon.SetIcons(Current, [trayIcon]);
+                        // Register on X11 (where Avalonia decides between
+                        // XEmbed and D-Bus itself) and on the native Wayland
+                        // backend (D-Bus StatusNotifierItem only). The one
+                        // combination still skipped is an X11/Xwayland session
+                        // that this process is hosting through the X11
+                        // backend while a native Wayland session is present,
+                        // which is the XEmbed BadAtom crash path.
+                        if (!LinuxAPI.IsWayland() || Program.IsNativeWaylandBackend)
+                        {
+                            TrayIcon.SetIcons(Current, [trayIcon]);
+                            // Avalonia.Wayland's built-in DBusTrayIconImpl owns
+                            // StatusNotifierItem registration on native Wayland.
+                        }
+                        else
+                        {
+                            DebugHelper.WriteLine("Skipping incompatible XEmbed tray registration on native Wayland.");
+                        }
+                        _recordingTrayController?.Dispose();
+                        _recordingTrayController = new RecordingTrayController(trayIcon);
+                    }
+
+                    // Recording UI and lifecycle must not depend on a tray
+                    // implementation. On native Wayland the controller owns
+                    // the layer-shell Pause/Stop/Abort surface directly.
+                    if (LinuxAPI.IsWayland() && _recordingTrayController is null)
+                    {
+                        _recordingTrayController?.Dispose();
+                        _recordingTrayController = new RecordingTrayController();
                     }
 
                     if (SnapX.isSilent())
@@ -915,7 +1572,11 @@ public partial class App : Application
                     }
 
                     var Window = new MainWindow(vm);
-
+                    bool appIdSet = WaylandAppIdentity.TrySet(Window);
+                    if (!appIdSet)
+                    {
+                        Window.Opened += (_, _) => WaylandAppIdentity.TrySet(Window);
+                    }
                     Window.Show();
                     DebugHelper.WriteLine("MainWindow startup time: {0} ms", SnapX.getStartupTime());
 
@@ -1009,6 +1670,10 @@ public partial class App : Application
 
         services.AddTransient<MainViewModel>();
         services.AddTransient<MainWindow>();
+        services.AddTransient<RegionSelectorViewModel>();
+        services.AddTransient<RegionSelectorWindow>();
+        services.AddTransient<InAppSettingsHost>();
+        services.AddTransient<InAppSettingsHostVM>();
         services.AddTransient<SettingsWindow>();
         services.AddTransient<SettingsMainView>();
         services.AddTransient<SettingsMainViewVM>();
@@ -1016,8 +1681,10 @@ public partial class App : Application
         services.AddSingleton<CustomUploaderVM>();
         services.AddSingleton<ImportExportVM>();
         services.AddTransient<ImportExportView>();
-        // services.AddSingleton<ScreenRecordOptionsVM>();
-        // services.AddTransient<ScreenRecordOptionsView>();
+        services.AddTransient<ScreenRecordOptionsVM>();
+        services.AddTransient<ScreenRecordOptionsView>();
+        services.AddTransient<SettingsCategoryVM>();
+        services.AddTransient<SettingsCategoryView>();
         services.AddSingleton<CoreUploaderVM>();
         services.AddTransient<BuiltInUploaderSettingsView>();
         services.AddSingleton<DatabaseVM>();
@@ -1132,5 +1799,90 @@ public partial class App : Application
     private void NativeMenu_OnOpening(object? Sender, EventArgs E)
     {
         DebugHelper.WriteLine("NativeMenu_OnOpening");
+    }
+
+    private static void RebuildRecordingMenu(NativeMenu recordingMenu)
+    {
+        recordingMenu.Items.Clear();
+
+        bool isRecording = ScreenRecordManager.IsRecording;
+        if (isRecording)
+        {
+            var stop = new NativeMenuItem("Stop recording");
+            stop.Click += (_, _) => TaskHelpers.StopScreenRecording();
+            recordingMenu.Items.Add(stop);
+
+            if (ScreenRecordManager.IsPaused)
+            {
+                var resume = new NativeMenuItem("Resume recording");
+                resume.Click += (_, _) => TaskHelpers.PauseScreenRecording();
+                recordingMenu.Items.Add(resume);
+            }
+            else
+            {
+                var pause = new NativeMenuItem("Pause recording");
+                pause.Click += (_, _) => TaskHelpers.PauseScreenRecording();
+                recordingMenu.Items.Add(pause);
+            }
+
+            var abort = new NativeMenuItem("Abort recording");
+            abort.Click += (_, _) => TaskHelpers.AbortScreenRecording();
+            recordingMenu.Items.Add(abort);
+        }
+        else
+        {
+            var fullscreen = new NativeMenuItem("Start fullscreen recording");
+            fullscreen.Click += (_, _) =>
+                TaskHelpers.StartScreenRecording(
+                    ScreenRecordOutput.FFmpeg,
+                    ScreenRecordStartMethod.Fullscreen);
+            recordingMenu.Items.Add(fullscreen);
+
+            var region = new NativeMenuItem("Start region recording");
+            region.Click += (_, _) =>
+                TaskHelpers.StartScreenRecording(
+                    ScreenRecordOutput.FFmpeg,
+                    ScreenRecordStartMethod.Region);
+            recordingMenu.Items.Add(region);
+
+            var lastRegion = new NativeMenuItem("Start last-region recording");
+            lastRegion.Click += (_, _) =>
+                TaskHelpers.StartScreenRecording(
+                    ScreenRecordOutput.FFmpeg,
+                    ScreenRecordStartMethod.LastRegion);
+            recordingMenu.Items.Add(lastRegion);
+        }
+    }
+
+    private void NativeMenuItem_Open_History_OnClick()
+    {
+        // Show the main window and select the history tab.
+        NativeMenuItem_Open_OnClick(this, EventArgs.Empty);
+        if (MyMainWindow is { } window && window.DataContext is HomePageViewModel homeVm)
+        {
+            _ = homeVm.RefreshTasks();
+        }
+    }
+
+    private static void OpenLatestHistoryItem(string type)
+    {
+        try
+        {
+            var history = TaskManager.History?.GetHistoryItems(30);
+            var latest = history?.FirstOrDefault(item =>
+                !string.IsNullOrEmpty(item.FilePath) &&
+                string.Equals(item.Type, type, StringComparison.OrdinalIgnoreCase));
+            if (latest is null || string.IsNullOrEmpty(latest.FilePath))
+            {
+                SendDesktopNotification("SnapX", $"No recent {type.ToLowerInvariant()} found.");
+                return;
+            }
+
+            FileHelpers.OpenFile(latest.FilePath);
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, $"Failed to open latest {type} from history");
+        }
     }
 }

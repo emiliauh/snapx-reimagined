@@ -5,6 +5,7 @@ using SnapX.Core.Upload.BaseServices;
 using SnapX.Core.Upload.BaseUploaders;
 using SnapX.Core.Upload.OAuth;
 using SnapX.Core.Upload.Utils;
+using SnapX.Core.Utils.Miscellaneous;
 
 namespace SnapX.Core.Upload.Img;
 
@@ -299,7 +300,7 @@ public sealed class GooglePhotos : ImageUploader, IOAuth2
         NameValueCollection uploadTokenHeaders = new NameValueCollection
     {
         { "X-Goog-Upload-File-Name", fileName },
-        { "X-Goog-Upload-Content-Type", MimeTypes.GetMimeType(fileName) },
+        { "X-Goog-Upload-Content-Type", MimeTypesPlus.GetMimeType(fileName) },
         { "X-Goog-Upload-Protocol", "raw" },
         { "Authorization", OAuth2.GetAuthHeaders()["Authorization"] }
     };

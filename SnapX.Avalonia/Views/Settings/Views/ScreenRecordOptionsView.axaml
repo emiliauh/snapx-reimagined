@@ -1,6 +1,6 @@
 <UserControl
-    d:DesignHeight="450"
-    d:DesignWidth="800"
+    d:DesignHeight="700"
+    d:DesignWidth="900"
     mc:Ignorable="d"
     x:Class="SnapX.Avalonia.Views.Settings.Views.ScreenRecordOptionsView"
     x:DataType="settings:ScreenRecordOptionsVM"
@@ -9,247 +9,83 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:settings="clr-namespace:SnapX.Avalonia.ViewModels.Settings"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto">
-        <StackPanel
-            Grid.Row="0"
-            Margin="5,0"
-            Orientation="Vertical">
-            <Grid ColumnDefinitions="*,Auto" Margin="0,5,0,0">
-                <Label Grid.Column="0">Screen Recording FPS:</Label>
-                <NumericUpDown
-                    FormatString="0"
-                    Grid.Column="1"
-                    Margin="0,0,5,0"
-                    Maximum="1000"
-                    Minimum="1"
-                    ParsingNumberStyle="Integer"
-                    Watermark="30" />
-            </Grid>
-            <Grid ColumnDefinitions="*,Auto" Margin="0,5,0,0">
-                <Label Grid.Column="0">GIF FPS:</Label>
-                <NumericUpDown
-                    FormatString="0"
-                    Grid.Column="1"
-                    Margin="0,0,5,0"
-                    Maximum="1000"
-                    Minimum="1"
-                    ParsingNumberStyle="Integer"
-                    Watermark="15" />
-            </Grid>
+    <Design.DataContext>
+        <settings:ScreenRecordOptionsVM />
+    </Design.DataContext>
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="18" MaxWidth="900">
+            <StackPanel Spacing="4">
+                <TextBlock FontSize="26" FontWeight="SemiBold" Text="Screen recorder" />
+                <TextBlock Opacity="0.75" Text="Set capture timing, FFmpeg devices, codecs, and command templates." TextWrapping="Wrap" />
+                <TextBlock FontSize="12" Opacity="0.65" Text="{Binding RecorderSummary}" />
+            </StackPanel>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Recording behavior" />
+                    <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Video frames per second" />
+                        <NumericUpDown Grid.Column="1" Maximum="240" Minimum="1" Value="{Binding FramesPerSecond}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="GIF frames per second" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Maximum="60" Minimum="1" Value="{Binding GifFramesPerSecond}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Start delay (seconds)" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding StartDelayText}" />
+                        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Fixed duration (seconds)" />
+                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding DurationText}" />
+                        <CheckBox Grid.Row="4" Grid.ColumnSpan="2" Content="Capture the mouse cursor" IsChecked="{Binding ShowCursor}" />
+                        <CheckBox Grid.Row="5" Grid.ColumnSpan="2" Content="Start recording after region selection" IsChecked="{Binding AutoStart}" />
+                        <CheckBox Grid.Row="6" Grid.ColumnSpan="2" Content="Use a fixed recording duration" IsChecked="{Binding FixedDuration}" />
+                    </Grid>
+                    <CheckBox Content="Use two-pass encoding" IsChecked="{Binding TwoPassEncoding}" />
+                    <CheckBox Content="Ask before aborting" IsChecked="{Binding AskConfirmationOnAbort}" />
+                    <CheckBox Content="Capture a transparent region" IsChecked="{Binding TransparentRegion}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="FFmpeg input and codecs" />
+                    <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock VerticalAlignment="Center" Text="Video source" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding VideoSources}" SelectedItem="{Binding SelectedVideoSource}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Audio source" />
+                        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding AudioSources}" SelectedItem="{Binding SelectedAudioSource}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Video codec" />
+                        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding VideoCodecs}" SelectedItem="{Binding VideoCodec}" />
+                        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Audio codec" />
+                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding AudioCodecs}" SelectedItem="{Binding AudioCodec}" />
+                        <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="x264 preset" />
+                        <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Presets}" SelectedItem="{Binding VideoPreset}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="FFmpeg executable" />
+                    <CheckBox Content="Override automatic FFmpeg discovery" IsChecked="{Binding OverrideCliPath}" />
+                    <Grid ColumnDefinitions="200,*" RowDefinitions="Auto">
+                        <TextBlock VerticalAlignment="Center" Text="Executable path" />
+                        <TextBox Grid.Column="1" Text="{Binding CliPath}" IsEnabled="{Binding OverrideCliPath}" Watermark="/usr/bin/ffmpeg" />
+                    </Grid>
+                    <TextBlock FontSize="12" Opacity="0.65" Text="When override is disabled, SnapX searches the bundled executable and PATH." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Advanced command options" />
+                    <CheckBox Content="Use a custom FFmpeg command template" IsChecked="{Binding UseCustomCommands}" />
+                    <TextBox AcceptsReturn="True" Height="120" Text="{Binding CustomCommands}" IsEnabled="{Binding UseCustomCommands}" Watermark="Use $fps$, $area_x$, $area_y$, $area_width$, $area_height$, $cursor$, $duration$, and $output$." />
+                    <TextBlock Text="Additional FFmpeg arguments" />
+                    <TextBox Text="{Binding UserArguments}" Watermark="Enter optional arguments." />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Command="{Binding SaveSettingsCommand}" Content="Save settings" />
+                <Button Command="{Binding ResetSettingsCommand}" Content="Reset recorder settings" />
+            </StackPanel>
         </StackPanel>
-        <StackPanel
-            Grid.Row="1"
-            Margin="5,0"
-            Orientation="Vertical">
-            <CheckBox Content="Use Custom FFmpeg Path" Name="cbUseCustomFFmpegPath" />
-            <Grid ColumnDefinitions="*,Auto" Margin="0,5,0,0">
-                <TextBox
-                    Grid.Column="0"
-                    Name="txtFFmpegPath"
-                    Watermark="Path to ffmpeg.exe" />
-                <Button
-                    Content="Browse..."
-                    Grid.Column="1"
-                    Margin="5,0,0,0"
-                    Name="btnFFmpegBrowse" />
-            </Grid>
-        </StackPanel>
-
-        <Grid
-            ColumnDefinitions="Auto,*,Auto,*"
-            Grid.Row="2"
-            Margin="5">
-            <TextBlock
-                Grid.Column="0"
-                Margin="0,0,10,0"
-                Name="lblVideoSource"
-                Text="Video Source:"
-                VerticalAlignment="Center" />
-            <ComboBox
-                Grid.Column="1"
-                Margin="0,0,10,0"
-                Name="cbVideoSource" />
-
-            <TextBlock
-                Grid.Column="2"
-                Margin="10,0,10,0"
-                Name="lblAudioSource"
-                Text="Audio Source:"
-                VerticalAlignment="Center" />
-            <ComboBox Grid.Column="3" Name="cbAudioSource" />
-        </Grid>
-
-        <Grid
-            ColumnDefinitions="Auto,*,Auto,*"
-            Grid.Row="3"
-            Margin="5,0,5,5">
-            <TextBlock
-                Grid.Column="0"
-                Margin="0,0,10,0"
-                Name="lblVideoEncoder"
-                Text="Video Encoder:"
-                VerticalAlignment="Center" />
-            <ComboBox
-                Grid.Column="1"
-                Margin="0,0,10,0"
-                Name="cbVideoCodec" />
-
-            <TextBlock
-                Grid.Column="2"
-                Margin="10,0,10,0"
-                Name="lblAudioEncoder"
-                Text="Audio Encoder:"
-                VerticalAlignment="Center" />
-            <ComboBox Grid.Column="3" Name="cbAudioCodec" />
-        </Grid>
-
-        <Grid ColumnDefinitions="*,*" Grid.Row="4">
-            <TabControl
-                Grid.Column="0"
-                Margin="5"
-                Name="tcFFmpegVideoCodecs">
-                <TabItem Header="x264" Name="tpX264">
-                    <StackPanel Margin="5">
-                        <CheckBox
-                            Content="Use Bitrate"
-                            Margin="0,0,0,5"
-                            Name="cbx264UseBitrate" />
-                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,5">
-                            <TextBlock
-                                Grid.Column="0"
-                                Margin="0,0,10,0"
-                                Name="lblx264Preset"
-                                Text="x264 Preset:"
-                                VerticalAlignment="Center" />
-                            <ComboBox Grid.Column="1" Name="cbx264Preset" />
-                            <!-- <Image Source="resm:YourApp.Assets.exclamation_button.png?assembly=YourAppAssembly" Width="16" Height="16" Grid.Column="2" Margin="5,0,0,0" Name="pbx264PresetWarning"/> -->
-                        </Grid>
-                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,5">
-                            <TextBlock
-                                Grid.Column="0"
-                                Margin="0,0,10,0"
-                                Name="lblx264CRF"
-                                Text="CRF:"
-                                VerticalAlignment="Center" />
-                            <NumericUpDown
-                                FormatString="0"
-                                Grid.Column="1"
-                                Margin="0,0,5,0"
-                                Maximum="51"
-                                Minimum="0"
-                                Name="nudx264CRF"
-                                ParsingNumberStyle="Integer"
-                                Value="23" />
-                        </Grid>
-                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,5">
-                            <TextBlock
-                                Grid.Column="0"
-                                Margin="0,0,10,0"
-                                Text="Bitrate:"
-                                VerticalAlignment="Center" />
-                            <NumericUpDown
-                                FormatString="0"
-                                Grid.Column="1"
-                                Margin="0,0,5,0"
-                                Maximum="100000"
-                                Minimum="100"
-                                Name="nudx264Bitrate"
-                                ParsingNumberStyle="Integer"
-                                Value="3000" />
-                            <TextBlock
-                                Grid.Column="2"
-                                Name="lblx264BitrateK"
-                                Text="K"
-                                VerticalAlignment="Center" />
-                        </Grid>
-                    </StackPanel>
-                </TabItem>
-
-                <TabItem Header="Xvid" Name="tpXvid">
-                    <StackPanel Margin="5">
-                        <Grid ColumnDefinitions="Auto,*">
-                            <TextBlock
-                                Grid.Column="0"
-                                Margin="0,0,10,0"
-                                Name="lblXvidQscale"
-                                Text="Qscale:"
-                                VerticalAlignment="Center" />
-                            <NumericUpDown
-                                Grid.Column="1"
-                                Maximum="31"
-                                Minimum="1"
-                                Name="nudXvidQscale"
-                                Value="3" />
-                        </Grid>
-                    </StackPanel>
-                </TabItem>
-
-            </TabControl>
-
-            <TabControl
-                Grid.Column="1"
-                Margin="5"
-                Name="tcFFmpegAudioCodecs">
-                <TabItem Header="AAC" Name="tpAAC">
-                    <StackPanel Margin="5">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <TextBlock
-                                Grid.Column="0"
-                                Margin="0,0,10,0"
-                                Name="lblAACBitrate"
-                                Text="Bitrate:"
-                                VerticalAlignment="Center" />
-                            <ComboBox
-                                Grid.Column="1"
-                                Margin="0,0,5,0"
-                                Name="cbAACBitrate" />
-                            <TextBlock
-                                Grid.Column="2"
-                                Name="lblAACBitrateK"
-                                Text="K"
-                                VerticalAlignment="Center" />
-                        </Grid>
-                    </StackPanel>
-                </TabItem>
-
-            </TabControl>
-        </Grid>
-
-        <CheckBox
-            Content="Use custom commands"
-            Grid.Row="5"
-            Margin="5,10,5,5"
-            Name="cbCustomCommands" />
-
-        <StackPanel Grid.Row="6" Margin="5,0,5,5">
-            <TextBlock
-                Margin="0,0,0,5"
-                Name="lblCommandLineArgs"
-                Text="Command Line Arguments (User):" />
-            <TextBox
-                AcceptsReturn="True"
-                MinHeight="40"
-                Name="txtUserArgs"
-                TextWrapping="Wrap" />
-        </StackPanel>
-
-        <StackPanel Grid.Row="7" Margin="5,0,5,5">
-            <TextBlock Margin="0,0,0,5" Text="Command Line Preview:" />
-            <TextBox
-                AcceptsReturn="True"
-                IsReadOnly="True"
-                MinHeight="40"
-                Name="txtCommandLinePreview"
-                TextWrapping="Wrap" />
-        </StackPanel>
-
-        <Button
-            Content="Reset Options"
-            Grid.Row="8"
-            HorizontalAlignment="Right"
-            Margin="5"
-            Name="btnResetOptions" />
-
-    </Grid>
+    </ScrollViewer>
 </UserControl>
-

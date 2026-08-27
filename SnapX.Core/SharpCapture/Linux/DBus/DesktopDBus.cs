@@ -16,10 +16,10 @@ partial class Inhibit : DesktopObject
     { }
     public Task<ObjectPath> InhibitAsync(string window, uint flags, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -34,10 +34,10 @@ partial class Inhibit : DesktopObject
     }
     public Task<ObjectPath> CreateMonitorAsync(string window, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -51,10 +51,10 @@ partial class Inhibit : DesktopObject
     }
     public Task QueryEndResponseAsync(ObjectPath sessionHandle)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -68,10 +68,10 @@ partial class Inhibit : DesktopObject
     public ValueTask<IDisposable> WatchStateChangedAsync(Action<Exception?, (ObjectPath SessionHandle, Dictionary<string, VariantValue> State)> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "StateChanged", (Message m, object? s) => ReadMessage_oaesv(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<InhibitProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static InhibitProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -137,10 +137,10 @@ partial class Background : DesktopObject
     { }
     public Task<ObjectPath> RequestBackgroundAsync(string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -154,10 +154,10 @@ partial class Background : DesktopObject
     }
     public Task SetStatusAsync(Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -169,10 +169,10 @@ partial class Background : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<BackgroundProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static BackgroundProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -238,10 +238,10 @@ partial class Location : DesktopObject
     { }
     public Task<ObjectPath> CreateSessionAsync(Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -254,10 +254,10 @@ partial class Location : DesktopObject
     }
     public Task<ObjectPath> StartAsync(ObjectPath sessionHandle, string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -273,10 +273,10 @@ partial class Location : DesktopObject
     public ValueTask<IDisposable> WatchLocationUpdatedAsync(Action<Exception?, (ObjectPath SessionHandle, Dictionary<string, VariantValue> Location)> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "LocationUpdated", (Message m, object? s) => ReadMessage_oaesv(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<LocationProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static LocationProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -343,10 +343,10 @@ partial class Notification : DesktopObject
     { }
     public Task AddNotificationAsync(string id, Dictionary<string, VariantValue> notification)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -360,10 +360,10 @@ partial class Notification : DesktopObject
     }
     public Task RemoveNotificationAsync(string id)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -377,12 +377,12 @@ partial class Notification : DesktopObject
     public ValueTask<IDisposable> WatchActionInvokedAsync(Action<Exception?, (string Id, string Action, VariantValue[] Parameter)> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "ActionInvoked", (Message m, object? s) => ReadMessage_ssav(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<Dictionary<string, VariantValue>> GetSupportedOptionsAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "SupportedOptions"), (Message m, object? s) => ReadMessage_v_aesv(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "SupportedOptions"), (Message m, object? s) => ReadMessage_v_aesv(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<NotificationProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static NotificationProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -454,10 +454,10 @@ partial class Screenshot : DesktopObject
     { }
     public Task<ObjectPath> ScreenshotAsync(string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -471,10 +471,10 @@ partial class Screenshot : DesktopObject
     }
     public Task<ObjectPath> PickColorAsync(string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -487,10 +487,10 @@ partial class Screenshot : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<ScreenshotProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static ScreenshotProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -556,10 +556,10 @@ partial class Account : DesktopObject
     { }
     public Task<ObjectPath> GetUserInformationAsync(string window, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -572,10 +572,10 @@ partial class Account : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<AccountProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static AccountProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -641,10 +641,10 @@ partial class NetworkMonitor : DesktopObject
     { }
     public Task<bool> GetAvailableAsync()
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -655,10 +655,10 @@ partial class NetworkMonitor : DesktopObject
     }
     public Task<bool> GetMeteredAsync()
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -669,10 +669,10 @@ partial class NetworkMonitor : DesktopObject
     }
     public Task<uint> GetConnectivityAsync()
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_u(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_u(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -683,10 +683,10 @@ partial class NetworkMonitor : DesktopObject
     }
     public Task<Dictionary<string, VariantValue>> GetStatusAsync()
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -697,10 +697,10 @@ partial class NetworkMonitor : DesktopObject
     }
     public Task<bool> CanReachAsync(string hostname, uint port)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -715,10 +715,10 @@ partial class NetworkMonitor : DesktopObject
     public ValueTask<IDisposable> WatchChangedAsync(Action<Exception?> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "changed", handler, emitOnCapturedContext, flags);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<NetworkMonitorProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static NetworkMonitorProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -784,10 +784,10 @@ partial class Print : DesktopObject
     { }
     public Task<ObjectPath> PreparePrintAsync(string parentWindow, string title, Dictionary<string, VariantValue> settings, Dictionary<string, VariantValue> pageSetup, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -804,10 +804,10 @@ partial class Print : DesktopObject
     }
     public Task<ObjectPath> PrintAsync(string parentWindow, string title, System.Runtime.InteropServices.SafeHandle fd, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -822,10 +822,10 @@ partial class Print : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<PrintProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static PrintProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -891,10 +891,10 @@ partial class Settings : DesktopObject
     { }
     public Task<Dictionary<string, Dictionary<string, VariantValue>>> ReadAllAsync(string[] namespaces)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesaesv(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesaesv(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -907,10 +907,10 @@ partial class Settings : DesktopObject
     }
     public Task<VariantValue> ReadAsync(string @namespace, string key)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_v(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_v(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -924,10 +924,10 @@ partial class Settings : DesktopObject
     }
     public Task<VariantValue> ReadOneAsync(string @namespace, string key)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_v(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_v(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -942,10 +942,10 @@ partial class Settings : DesktopObject
     public ValueTask<IDisposable> WatchSettingChangedAsync(Action<Exception?, (string Namespace, string Key, VariantValue Value)> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "SettingChanged", (Message m, object? s) => ReadMessage_ssv(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<SettingsProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static SettingsProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -1012,10 +1012,10 @@ partial class GameMode : DesktopObject
     { }
     public Task<int> QueryStatusAsync(int pid)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1028,10 +1028,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> RegisterGameAsync(int pid)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1044,10 +1044,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> UnregisterGameAsync(int pid)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1060,10 +1060,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> QueryStatusByPidAsync(int target, int requester)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1077,10 +1077,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> RegisterGameByPidAsync(int target, int requester)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1094,10 +1094,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> UnregisterGameByPidAsync(int target, int requester)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1111,10 +1111,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> QueryStatusByPIDFdAsync(System.Runtime.InteropServices.SafeHandle target, System.Runtime.InteropServices.SafeHandle requester)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1128,10 +1128,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> RegisterGameByPIDFdAsync(System.Runtime.InteropServices.SafeHandle target, System.Runtime.InteropServices.SafeHandle requester)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1145,10 +1145,10 @@ partial class GameMode : DesktopObject
     }
     public Task<int> UnregisterGameByPIDFdAsync(System.Runtime.InteropServices.SafeHandle target, System.Runtime.InteropServices.SafeHandle requester)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_i(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1161,12 +1161,12 @@ partial class GameMode : DesktopObject
         }
     }
     public Task<bool> GetActiveAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "Active"), (Message m, object? s) => ReadMessage_v_b(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "Active"), (Message m, object? s) => ReadMessage_v_b(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<GameModeProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static GameModeProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -1239,10 +1239,10 @@ partial class RemoteDesktop : DesktopObject
     { }
     public Task<ObjectPath> CreateSessionAsync(Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1255,10 +1255,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task<ObjectPath> SelectDevicesAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1272,10 +1272,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task<ObjectPath> StartAsync(ObjectPath sessionHandle, string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1290,10 +1290,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyPointerMotionAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, double dx, double dy)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1309,10 +1309,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyPointerMotionAbsoluteAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint stream, double x, double y)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1329,10 +1329,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyPointerButtonAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, int button, uint state)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1348,10 +1348,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyPointerAxisAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, double dx, double dy)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1367,10 +1367,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyPointerAxisDiscreteAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint axis, int steps)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1386,10 +1386,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyKeyboardKeycodeAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, int keycode, uint state)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1405,10 +1405,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyKeyboardKeysymAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, int keysym, uint state)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1424,10 +1424,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyTouchDownAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint stream, uint slot, double x, double y)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1445,10 +1445,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyTouchMotionAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint stream, uint slot, double x, double y)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1466,10 +1466,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task NotifyTouchUpAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint slot)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1484,10 +1484,10 @@ partial class RemoteDesktop : DesktopObject
     }
     public Task<System.Runtime.InteropServices.SafeHandle> ConnectToEISAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1500,12 +1500,12 @@ partial class RemoteDesktop : DesktopObject
         }
     }
     public Task<uint> GetAvailableDeviceTypesAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "AvailableDeviceTypes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "AvailableDeviceTypes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<RemoteDesktopProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static RemoteDesktopProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -1578,10 +1578,10 @@ partial class MemoryMonitor : DesktopObject
     public ValueTask<IDisposable> WatchLowMemoryWarningAsync(Action<Exception?, byte> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "LowMemoryWarning", (Message m, object? s) => ReadMessage_y(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<MemoryMonitorProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static MemoryMonitorProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -1647,10 +1647,10 @@ partial class OpenURI : DesktopObject
     { }
     public Task<ObjectPath> OpenURIAsync(string parentWindow, string uri, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1665,10 +1665,10 @@ partial class OpenURI : DesktopObject
     }
     public Task<ObjectPath> OpenFileAsync(string parentWindow, System.Runtime.InteropServices.SafeHandle fd, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1683,10 +1683,10 @@ partial class OpenURI : DesktopObject
     }
     public Task<ObjectPath> OpenDirectoryAsync(string parentWindow, System.Runtime.InteropServices.SafeHandle fd, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1701,10 +1701,10 @@ partial class OpenURI : DesktopObject
     }
     public Task<bool> SchemeSupportedAsync(string scheme, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_b(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1717,10 +1717,10 @@ partial class OpenURI : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<OpenURIProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static OpenURIProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -1789,10 +1789,10 @@ partial class Realtime : DesktopObject
     { }
     public Task MakeThreadRealtimeWithPIDAsync(ulong process, ulong thread, uint priority)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1807,10 +1807,10 @@ partial class Realtime : DesktopObject
     }
     public Task MakeThreadHighPriorityWithPIDAsync(ulong process, ulong thread, int priority)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1824,16 +1824,16 @@ partial class Realtime : DesktopObject
         }
     }
     public Task<int> GetMaxRealtimePriorityAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "MaxRealtimePriority"), (Message m, object? s) => ReadMessage_v_i(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "MaxRealtimePriority"), (Message m, object? s) => ReadMessage_v_i(m, (DesktopObject)s!), this);
     public Task<int> GetMinNiceLevelAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "MinNiceLevel"), (Message m, object? s) => ReadMessage_v_i(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "MinNiceLevel"), (Message m, object? s) => ReadMessage_v_i(m, (DesktopObject)s!), this);
     public Task<long> GetRTTimeUSecMaxAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "RTTimeUSecMax"), (Message m, object? s) => ReadMessage_v_x(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "RTTimeUSecMax"), (Message m, object? s) => ReadMessage_v_x(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<RealtimeProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static RealtimeProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -1917,10 +1917,10 @@ partial class Secret : DesktopObject
     { }
     public Task<ObjectPath> RetrieveSecretAsync(System.Runtime.InteropServices.SafeHandle fd, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -1933,10 +1933,10 @@ partial class Secret : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<SecretProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static SecretProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2003,10 +2003,10 @@ partial class Camera : DesktopObject
     { }
     public Task<ObjectPath> AccessCameraAsync(Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2019,10 +2019,10 @@ partial class Camera : DesktopObject
     }
     public Task<System.Runtime.InteropServices.SafeHandle> OpenPipeWireRemoteAsync(Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2034,12 +2034,12 @@ partial class Camera : DesktopObject
         }
     }
     public Task<bool> GetIsCameraPresentAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "IsCameraPresent"), (Message m, object? s) => ReadMessage_v_b(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "IsCameraPresent"), (Message m, object? s) => ReadMessage_v_b(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<CameraProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static CameraProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2112,10 +2112,10 @@ partial class InputCapture : DesktopObject
     { }
     public Task<ObjectPath> CreateSessionAsync(string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2129,10 +2129,10 @@ partial class InputCapture : DesktopObject
     }
     public Task<ObjectPath> GetZonesAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2146,10 +2146,10 @@ partial class InputCapture : DesktopObject
     }
     public Task<ObjectPath> SetPointerBarriersAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, Dictionary<string, VariantValue>[] barriers, uint zoneSet)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2165,10 +2165,10 @@ partial class InputCapture : DesktopObject
     }
     public Task EnableAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2182,10 +2182,10 @@ partial class InputCapture : DesktopObject
     }
     public Task DisableAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2199,10 +2199,10 @@ partial class InputCapture : DesktopObject
     }
     public Task ReleaseAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2216,10 +2216,10 @@ partial class InputCapture : DesktopObject
     }
     public Task<System.Runtime.InteropServices.SafeHandle> ConnectToEISAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2240,12 +2240,12 @@ partial class InputCapture : DesktopObject
     public ValueTask<IDisposable> WatchZonesChangedAsync(Action<Exception?, (ObjectPath SessionHandle, Dictionary<string, VariantValue> Options)> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "ZonesChanged", (Message m, object? s) => ReadMessage_oaesv(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<uint> GetSupportedCapabilitiesAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "SupportedCapabilities"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "SupportedCapabilities"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<InputCaptureProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static InputCaptureProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2317,10 +2317,10 @@ partial class GlobalShortcuts : DesktopObject
     { }
     public Task<ObjectPath> CreateSessionAsync(Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2333,10 +2333,10 @@ partial class GlobalShortcuts : DesktopObject
     }
     public Task<ObjectPath> BindShortcutsAsync(ObjectPath sessionHandle, (string, Dictionary<string, VariantValue>)[] shortcuts, string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2352,10 +2352,10 @@ partial class GlobalShortcuts : DesktopObject
     }
     public Task<ObjectPath> ListShortcutsAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2374,10 +2374,10 @@ partial class GlobalShortcuts : DesktopObject
     public ValueTask<IDisposable> WatchShortcutsChangedAsync(Action<Exception?, (ObjectPath SessionHandle, (string, Dictionary<string, VariantValue>)[] Shortcuts)> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "ShortcutsChanged", (Message m, object? s) => ReadMessage_oarsaesvz(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<GlobalShortcutsProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static GlobalShortcutsProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2443,12 +2443,12 @@ partial class PowerProfileMonitor : DesktopObject
     public PowerProfileMonitor(DesktopService service, ObjectPath path) : base(service, path)
     { }
     public Task<bool> GetPowerSaverEnabledAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "power-saver-enabled"), (Message m, object? s) => ReadMessage_v_b(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "power-saver-enabled"), (Message m, object? s) => ReadMessage_v_b(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<PowerProfileMonitorProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static PowerProfileMonitorProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2521,10 +2521,10 @@ partial class DynamicLauncher : DesktopObject
     { }
     public Task InstallAsync(string token, string desktopFileId, string desktopEntry, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2540,10 +2540,10 @@ partial class DynamicLauncher : DesktopObject
     }
     public Task<ObjectPath> PrepareInstallAsync(string parentWindow, string name, VariantValue iconV, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2559,10 +2559,10 @@ partial class DynamicLauncher : DesktopObject
     }
     public Task<string> RequestInstallTokenAsync(string name, VariantValue iconV, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_s(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_s(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2577,10 +2577,10 @@ partial class DynamicLauncher : DesktopObject
     }
     public Task UninstallAsync(string desktopFileId, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2594,10 +2594,10 @@ partial class DynamicLauncher : DesktopObject
     }
     public Task<string> GetDesktopEntryAsync(string desktopFileId)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_s(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_s(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2610,10 +2610,10 @@ partial class DynamicLauncher : DesktopObject
     }
     public Task<(VariantValue IconV, string IconFormat, uint IconSize)> GetIconAsync(string desktopFileId)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_vsu(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_vsu(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2626,10 +2626,10 @@ partial class DynamicLauncher : DesktopObject
     }
     public Task LaunchAsync(string desktopFileId, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2642,12 +2642,12 @@ partial class DynamicLauncher : DesktopObject
         }
     }
     public Task<uint> GetSupportedLauncherTypesAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "SupportedLauncherTypes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "SupportedLauncherTypes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<DynamicLauncherProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static DynamicLauncherProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2721,10 +2721,10 @@ partial class ScreenCast : DesktopObject
     { }
     public Task<ObjectPath> CreateSessionAsync(Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2737,10 +2737,10 @@ partial class ScreenCast : DesktopObject
     }
     public Task<ObjectPath> SelectSourcesAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2754,10 +2754,10 @@ partial class ScreenCast : DesktopObject
     }
     public Task<ObjectPath> StartAsync(ObjectPath sessionHandle, string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2772,10 +2772,10 @@ partial class ScreenCast : DesktopObject
     }
     public Task<System.Runtime.InteropServices.SafeHandle> OpenPipeWireRemoteAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_h(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2788,14 +2788,14 @@ partial class ScreenCast : DesktopObject
         }
     }
     public Task<uint> GetAvailableSourceTypesAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "AvailableSourceTypes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "AvailableSourceTypes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<uint> GetAvailableCursorModesAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "AvailableCursorModes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "AvailableCursorModes"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<ScreenCastProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static ScreenCastProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2873,10 +2873,10 @@ partial class Email : DesktopObject
     { }
     public Task<ObjectPath> ComposeEmailAsync(string parentWindow, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2889,10 +2889,10 @@ partial class Email : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<EmailProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static EmailProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -2958,10 +2958,10 @@ partial class Trash : DesktopObject
     { }
     public Task<uint> TrashFileAsync(System.Runtime.InteropServices.SafeHandle fd)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_u(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_u(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -2973,10 +2973,10 @@ partial class Trash : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<TrashProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static TrashProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -3042,10 +3042,10 @@ partial class ProxyResolver : DesktopObject
     { }
     public Task<string[]> LookupAsync(string uri)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_as(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_as(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -3057,10 +3057,10 @@ partial class ProxyResolver : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<ProxyResolverProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static ProxyResolverProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -3126,10 +3126,10 @@ partial class FileChooser : DesktopObject
     { }
     public Task<ObjectPath> OpenFileAsync(string parentWindow, string title, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -3144,10 +3144,10 @@ partial class FileChooser : DesktopObject
     }
     public Task<ObjectPath> SaveFileAsync(string parentWindow, string title, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -3162,10 +3162,10 @@ partial class FileChooser : DesktopObject
     }
     public Task<ObjectPath> SaveFilesAsync(string parentWindow, string title, Dictionary<string, VariantValue> options)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (DesktopObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -3179,10 +3179,10 @@ partial class FileChooser : DesktopObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<FileChooserProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static FileChooserProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -3248,10 +3248,10 @@ partial class Session : DesktopObject
     { }
     public Task CloseAsync()
     {
-        return this.Connection.CallMethodAsync(CreateMessage());
+        return this.DBusConnection.CallMethodAsync(CreateMessage());
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -3263,10 +3263,10 @@ partial class Session : DesktopObject
     public ValueTask<IDisposable> WatchClosedAsync(Action<Exception?, Dictionary<string, VariantValue>> handler, bool emitOnCapturedContext = true, ObserverFlags flags = ObserverFlags.None)
         => base.WatchSignalAsync(Service.Destination, __Interface, Path, "Closed", (Message m, object? s) => ReadMessage_aesv(m, (DesktopObject)s!), handler, emitOnCapturedContext, flags);
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "version"), (Message m, object? s) => ReadMessage_v_u(m, (DesktopObject)s!), this);
     public Task<SessionProperties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (DesktopObject)s!), this);
         static SessionProperties ReadMessage(Message message, DesktopObject _)
         {
             var reader = message.GetBodyReader();
@@ -3323,10 +3323,10 @@ partial class Session : DesktopObject
 }
 partial class DesktopService
 {
-    public Tmds.DBus.Protocol.Connection Connection { get; }
+    public Tmds.DBus.Protocol.DBusConnection DBusConnection { get; }
     public string Destination { get; }
-    public DesktopService(Tmds.DBus.Protocol.Connection connection, string destination)
-        => (Connection, Destination) = (connection, destination);
+    public DesktopService(Tmds.DBus.Protocol.DBusConnection connection, string destination)
+        => (DBusConnection, Destination) = (connection, destination);
     public Inhibit CreateInhibit(ObjectPath path) => new Inhibit(this, path);
     public Background CreateBackground(ObjectPath path) => new Background(this, path);
     public Location CreateLocation(ObjectPath path) => new Location(this, path);
@@ -3358,12 +3358,12 @@ class DesktopObject
 {
     public DesktopService Service { get; }
     public ObjectPath Path { get; }
-    protected Tmds.DBus.Protocol.Connection Connection => Service.Connection;
+    protected Tmds.DBus.Protocol.DBusConnection DBusConnection => Service.DBusConnection;
     protected DesktopObject(DesktopService service, ObjectPath path)
         => (Service, Path) = (service, path);
     protected MessageBuffer CreateGetPropertyMessage(string @interface, string property)
     {
-        var writer = this.Connection.GetMessageWriter();
+        var writer = this.DBusConnection.GetMessageWriter();
         writer.WriteMethodCallHeader(
             destination: Service.Destination,
             path: Path,
@@ -3376,7 +3376,7 @@ class DesktopObject
     }
     protected MessageBuffer CreateGetAllPropertiesMessage(string @interface)
     {
-        var writer = this.Connection.GetMessageWriter();
+        var writer = this.DBusConnection.GetMessageWriter();
         writer.WriteMethodCallHeader(
             destination: Service.Destination,
             path: Path,
@@ -3397,7 +3397,7 @@ class DesktopObject
             Member = "PropertiesChanged",
             Arg0 = @interface
         };
-        return this.Connection.AddMatchAsync(rule, reader,
+        return this.DBusConnection.AddMatchAsync(rule, reader,
                                                 (Exception? ex, PropertyChanges<TProperties> changes, object? rs, object? hs) => ((Action<Exception?, PropertyChanges<TProperties>>)hs!).Invoke(ex, changes),
                                                 this, handler, emitOnCapturedContext, flags);
     }
@@ -3411,7 +3411,7 @@ class DesktopObject
             Member = signal,
             Interface = @interface
         };
-        return this.Connection.AddMatchAsync(rule, reader,
+        return this.DBusConnection.AddMatchAsync(rule, reader,
                                                 (Exception? ex, TArg arg, object? rs, object? hs) => ((Action<Exception?, TArg>)hs!).Invoke(ex, arg),
                                                 this, handler, emitOnCapturedContext, flags);
     }
@@ -3425,7 +3425,7 @@ class DesktopObject
             Member = signal,
             Interface = @interface
         };
-        return this.Connection.AddMatchAsync<object>(rule, (Message message, object? state) => null!,
+        return this.DBusConnection.AddMatchAsync<object>(rule, (Message message, object? state) => null!,
                                                         (Exception? ex, object v, object? rs, object? hs) => ((Action<Exception?>)hs!).Invoke(ex), this, handler, emitOnCapturedContext, flags);
     }
     protected static ObjectPath ReadMessage_o(Message message, DesktopObject _)
@@ -3615,9 +3615,10 @@ class DesktopObject
 class PortalResponse
 {
     public required string RequestPath { get; init; }
+    public required uint ResponseCode { get; init; }
     public required Dictionary<string, VariantValue> Results { get; init; }
 
-    public static async Task<PortalResponse> WaitAsync(Connection connection,
+    public static async Task<PortalResponse> WaitAsync(DBusConnection connection,
                                                        Func<Task<ObjectPath>> request,
                                                        CancellationToken cancel = default)
     {
@@ -3625,7 +3626,8 @@ class PortalResponse
         ArgumentNullException.ThrowIfNull(request);
 
         var results = new List<PortalResponse>();
-        var result = new TaskCompletionSource<PortalResponse>();
+        var result = new TaskCompletionSource<PortalResponse>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         string? requestPath = null;
 
         using var matcher = await connection.AddMatchAsync(
@@ -3642,12 +3644,12 @@ class PortalResponse
                 return new PortalResponse
                 {
                     RequestPath = message.PathAsString!,
+                    ResponseCode = arg0,
                     Results = reader.ReadDictionaryOfStringToVariantValue(),
                 };
             },
             handler: (ex, response, _, __) =>
             {
-                Console.WriteLine($"Got {response}");
                 if (ex is null)
                 {
                     lock (results)
@@ -3657,7 +3659,7 @@ class PortalResponse
                             if (response.RequestPath != requestPath)
                                 return;
 
-                            result.SetResult(response);
+                            result.TrySetResult(response);
                             return;
                         }
 
@@ -3666,21 +3668,59 @@ class PortalResponse
                 }
                 else
                 {
-                    result.SetException(ex);
+                    result.TrySetException(ex);
                 }
             },
             ObserverFlags.NoSubscribe, emitOnCapturedContext: false).ConfigureAwait(false);
 
-        var path = await request().WaitAsync(cancel).ConfigureAwait(false);
+        ObjectPath path;
+        try
+        {
+            path = await request().WaitAsync(cancel).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The signal observer can report a second error while the failed
+            // portal request is being removed. Complete the task before the
+            // observer is disposed so that this secondary error cannot become
+            // an unobserved task exception on the finalizer thread.
+            CompleteWithoutResponse(result, cancel);
+            throw;
+        }
 
         lock (results)
         {
             requestPath = path;
             if (results.Find(r => r.RequestPath == path) is { } response)
+            {
+                result.TrySetResult(response);
                 return response;
+            }
         }
 
-        return await result.Task.WaitAsync(cancel).ConfigureAwait(false);
+        try
+        {
+            return await result.Task.WaitAsync(cancel).ConfigureAwait(false);
+        }
+        catch
+        {
+            CompleteWithoutResponse(result, cancel);
+            throw;
+        }
+
+        static void CompleteWithoutResponse(
+            TaskCompletionSource<PortalResponse> completion,
+            CancellationToken cancellationToken)
+        {
+            if (!completion.TrySetCanceled(
+                    cancellationToken.IsCancellationRequested
+                        ? cancellationToken
+                        : new CancellationToken(true)))
+            {
+                // Reading Exception marks a racing observer failure as seen.
+                _ = completion.Task.Exception;
+            }
+        }
     }
 
     public override string ToString()

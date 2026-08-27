@@ -28,8 +28,10 @@ using SnapX.Core.Upload;
 using SnapX.Core.Upload.Custom;
 using SnapX.Core.Upload.SharingServices;
 using SnapX.Core.Utils;
+using SnapX.Core.Utils.Cryptographic;
 using SnapX.Core.Utils.Extensions;
 using SnapX.Core.Utils.Miscellaneous;
+using SnapX.Core.Utils.Native;
 using SnapX.Core.Utils.Parsers;
 using Xdg.Directories;
 using ZXing;
@@ -48,18 +50,21 @@ public static class TaskHelpers
 {
     public static async Task ExecuteJob(HotkeyType job, CLICommand command = null)
     {
-        await ExecuteJob(SnapXL.DefaultTaskSettings, job, command);
+        bool useWaylandWindowOrRegionPicker = command is not null &&
+            job is HotkeyType.RectangleRegion or HotkeyType.ScreenRecorder;
+        await ExecuteJob(SnapXL.DefaultTaskSettings, job, command, useWaylandWindowOrRegionPicker);
     }
 
     public static async Task ExecuteJob(TaskSettings taskSettings)
     {
-        await ExecuteJob(taskSettings, taskSettings.Job);
+        await ExecuteJob(taskSettings, taskSettings.Job, useWaylandWindowOrRegionPicker: true);
     }
 
     public static async Task ExecuteJob(
         TaskSettings taskSettings,
         HotkeyType job,
-        CLICommand command = null
+        CLICommand command = null,
+        bool useWaylandWindowOrRegionPicker = false
     )
     {
         if (job == HotkeyType.None)
@@ -68,6 +73,16 @@ public static class TaskHelpers
         DebugHelper.WriteAlways("Executing: " + job.GetLocalizedDescription());
 
         var safeTaskSettings = TaskSettings.GetSafeTaskSettings(taskSettings);
+        if (useWaylandWindowOrRegionPicker && OperatingSystem.IsLinux() && LinuxAPI.IsWayland() &&
+            job is HotkeyType.RectangleRegion or HotkeyType.ScreenRecorder)
+        {
+            RegionCaptureOptions options = RegionCaptureTasks.GetRegionCaptureOptions(
+                safeTaskSettings.CaptureSettings.SurfaceOptions);
+            options.WindowOrRegionPickerMode = true;
+            safeTaskSettings.CaptureSettings.SurfaceOptions = options;
+            DebugHelper.WriteLine(
+                $"Wayland hotkey {job} is using the native window-or-region selector.");
+        }
 
         switch (job)
         {
@@ -82,15 +97,13 @@ public static class TaskHelpers
                 UploadManager.ClipboardUpload(safeTaskSettings);
                 break;
             case HotkeyType.ClipboardUploadWithContentViewer:
-                DebugHelper.WriteException(
-                    "HotkeyType.ClipboardUploadWithContentViewer is NOT implemented."
-                );
-                // UploadManager.ClipboardUploadWithContentViewer(safeTaskSettings);
+                // The Avalonia content viewer is optional; the core clipboard
+                // pipeline still provides the same upload behavior when the
+                // hotkey is invoked from a headless or tray-only session.
+                UploadManager.ClipboardUpload(safeTaskSettings);
                 break;
             case HotkeyType.UploadText:
-                DebugHelper.WriteException("HotkeyType.UploadText is NOT implemented.");
-                // UploadManager.ShowTextUploadDialog(safeTaskSettings);
-
+                UploadManager.UploadText(Clipboard.GetText(), safeTaskSettings);
                 break;
             case HotkeyType.UploadURL:
                 UploadManager.UploadURL(safeTaskSettings);
@@ -100,8 +113,7 @@ public static class TaskHelpers
                 // OpenDropWindow(safeTaskSettings);
                 break;
             case HotkeyType.ShortenURL:
-                DebugHelper.WriteException("HotkeyType.ShortenURL is NOT implemented.");
-                // UploadManager.ShowShortenURLDialog(safeTaskSettings);
+                UploadManager.ShortenURL(Clipboard.GetText(), safeTaskSettings);
                 break;
             case HotkeyType.TweetMessage:
                 TweetMessage();
@@ -151,44 +163,31 @@ public static class TaskHelpers
                 break;
             // Screen record
             case HotkeyType.ScreenRecorder:
-                DebugHelper.WriteException("HotkeyType.ScreenRecorder is NOT implemented.");
-                // StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.Region, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.Region, safeTaskSettings);
+                break;
+            case HotkeyType.ScreenRecorderFullscreen:
+                StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.Fullscreen, safeTaskSettings);
                 break;
             case HotkeyType.ScreenRecorderActiveWindow:
-                DebugHelper.WriteException(
-                    "HotkeyType.ScreenRecorderActiveWindow is NOT implemented."
-                );
-                // StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.ActiveWindow, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.ActiveWindow, safeTaskSettings);
                 break;
             case HotkeyType.ScreenRecorderCustomRegion:
-                DebugHelper.WriteException(
-                    "HotkeyType.ScreenRecorderCustomRegion is NOT implemented."
-                );
-                // StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.CustomRegion, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.CustomRegion, safeTaskSettings);
                 break;
             case HotkeyType.StartScreenRecorder:
-                DebugHelper.WriteException("HotkeyType.StartScreenRecorder is NOT implemented.");
-                // StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.LastRegion, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.LastRegion, safeTaskSettings);
                 break;
             case HotkeyType.ScreenRecorderGIF:
-                DebugHelper.WriteException("HotkeyType.ScreenRecorderGIF is NOT implemented.");
-                // StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.Region, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.Region, safeTaskSettings);
                 break;
             case HotkeyType.ScreenRecorderGIFActiveWindow:
-                DebugHelper.WriteException(
-                    "HotkeyType.ScreenRecorderGIFActiveWindow is NOT implemented."
-                );
-                // StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.ActiveWindow, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.ActiveWindow, safeTaskSettings);
                 break;
             case HotkeyType.ScreenRecorderGIFCustomRegion:
-                DebugHelper.WriteException(
-                    "HotkeyType.ScreenRecorderGIFCustomRegion is NOT implemented."
-                );
-                // StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.CustomRegion, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.CustomRegion, safeTaskSettings);
                 break;
             case HotkeyType.StartScreenRecorderGIF:
-                DebugHelper.WriteException("HotkeyType.StartScreenRecorderGIF is NOT implemented.");
-                // StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.LastRegion, safeTaskSettings);
+                StartScreenRecording(ScreenRecordOutput.GIF, ScreenRecordStartMethod.LastRegion, safeTaskSettings);
                 break;
             case HotkeyType.StopScreenRecording:
                 StopScreenRecording();
@@ -201,12 +200,8 @@ public static class TaskHelpers
                 break;
             // Tools
             case HotkeyType.ColorPicker:
-                DebugHelper.WriteException("HotkeyType.ColorPicker is NOT implemented.");
-                // ShowScreenColorPickerDialog(safeTaskSettings);
-                break;
             case HotkeyType.ScreenColorPicker:
-                DebugHelper.WriteException("HotkeyType.ScreenColorPicker is NOT implemented.");
-                // OpenScreenColorPicker(safeTaskSettings);
+                CopyScreenColor(safeTaskSettings);
                 break;
             case HotkeyType.Ruler:
                 DebugHelper.WriteException("HotkeyType.Ruler is NOT implemented.");
@@ -255,31 +250,25 @@ public static class TaskHelpers
                 // OpenImageThumbnailer();
                 break;
             case HotkeyType.VideoConverter:
-                DebugHelper.WriteException("HotkeyType.VideoConverter is NOT implemented.");
-                // OpenVideoConverter(safeTaskSettings);
+                RequestVideoConversion(safeTaskSettings);
                 break;
             case HotkeyType.VideoThumbnailer:
-                DebugHelper.WriteException("HotkeyType.VideoThumbnailer is NOT implemented.");
-                // OpenVideoThumbnailer(safeTaskSettings);
+                RequestVideoThumbnails(safeTaskSettings);
                 break;
             case HotkeyType.OCR:
                 await OCRImage(command.Parameter);
                 break;
             case HotkeyType.QRCode:
-                DebugHelper.WriteException("HotkeyType.QRCode is NOT implemented.");
-                // OpenQRCode();
+                SnapXL.EventAggregator.Publish(new NeedScanQRCodeEvent(Clipboard.GetText() ?? string.Empty, safeTaskSettings));
                 break;
             case HotkeyType.QRCodeDecodeFromScreen:
-                DebugHelper.WriteException("HotkeyType.QRCodeDecodeFromScreen is NOT implemented.");
-                // OpenQRCodeDecodeFromScreen();
+                await ScanQRCodeFromScreen(safeTaskSettings);
                 break;
             case HotkeyType.HashCheck:
-                DebugHelper.WriteException("HotkeyType.HashCheck is NOT implemented.");
-                // OpenHashCheck();
+                RequestHashCheck(safeTaskSettings);
                 break;
             case HotkeyType.IndexFolder:
-                DebugHelper.WriteException("HotkeyType.IndexFolder is NOT implemented.");
-                // UploadManager.IndexFolder();
+                RequestFolderIndex(safeTaskSettings);
                 break;
             case HotkeyType.ClipboardViewer:
                 DebugHelper.WriteException("HotkeyType.ClipboardViewer is NOT implemented.");
@@ -344,28 +333,49 @@ public static class TaskHelpers
 
     public static ImageData PrepareImage(Image img, TaskSettings taskSettings)
     {
+        var stopwatch = Stopwatch.StartNew();
         var imageData = new ImageData();
-        imageData.ImageStream = SaveImageAsStream(
-            img,
-            taskSettings.ImageSettings.ImageFormat,
-            taskSettings
-        );
-        imageData.ImageFormat = taskSettings.ImageSettings.ImageFormat;
 
-        if (
+        bool mayFallBackToJpeg =
             taskSettings.ImageSettings.ImageAutoUseJPEG
-            && taskSettings.ImageSettings.ImageFormat != EImageFormat.JPEG
-            && imageData.ImageStream.Length > taskSettings.ImageSettings.ImageAutoUseJPEGSize * 1000
-        )
+            && taskSettings.ImageSettings.ImageFormat != EImageFormat.JPEG;
+        long thresholdBytes = taskSettings.ImageSettings.ImageAutoUseJPEGSize * 1000L;
+
+        // PNG rarely beats ~4:1 on real desktop content (text, UI chrome,
+        // photos). When the raw pixel data already dwarfs the JPEG fallback
+        // threshold, PNG cannot plausibly land under it, so encoding it once
+        // just to discard the result wastes real time on every large
+        // multi-monitor capture. Skip straight to the format that will
+        // actually be used.
+        bool skipPngProbe = mayFallBackToJpeg && (long)img.Width * img.Height * 4 > thresholdBytes * 4;
+
+        bool needsFallback;
+        if (skipPngProbe)
         {
-            imageData.ImageStream.Dispose();
+            needsFallback = true;
+        }
+        else
+        {
+            imageData.ImageStream = SaveImageAsStream(
+                img,
+                taskSettings.ImageSettings.ImageFormat,
+                taskSettings
+            );
+            imageData.ImageFormat = taskSettings.ImageSettings.ImageFormat;
+            needsFallback = mayFallBackToJpeg && imageData.ImageStream.Length > thresholdBytes;
+        }
+        long firstEncodeMs = stopwatch.ElapsedMilliseconds;
+
+        if (needsFallback)
+        {
+            imageData.ImageStream?.Dispose();
 
             img.Mutate((ctx) => ctx.BackgroundColor(Color.White));
             if (taskSettings.ImageSettings.ImageAutoJPEGQuality)
             {
                 imageData.ImageStream = ImageHelpers.SaveJPEGAutoQuality(
                     img,
-                    taskSettings.ImageSettings.ImageAutoUseJPEGSize * 1000,
+                    (int)thresholdBytes,
                     2,
                     70,
                     100
@@ -381,6 +391,14 @@ public static class TaskHelpers
 
             imageData.ImageFormat = EImageFormat.JPEG;
         }
+
+        DebugHelper.WriteLine(
+            skipPngProbe
+                ? $"PrepareImage: skipped {taskSettings.ImageSettings.ImageFormat} probe (raw size implies it would exceed the JPEG fallback threshold), {stopwatch.ElapsedMilliseconds} ms {imageData.ImageFormat} encode ({imageData.ImageStream.Length.ToSizeString()})"
+                : $"PrepareImage: {firstEncodeMs} ms {taskSettings.ImageSettings.ImageFormat} encode" +
+                  (imageData.ImageFormat != taskSettings.ImageSettings.ImageFormat
+                      ? $", {stopwatch.ElapsedMilliseconds - firstEncodeMs} ms {imageData.ImageFormat} fallback encode ({imageData.ImageStream.Length.ToSizeString()})"
+                      : $" ({imageData.ImageStream.Length.ToSizeString()})"));
 
         return imageData;
     }
@@ -458,7 +476,12 @@ public static class TaskHelpers
         {
             IImageEncoder encoder = imageFormat switch
             {
-                EImageFormat.PNG => new PngEncoder() { },
+                // This encode is also the size probe PrepareImage uses to decide
+                // whether to fall back to JPEG; on a large multi-monitor capture,
+                // ImageSharp's default (level 6) compression cost that check ~2s
+                // that was then thrown away. BestSpeed trades PNG file size for
+                // an encode that no longer dominates capture latency.
+                EImageFormat.PNG => new PngEncoder() { CompressionLevel = PngCompressionLevel.BestSpeed },
                 EImageFormat.JPEG => new JpegEncoder() { Quality = jpegQuality },
                 EImageFormat.GIF => new GifEncoder() { Quantizer = GetGifQuantizer(gifQuality) },
                 EImageFormat.BMP => new BmpEncoder(),
@@ -756,6 +779,102 @@ public static class TaskHelpers
         ScreenRecordManager.StopRecording();
     }
 
+    public static IReadOnlyList<VideoThumbnailInfo> CreateVideoThumbnails(string mediaPath, TaskSettings taskSettings)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaPath);
+        ArgumentNullException.ThrowIfNull(taskSettings);
+
+        VideoThumbnailOptions options = taskSettings.ToolsSettingsReference.VideoThumbnailOptions;
+        options.DefaultOutputDirectory ??= Path.GetDirectoryName(mediaPath) ?? SnapXL.PersonalFolder;
+        options.LastVideoPath = mediaPath;
+        var thumbnailer = new VideoThumbnailer(taskSettings.CaptureSettings.FFmpegOptions.FFmpegPath, options);
+        return thumbnailer.TakeThumbnails(mediaPath) ?? [];
+    }
+
+    /// <summary>
+    /// Converts a video (or an animated image) with the configured FFmpeg
+    /// codec settings. The caller owns any follow-up action, such as upload.
+    /// </summary>
+    public static string ConvertVideo(string mediaPath, TaskSettings taskSettings)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaPath);
+        ArgumentNullException.ThrowIfNull(taskSettings);
+        if (!File.Exists(mediaPath))
+        {
+            throw new FileNotFoundException("The video selected for conversion no longer exists.", mediaPath);
+        }
+
+        VideoConverterOptions options = taskSettings.ToolsSettingsReference.VideoConverterOptions;
+        string previousInput = options.InputFilePath ?? string.Empty;
+        options.InputFilePath = mediaPath;
+        options.OutputFolderPath ??= Path.GetDirectoryName(mediaPath) ?? SnapXL.PersonalFolder;
+        if (string.IsNullOrWhiteSpace(options.OutputFileName) ||
+            !string.Equals(previousInput, mediaPath, StringComparison.OrdinalIgnoreCase))
+        {
+            options.OutputFileName = Path.GetFileNameWithoutExtension(mediaPath) + "-converted";
+        }
+
+        string outputPath = options.OutputFilePath;
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            throw new InvalidOperationException("Choose an output file name for the converted video.");
+        }
+
+        if (string.Equals(Path.GetFullPath(outputPath), Path.GetFullPath(mediaPath), StringComparison.OrdinalIgnoreCase))
+        {
+            options.OutputFileName = Path.GetFileNameWithoutExtension(mediaPath) + "-converted";
+            outputPath = options.OutputFilePath;
+        }
+
+        string? outputDirectory = Path.GetDirectoryName(outputPath);
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            throw new InvalidOperationException("The converted video has no output directory.");
+        }
+        Directory.CreateDirectory(outputDirectory);
+
+        string? ffmpegPath = taskSettings.CaptureSettings.FFmpegOptions.FFmpegPath;
+        if (string.IsNullOrWhiteSpace(ffmpegPath) || !File.Exists(ffmpegPath))
+        {
+            throw new FileNotFoundException("The configured FFmpeg executable was not found.", ffmpegPath);
+        }
+
+        using var ffmpeg = new FFmpegCLIManager(ffmpegPath) { ShowError = true, TrackEncodeProgress = true };
+        if (!ffmpeg.Run(options.Arguments) || !File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
+        {
+            throw new IOException($"FFmpeg did not produce a converted video: {outputPath}");
+        }
+
+        if (options.AutoOpenFolder)
+        {
+            FileHelpers.OpenFolderWithFile(outputPath);
+        }
+
+        return outputPath;
+    }
+
+    private static void RequestVideoThumbnails(TaskSettings taskSettings)
+    {
+        SnapXL.EventAggregator.Publish(new NeedFileOpenerEvent
+        {
+            Title = "SnapX | Video thumbnailer",
+            AcceptedExtensions = ["*.mp4", "*.webm", "*.mkv", "*.avi", "*.mov"],
+            VideoThumbnailer = true,
+            TaskSettings = taskSettings
+        });
+    }
+
+    private static void RequestVideoConversion(TaskSettings taskSettings)
+    {
+        SnapXL.EventAggregator.Publish(new NeedFileOpenerEvent
+        {
+            Title = "SnapX | Video converter",
+            AcceptedExtensions = ["*.mp4", "*.webm", "*.mkv", "*.avi", "*.mov", "*.gif", "*.webp", "*.apng"],
+            VideoConverter = true,
+            TaskSettings = taskSettings
+        });
+    }
+
     public static void PauseScreenRecording()
     {
         ScreenRecordManager.PauseScreenRecording();
@@ -781,73 +900,82 @@ public static class TaskHelpers
     }
 
     [RequiresAssemblyFiles()]
-    public static void RunShareXAsAdmin(string arguments = null)
+    public static bool TryRunShareXAsAdmin(out string message, params string[] arguments)
     {
         try
         {
-            using var process = new Process();
-            var exePath = Assembly.GetExecutingAssembly().Location;
+            var commandLine = Environment.GetCommandLineArgs();
+            var processPath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(processPath))
+            {
+                message = "SnapX could not find its executable path.";
+                return false;
+            }
+
             var isWindows = OperatingSystem.IsWindows();
             var isLinux = OperatingSystem.IsLinux();
             var isMacOS = OperatingSystem.IsMacOS();
             var isFreeBSD = OperatingSystem.IsFreeBSD();
-
-            ProcessStartInfo psi;
+            var psi = new ProcessStartInfo
+            {
+                UseShellExecute = false
+            };
 
             if (isWindows)
             {
-                psi = new ProcessStartInfo()
-                {
-                    FileName = exePath,
-                    Arguments = arguments,
-                    UseShellExecute = true,
-                    Verb = "runas",
-                };
+                psi.FileName = processPath;
+                psi.UseShellExecute = true;
+                psi.Verb = "runas";
             }
             else if (isLinux)
             {
-                psi = new ProcessStartInfo()
-                {
-                    FileName = "pkexec",
-                    ArgumentList = { exePath },
-                    UseShellExecute = false,
-                };
-                if (!string.IsNullOrEmpty(arguments))
-                    psi.ArgumentList.Add(arguments);
+                psi.FileName = "pkexec";
+                AddCurrentApplication(psi, processPath, commandLine);
             }
             else if (isMacOS)
             {
-                psi = new ProcessStartInfo()
-                {
-                    FileName = "osascript",
-                    ArgumentList =
-                    {
-                        "-e",
-                        $"do shell script \"'{exePath}' {(arguments ?? "")}\" with administrator privileges",
-                    },
-                    UseShellExecute = false,
-                };
+                message = "Administrator launch is not available from this build on macOS.";
+                return false;
             }
             else if (isFreeBSD)
             {
-                psi = new ProcessStartInfo()
-                {
-                    FileName = "doas",
-                    ArgumentList = { exePath },
-                    UseShellExecute = false,
-                };
-                if (!string.IsNullOrEmpty(arguments))
-                    psi.ArgumentList.Add(arguments);
+                psi.FileName = "doas";
+                AddCurrentApplication(psi, processPath, commandLine);
             }
             else
             {
-                return;
+                message = "Administrator launch is not available on this operating system.";
+                return false;
             }
 
-            process.StartInfo = psi;
-            process.Start();
+            foreach (var argument in arguments.Where(argument => !string.IsNullOrWhiteSpace(argument)))
+                psi.ArgumentList.Add(argument);
+
+            Process.Start(psi);
+            message = "SnapX requested an elevated process. The system may ask for authentication.";
+            return true;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            message = $"SnapX could not start an elevated process: {ex.Message}";
+            return false;
+        }
+    }
+
+    [RequiresAssemblyFiles()]
+    public static void RunShareXAsAdmin(string arguments = null)
+    {
+        _ = TryRunShareXAsAdmin(out _, string.IsNullOrWhiteSpace(arguments) ? [] : [arguments]);
+    }
+
+    private static void AddCurrentApplication(ProcessStartInfo psi, string processPath, string[] commandLine)
+    {
+        psi.ArgumentList.Add(processPath);
+        if (Path.GetFileNameWithoutExtension(processPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase) && commandLine.Length > 1)
+        {
+            psi.ArgumentList.Add(commandLine[1]);
+            for (int i = 2; i < commandLine.Length; i++) psi.ArgumentList.Add(commandLine[i]);
+        }
     }
 
     public static void SearchImageUsingGoogleLens(string? url)
@@ -1005,7 +1133,7 @@ public static class TaskHelpers
     DebugHelper.WriteException(new Exception("This build of SnapX was built with DISABLE_OCR build time constant."));
     return new OcrResponse { FullText = "OCR Disabled in this build." };
 #else
-        progress?.Report(new(5, "Initializing OCR engine..."));
+        progress?.Report(new(5, "Initializing the OCR engine."));
 
         var imageConfig = Configuration.Default;
         imageConfig.ImageFormatsManager.SetEncoder(AVIFFormat.Instance, AVIFEncoder.Instance);
@@ -1016,7 +1144,7 @@ public static class TaskHelpers
         {
             if (filePath is not null && image is null)
             {
-                progress?.Report(new(10, "Reading image from disk..."));
+        progress?.Report(new(10, "Reading the image from disk."));
                 image = await Image.LoadAsync(filePath, cts);
             }
         }
@@ -1068,7 +1196,7 @@ public static class TaskHelpers
             filename ??= "model.onnx";
 
             var displayProgress = Math.Max(progressValue, currentFileProgress);
-            progress?.Report(new(displayProgress, $"Downloading {filename} ({args.ProgressPercentage}%)..."));
+            progress?.Report(new(displayProgress, $"Downloading {filename} ({args.ProgressPercentage}%)."));
 
             if (currentFileProgress > lastFileProgress)
             {
@@ -1082,7 +1210,7 @@ public static class TaskHelpers
 
         try
         {
-            progress?.Report(new(15, "Checking and loading OCR models..."));
+        progress?.Report(new(15, "Checking and loading OCR models."));
             await ocrEngine.LoadModelAsync(model, modelDir, HttpClientFactory.Get(), ct: cts);
         }
         finally
@@ -1090,12 +1218,12 @@ public static class TaskHelpers
             if (HttpClientFactory._ph != null) HttpClientFactory._ph.HttpReceiveProgress -= progressHandler;
         }
 
-        progress?.Report(new(85, "Preprocessing image for Paddle..."));
+        progress?.Report(new(85, "Preparing the image for Paddle."));
         var originalLongSide = Math.Max(image.Width, image.Height);
         var targetLimit = 1504;
         var finalResize = originalLongSide < targetLimit ? (int)(Math.Ceiling(originalLongSide / 32.0) * 32) : targetLimit;
 
-        progress?.Report(new(90, "Performing Text Detection & Recognition..."));
+        progress?.Report(new(90, "Detecting and recognizing text."));
         var ocrResult = ocrEngine.Detect(image, new RapidOcrOptions
         {
             BoxScoreThresh = 0.5f,
@@ -1113,7 +1241,7 @@ public static class TaskHelpers
             visualDebugImage.Mutate(ctx => { ctx.DrawPolygon(Color.Red, 4f, block.BoxPoints); });
         }
 
-        progress?.Report(new(98, "Finalizing results..."));
+        progress?.Report(new(98, "Finalizing the results."));
         return MapToResponse(ocrResult, visualDebugImage);
 #endif
     }
@@ -1142,6 +1270,97 @@ public static class TaskHelpers
     public static void PinToScreen(TaskSettings taskSettings = null)
     {
         throw new NotImplementedException("PinToScreen is not implemented");
+    }
+
+    private static void CopyScreenColor(TaskSettings taskSettings)
+    {
+        taskSettings ??= TaskSettings.GetDefaultTaskSettings();
+
+        Point position = CaptureHelpers.GetCursorPosition();
+        Color color = CaptureHelpers.GetPixelColor(position);
+        string text = CodeMenuEntryPixelInfo.Parse(
+            taskSettings.ToolsSettings.ScreenColorPickerFormat ?? "$hex",
+            color.ToPixel<Rgba64>(),
+            position);
+
+        if (!string.IsNullOrEmpty(text))
+        {
+            SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(text));
+        }
+    }
+
+    private static async Task ScanQRCodeFromScreen(TaskSettings taskSettings)
+    {
+        try
+        {
+            RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
+                taskSettings.CaptureSettings.SurfaceOptions,
+                captureImage: true);
+
+            if (selection?.Image is not null)
+            {
+                SnapXL.EventAggregator.Publish(new NeedScanQRCodeEvent(selection.Image, taskSettings));
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex);
+            SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "QR/barcode screen scan failed", true));
+        }
+    }
+
+    private static void RequestFolderIndex(TaskSettings taskSettings)
+    {
+        string? clipboardPath = Clipboard.GetText();
+        if (!string.IsNullOrWhiteSpace(clipboardPath) && Directory.Exists(clipboardPath.Trim()))
+        {
+            UploadManager.IndexFolder(clipboardPath.Trim(), taskSettings);
+            return;
+        }
+
+        SnapXL.EventAggregator.Publish(new NeedFileOpenerEvent
+        {
+            Title = "SnapX | Index Folder",
+            FolderPicker = true,
+            IndexFolder = true,
+            TaskSettings = taskSettings
+        });
+    }
+
+    private static void RequestHashCheck(TaskSettings taskSettings)
+    {
+        string? clipboardPath = Clipboard.GetText();
+        if (!string.IsNullOrWhiteSpace(clipboardPath) && File.Exists(clipboardPath.Trim()))
+        {
+            _ = ChecksumToClipboardAsync(clipboardPath.Trim());
+            return;
+        }
+
+        SnapXL.EventAggregator.Publish(new NeedFileOpenerEvent
+        {
+            Title = "SnapX | Hash check",
+            HashCheck = true,
+            TaskSettings = taskSettings
+        });
+    }
+
+    private static async Task ChecksumToClipboardAsync(string filePath)
+    {
+        try
+        {
+            var checker = new HashChecker();
+            string? checksum = await checker.Start(filePath, HashType.SHA256);
+            if (!string.IsNullOrEmpty(checksum))
+            {
+                SnapXL.EventAggregator.Publish(
+                    new NeedClipboardCopyEvent($"{checksum}  {Path.GetFileName(filePath)}"));
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex);
+            SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Hash check failed", true));
+        }
     }
 
     public static void TweetMessage()

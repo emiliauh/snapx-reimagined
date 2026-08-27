@@ -17,7 +17,7 @@
         <StackPanel Spacing="20">
 
             <StackPanel Spacing="5">
-                <TextBlock FontWeight="SemiBold" Text="SnapX Personal Folder" />
+                <TextBlock FontWeight="SemiBold" Text="SnapX personal folder" />
                 <Grid ColumnDefinitions="*, Auto, Auto, Auto" RowDefinitions="Auto">
                     <TextBox
                         Grid.Column="0"
@@ -28,16 +28,12 @@
                         Command="{Binding BrowsePersonalFolderCommand}"
                         Content="Browse"
                         Grid.Column="1"
-                        IsEnabled="False"
-                        Margin="0,0,5,0"
-                        ToolTip.Tip="I'm still cooking in the oven!" />
+                        Margin="0,0,5,0" />
                     <Button
                         Command="{Binding ApplyPersonalFolderCommand}"
                         Content="Apply"
                         Grid.Column="2"
-                        IsEnabled="False"
-                        Margin="0,0,5,0"
-                        ToolTip.Tip="I'm still cooking in the oven!" />
+                        Margin="0,0,5,0" />
                     <Button
                         Command="{Binding OpenPersonalFolderCommand}"
                         Content="Open"
@@ -60,7 +56,7 @@
             </StackPanel>
 
             <StackPanel Spacing="5">
-                <TextBlock FontWeight="SemiBold" Text="Sub-folder Pattern" />
+                <TextBlock FontWeight="SemiBold" Text="Sub-folder pattern" />
                 <Grid ColumnDefinitions="*, Auto">
                     <TextBox
                         Grid.Column="0"
@@ -80,18 +76,16 @@
             </StackPanel>
 
             <StackPanel Spacing="5">
-                <TextBlock FontWeight="SemiBold" Text="Sub-folder Pattern (Window)" />
-                <TextBox Text="{Binding WindowSubFolderPattern}" Watermark="Enter pattern..." />
+                <TextBlock FontWeight="SemiBold" Text="Sub-folder pattern for windows" />
+                <TextBox Text="{Binding WindowSubFolderPattern}" Watermark="Enter a pattern" />
             </StackPanel>
 
             <Separator Margin="0,10" />
-
-            <controls:InfoBar
-                IsClosable="False"
-                IsOpen="True"
-                Message="I am still working on this section. More settings coming soon!"
-                Severity="Informational"
-                Title="Development Note" />
+            <TextBlock
+                FontSize="12"
+                Opacity="0.65"
+                Text="SnapX expands these tokens when it saves a capture: %y, %mo, and %d."
+                TextWrapping="Wrap" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

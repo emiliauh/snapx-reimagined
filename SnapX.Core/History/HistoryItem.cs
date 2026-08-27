@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using SnapX.Core.Utils;
 using SnapX.Core.Utils.Extensions;
 
 namespace SnapX.Core.History;
@@ -81,7 +82,8 @@ public class HistoryItem
             {
                 var isVisual =
                     string.Equals(Type, "image", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(Type, "video", StringComparison.OrdinalIgnoreCase);
+                    string.Equals(Type, "video", StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(FilePath) && FileHelpers.IsVideoFile(FilePath));
 
                 if (!isVisual)
                     return SafeString(ThumbnailURL);
@@ -159,4 +161,3 @@ public class HistoryItem
         return hash.ToHashCode();
     }
 }
-

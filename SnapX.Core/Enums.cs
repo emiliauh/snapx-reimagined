@@ -162,6 +162,8 @@ public enum ScreenRecordStartMethod
 {
     Region,
     ActiveWindow,
+    ActiveMonitor,
+    Fullscreen,
     CustomRegion,
     LastRegion
 }
@@ -217,6 +219,8 @@ public enum HotkeyType // Localized
     // Screen record
     [Category(EnumExtensions.HotkeyType_Category_ScreenRecord)]
     ScreenRecorder,
+    [Category(EnumExtensions.HotkeyType_Category_ScreenRecord)]
+    ScreenRecorderFullscreen,
     [Category(EnumExtensions.HotkeyType_Category_ScreenRecord)]
     ScreenRecorderActiveWindow,
     [Category(EnumExtensions.HotkeyType_Category_ScreenRecord)]
@@ -606,4 +610,3 @@ public enum CutOutEffectType // Localized
     TornEdge,
     Wave
 }
-

@@ -17,6 +17,8 @@ namespace SnapX.Core.Upload.BaseUploaders;
 
 public class Uploader
 {
+    private CancellationTokenSource? activeRequestCancellation;
+
     public delegate void ProgressEventHandler(ProgressManager progress);
     public event ProgressEventHandler ProgressChanged;
 
@@ -27,6 +29,7 @@ public class Uploader
     public bool IsError => !StopUploadRequested && Errors is { Count: > 0 };
     // SFTP and Dropbox uploaders use this. According to my research, 8KiB is very small for 2026 networking.
     public int BufferSize { get; set; } = 65536;
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(100);
 
     protected bool StopUploadRequested { get; set; }
     protected bool AllowReportProgress { get; set; } = true;
@@ -62,7 +65,35 @@ public class Uploader
         if (IsUploading)
         {
             StopUploadRequested = true;
-            DebugHelper.WriteLine("StopUpload called, but, SnapX does not support cancelling HTTP requests!");
+            Volatile.Read(ref activeRequestCancellation)?.Cancel();
+        }
+    }
+
+    private CancellationTokenSource BeginRequest()
+    {
+        var cancellation = new CancellationTokenSource();
+        if (RequestTimeout > TimeSpan.Zero && RequestTimeout != Timeout.InfiniteTimeSpan)
+        {
+            cancellation.CancelAfter(RequestTimeout);
+        }
+
+        var previous = Interlocked.Exchange(ref activeRequestCancellation, cancellation);
+        previous?.Cancel();
+        previous?.Dispose();
+        return cancellation;
+    }
+
+    private void EndRequest(CancellationTokenSource cancellation)
+    {
+        Interlocked.CompareExchange(ref activeRequestCancellation, null, cancellation);
+        cancellation.Dispose();
+    }
+
+    private void ReportCancellation()
+    {
+        if (!StopUploadRequested)
+        {
+            Errors.Add($"The upload request timed out after {RequestTimeout.TotalSeconds:0.#} seconds.");
         }
     }
 
@@ -132,9 +163,32 @@ public class Uploader
             var cookieHeader = string.Join("; ", cookies.Select(c => $"{c.Name}={c.Value}"));
             requestMessage.Headers.Add("Cookie", cookieHeader);
         }
-        var client = HttpClientFactory.Get();
-        var response = client.SendAsync(requestMessage).GetAwaiter().GetResult();
-        return ProcessWebResponseText(response);
+        var cancellation = BeginRequest();
+        IsUploading = true;
+        StopUploadRequested = false;
+
+        try
+        {
+            var client = HttpClientFactory.Get();
+            var response = client.SendAsync(requestMessage, cancellation.Token).GetAwaiter().GetResult();
+            cancellation.Token.ThrowIfCancellationRequested();
+            return ProcessWebResponseText(response);
+        }
+        catch (OperationCanceledException)
+        {
+            ReportCancellation();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            ProcessError(ex, url);
+            return null;
+        }
+        finally
+        {
+            IsUploading = false;
+            EndRequest(cancellation);
+        }
     }
 
     protected MultipartFormDataContent GetMultipartFormDataContent(Dictionary<string, string?>? args, Stream? data, string? fileName, string? fileFormName, string? relatedData = null)
@@ -159,7 +213,7 @@ public class Uploader
         else if (data is not null)
         {
             var fileContent = new StreamContent(data);
-            var mimeType = MimeTypes.GetMimeType(fileName);
+            var mimeType = MimeTypesPlus.GetMimeType(fileName);
 
             fileContent.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(
                 mimeType
@@ -189,6 +243,7 @@ public class Uploader
         IsUploading = true;
         StopUploadRequested = false;
         EventHandler<HttpProgressEventArgs>? handler = null;
+        var cancellation = BeginRequest();
 
         try
         {
@@ -212,7 +267,7 @@ public class Uploader
                 requestMessage.Headers.Add("Cookie", cookieHeader);
             }
 
-            var ph = HttpClientFactory._ph!;
+            var ph = HttpClientFactory._ph;
             var requestLength = data.Length;
             var progress = new ProgressManager(requestLength);
 
@@ -224,8 +279,9 @@ public class Uploader
                     OnProgressChanged(progress);
             };
 
-            ph.HttpSendProgress += handler;
-            var response = client.SendAsync(requestMessage).GetAwaiter().GetResult();
+            if (ph != null) ph.HttpSendProgress += handler;
+            var response = client.SendAsync(requestMessage, cancellation.Token).GetAwaiter().GetResult();
+            cancellation.Token.ThrowIfCancellationRequested();
             // foreach (var part in multipartContent)
             // {
             //     DebugHelper.WriteLine($"Part Headers:");
@@ -235,6 +291,11 @@ public class Uploader
             result.ResponseInfo = ProcessWebResponse(response);
             result.Response = result.ResponseInfo?.ResponseText;
             result.IsSuccess = result.ResponseInfo?.IsSuccess ?? false;
+        }
+        catch (OperationCanceledException)
+        {
+            ReportCancellation();
+            result.IsSuccess = false;
         }
         catch (Exception e)
         {
@@ -253,7 +314,11 @@ public class Uploader
         finally
         {
             IsUploading = false;
-            HttpClientFactory._ph!.HttpSendProgress -= handler; // prevent dangling event ref
+            if (handler != null && HttpClientFactory._ph != null)
+            {
+                HttpClientFactory._ph.HttpSendProgress -= handler; // prevent dangling event ref
+            }
+            EndRequest(cancellation);
         }
 
         return result;
@@ -275,6 +340,7 @@ public class Uploader
         var result = new UploadResult();
         IsUploading = true;
         StopUploadRequested = false;
+        var cancellation = BeginRequest();
 
         try
         {
@@ -286,7 +352,7 @@ public class Uploader
             }
 
             contentLength = Math.Min(contentLength, data.Length - contentPosition);
-            var contentType = MimeTypes.GetMimeType(fileName);
+            var contentType = MimeTypesPlus.GetMimeType(fileName);
 
             headers ??= new NameValueCollection();
             var startByte = contentPosition;
@@ -320,11 +386,17 @@ public class Uploader
                 requestMessage.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
             }
 
-            var response = client.SendAsync(requestMessage).GetAwaiter().GetResult();
+            var response = client.SendAsync(requestMessage, cancellation.Token).GetAwaiter().GetResult();
+            cancellation.Token.ThrowIfCancellationRequested();
 
             result.ResponseInfo = ProcessWebResponse(response);
             result.Response = result.ResponseInfo?.ResponseText;
             result.IsSuccess = result.ResponseInfo?.IsSuccess ?? false;
+        }
+        catch (OperationCanceledException)
+        {
+            ReportCancellation();
+            result.IsSuccess = false;
         }
         catch (Exception e)
         {
@@ -344,6 +416,7 @@ public class Uploader
         finally
         {
             IsUploading = false;
+            EndRequest(cancellation);
         }
 
         return result;
@@ -377,6 +450,7 @@ public class Uploader
     {
         IsUploading = true;
         StopUploadRequested = false;
+        var cancellation = BeginRequest();
 
         try
         {
@@ -419,8 +493,13 @@ public class Uploader
             }
 
             var client = HttpClientFactory.Get();
-            var response = client.SendAsync(requestMessage).ConfigureAwait(false).GetAwaiter().GetResult();
+            var response = client.SendAsync(requestMessage, cancellation.Token).ConfigureAwait(false).GetAwaiter().GetResult();
+            cancellation.Token.ThrowIfCancellationRequested();
             return response;
+        }
+        catch (OperationCanceledException)
+        {
+            ReportCancellation();
         }
         catch (Exception e)
         {
@@ -432,6 +511,7 @@ public class Uploader
         finally
         {
             IsUploading = false;
+            EndRequest(cancellation);
         }
 
         return null;
@@ -596,11 +676,11 @@ public class Uploader
     }
 
 
-    private ResponseInfo? ProcessWebResponse(HttpResponseMessage response)
+    private ResponseInfo? ProcessWebResponse(HttpResponseMessage? response)
     {
         if (response == null)
         {
-            DebugHelper.Logger.Error("ProcessWebResponse: response is null");
+            DebugHelper.Logger?.Error("ProcessWebResponse: response is null");
             return null;
         }
 
@@ -620,7 +700,7 @@ public class Uploader
     }
 
 
-    protected string? ProcessWebResponseText(HttpResponseMessage response)
+    protected string? ProcessWebResponseText(HttpResponseMessage? response)
     {
         var responseInfo = ProcessWebResponse(response);
 

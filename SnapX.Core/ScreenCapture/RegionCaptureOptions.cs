@@ -28,8 +28,35 @@ public class RegionCaptureOptions
     public RegionCaptureAction RegionCaptureActionX2Click { get; set; } = RegionCaptureAction.CaptureActiveMonitor;
     public bool DetectWindows { get; set; } = true;
     public bool DetectControls { get; set; } = true;
-    public bool UseDimming { get; set; } = true;
-    public int BackgroundDimStrength { get; set; } = 10;
+    /// <summary>
+    /// When true, the selector highlights whichever window is under the
+    /// cursor and a single click captures it, instead of requiring a drag.
+    /// </summary>
+    [JsonIgnore]
+    public bool WindowPickerMode { get; set; }
+    /// <summary>
+    /// When true, a stationary click selects the hovered window while a drag
+    /// selects an arbitrary rectangle in the same native selector session.
+    /// Used by the default Wayland capture and recording hotkeys only.
+    /// </summary>
+    [JsonIgnore]
+    public bool WindowOrRegionPickerMode { get; set; }
+    /// <summary>
+    /// When true, the selector highlights whichever monitor is under the
+    /// cursor and a single click captures it in full.
+    /// </summary>
+    [JsonIgnore]
+    public bool MonitorPickerMode { get; set; }
+    /// <summary>
+    /// When true, a successful selection replaces the last screenshot region.
+    /// Recording selectors disable this for their non-persisted option clone.
+    /// </summary>
+    [JsonIgnore]
+    public bool UpdateRegionHistory { get; set; } = true;
+    // The Wayland selector is intentionally transparent; retain these fields
+    // only to preserve compatibility with saved settings from older releases.
+    public bool UseDimming { get; set; }
+    public int BackgroundDimStrength { get; set; }
     public bool UseCustomInfoText { get; set; } = false;
     public string CustomInfoText { get; set; } = "X: $x, Y: $y$nR: $r, G: $g, B: $b$nHex: $hex";
     public List<SnapSize> SnapSizes { get; set; } =

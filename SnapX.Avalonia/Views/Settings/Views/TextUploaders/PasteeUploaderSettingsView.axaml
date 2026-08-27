@@ -7,32 +7,32 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel Spacing="4">
-        <controls:SettingsExpander
+        <controls:FASettingsExpander
             Description="Enter your unique user key"
             Header="Account Authentication"
             IconSource="Contact"
             IsExpanded="True">
-            <controls:SettingsExpanderItem Content="Don't have a key?">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Don't have a key?">
+                <controls:FASettingsExpanderItem.Footer>
                     <Button
                         Classes="accent"
                         Click="UserKeyButton_OnClick"
                         Content="Get user key online"
                         x:Name="UserKeyButton" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
-            <controls:SettingsExpanderItem Content="User Key">
-                <controls:SettingsExpanderItem.Footer>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
+            <controls:FASettingsExpanderItem Content="User Key">
+                <controls:FASettingsExpanderItem.Footer>
                     <TextBox
                         PasswordChar="*"
                         VerticalAlignment="Center"
-                        Watermark="Paste your key here..."
+                        Watermark="Paste your key here"
                         Width="250"
                         x:Name="PasswordTextBox" />
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-        </controls:SettingsExpander>
+        </controls:FASettingsExpander>
 
     </StackPanel>
 </UserControl>

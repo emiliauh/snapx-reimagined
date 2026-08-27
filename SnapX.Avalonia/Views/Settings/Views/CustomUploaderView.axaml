@@ -382,15 +382,7 @@
                                                     Icon="QuestionCircle"
                                                     Opacity="0.6">
                                                     <ToolTip.Tip>
-                                                        <TextBlock xml:space="preserve">• Purpose: Headers send "hidden" background info with your request, usually for security or telling the site what kind of data you're sending.
-• Overriding: You can customize standard settings like your "User-Agent" (what browser the site thinks you're using) or "Cookies."
-• Authentication: This is the most common use. It proves who you are so the site allows the upload.
-
-Examples:
-• Login: Authorization = Basic {base64:user:pass}
-• API Key: api_key = eUM14R4g4pMs
-
-Need more info? Click me and I'll open the documentation.</TextBlock>
+                                                        <TextBlock Text="Headers add request information. Use them for authentication, user-agent values, cookies, or API keys. Select this icon to open the documentation." TextWrapping="Wrap" />
                                                     </ToolTip.Tip>
                                                 </avalonia:FluentIcon>
                                             </Button>
@@ -457,16 +449,7 @@ Need more info? Click me and I'll open the documentation.</TextBlock>
                                                     Icon="QuestionCircle"
                                                     Opacity="0.6">
                                                     <ToolTip.Tip>
-                                                        <TextBlock xml:space="preserve">• Parameters: These create a URL "query string" (the text after the '?' in a link) to send settings to a website.
-• Placeholders: Use {input} to automatically insert the text or URL you are currently uploading.
-• Shortcuts: Use shortcuts like %mo to automatically insert the current month.
-
-Example:
-If you set: api_key = eUM14R4g4pMs and private = true
-The resulting link looks like:
-https://example.com/upload.php?api_key=eUM14R4g4pMs&amp;private=true
-
-Need more info? Click me and I'll open the documentation.</TextBlock>
+                                                        <TextBlock Text="Parameters add a query string to the URL. Use {input} for the uploaded text or URL. Use date tokens such as %mo for the current month. Select this icon to open the documentation." TextWrapping="Wrap" />
                                                     </ToolTip.Tip>
                                                 </avalonia:FluentIcon>
                                             </Button>
@@ -536,14 +519,7 @@ Need more info? Click me and I'll open the documentation.</TextBlock>
                                                     Icon="QuestionCircle"
                                                     Opacity="0.6">
                                                     <ToolTip.Tip>
-                                                        <TextBlock xml:space="preserve">• Purpose: For text uploaders or link shorteners, this is the actual "payload" (the specific content you are sending).
-• Automatic Filling: Use the {input} placeholder to tell the app exactly where to drop your copied text or link inside the request.
-
-Example:
-If you set: text = {input}
-The app swaps "{input}" for whatever text you are currently trying to upload.
-
-Need more info? Click me and I'll open the documentation.</TextBlock>
+                                                        <TextBlock Text="Arguments contain the data for a text uploader or URL shortener. Use {input} where SnapX must insert the uploaded text or URL. Select this icon to open the documentation." TextWrapping="Wrap" />
                                                     </ToolTip.Tip>
                                                 </avalonia:FluentIcon>
                                             </Button>
@@ -711,12 +687,12 @@ Need more info? Click me and I'll open the documentation.</TextBlock>
                         FontSize="18"
                         FontWeight="SemiBold"
                         HorizontalAlignment="Center"
-                        Text="Wow, a fresh start!" />
+                        Text="No custom uploaders" />
 
                     <TextBlock
                         MaxWidth="300"
                         Opacity="0.7"
-                        Text="Open the catalog to import a pre-made configuration with no hassle!"
+                        Text="Open the catalog to import a configuration."
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
 

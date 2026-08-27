@@ -51,9 +51,36 @@ public class FFmpegOptions
                 return FileHelpers.GetAbsolutePath(CLIPath);
             }
 
-            var destiredFFmpegFileName = "ffmpeg";
-            if (OperatingSystem.IsWindows()) destiredFFmpegFileName += ".exe";
-            return FileHelpers.GetAbsolutePath(destiredFFmpegFileName);
+            var desiredFFmpegFileName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+            string bundledPath = FileHelpers.GetAbsolutePath(desiredFFmpegFileName);
+            if (File.Exists(bundledPath))
+            {
+                return bundledPath;
+            }
+
+            string? path = Environment.GetEnvironmentVariable("PATH");
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                foreach (string directory in path.Split(
+                    Path.PathSeparator,
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    try
+                    {
+                        string candidate = Path.Combine(directory, desiredFFmpegFileName);
+                        if (File.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                    catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+                    {
+                        // Ignore malformed PATH entries.
+                    }
+                }
+            }
+
+            return desiredFFmpegFileName;
         }
     }
 

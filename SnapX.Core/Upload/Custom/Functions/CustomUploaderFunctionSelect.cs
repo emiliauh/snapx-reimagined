@@ -13,16 +13,14 @@ internal class CustomUploaderFunctionSelect : CustomUploaderFunction
 
     public override string? Call(ShareXCustomUploaderSyntaxParser parser, string?[] parameters)
     {
-        string[] values = parameters.Where(x => !string.IsNullOrEmpty(x)).ToArray();
+        string[] values = parameters?
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Select(x => x!)
+            .ToArray() ?? [];
 
         if (values.Length > 0)
         {
-            // TODO: Reimplement CustomUploaderFunctionSelectForm
-            // using (ParserSelectForm form = new ParserSelectForm(values))
-            // {
-            //     form.ShowDialog();
-            //     return form.SelectedText;
-            // }
+            return parser.Interaction.Select("Select", values);
         }
 
         return null;

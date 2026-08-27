@@ -33,7 +33,7 @@ public class ImageData : IDisposable
                 retryCount++;
 
                 DebugHelper.WriteLine(
-                    $"Attempt {retryCount} failed. IOException: {ex.Message}. Retrying in {retryDelayMilliseconds / 1000} second(s)...");
+                    $"Attempt {retryCount} failed. IOException: {ex.Message}. Retrying in {retryDelayMilliseconds / 1000} second(s).");
 
                 if (retryCount < maxRetries)
                 {

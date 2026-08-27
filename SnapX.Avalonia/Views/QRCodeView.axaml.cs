@@ -22,7 +22,7 @@ using Image = Avalonia.Controls.Image;
 
 namespace SnapX.Avalonia.Views;
 
-public partial class QRCodeView : AppWindow
+public partial class QRCodeView : FAAppWindow
 {
     private QRCodeViewModel ViewModel => (QRCodeViewModel)DataContext!;
 
@@ -43,11 +43,24 @@ public partial class QRCodeView : AppWindow
         ViewModel.Initialize();
     }
 
-    private void CopyImageButtonPressed(object? Sender, RoutedEventArgs RoutedEventArgs)
+    private async void CopyImageButtonPressed(object? Sender, RoutedEventArgs RoutedEventArgs)
     {
-        if (ViewModel.QrImage != null)
+        if (ViewModel.QrImage is null) return;
+
+        try
         {
-            Clipboard.SetBitmapAsync(ViewModel.QrImage);
+            // The view model owns QrImage and can replace or dispose it while
+            // the X11 clipboard is still being requested. Give the app-owned
+            // clipboard a separate bitmap with the required lifetime.
+            using var stream = new MemoryStream();
+            ViewModel.QrImage.Save(stream, 100);
+            stream.Position = 0;
+            var clipboardBitmap = new Bitmap(stream);
+            await App.SetClipboardBitmapAsync(Clipboard, clipboardBitmap);
+        }
+        catch (Exception ex)
+        {
+            ex.ShowError();
         }
     }
 
@@ -90,13 +103,15 @@ public partial class QRCodeView : AppWindow
         UploadManager.UploadImageStream(stream, "QRCode.png");
     }
 
-    private async void DoDrag(Action<DataObject> factory, PointerEventArgs e, DragDropEffects effects)
+    private async void DoDrag(Action<DataTransferItem> factory, PointerPressedEventArgs e, DragDropEffects effects)
     {
         try
         {
-            var dragData = new DataObject();
-            factory(dragData);
-            await DragDrop.DoDragDrop(e, dragData, effects);
+            var dragData = new DataTransfer();
+            var item = new DataTransferItem();
+            factory(item);
+            dragData.Add(item);
+            await DragDrop.DoDragDropAsync(e, dragData, effects);
         }
         catch (Exception ex)
         {
@@ -120,18 +135,18 @@ public partial class QRCodeView : AppWindow
             {
                 e.DragEffects &= DragDropEffects.Copy;
             }
-            if (e.Data.Contains(DataFormats.Text))
+            if (e.DataTransfer.Contains(DataFormat.Text))
             {
-                ViewModel.QrText = e.Data.GetText();
+                ViewModel.QrText = DataTransferExtensions.TryGetText(e.DataTransfer);
             }
-            else if (e.Data.Contains(DataFormats.Files))
+            else if (e.DataTransfer.Contains(DataFormat.File))
             {
-                var files = e.Data.GetFiles() ?? Array.Empty<IStorageItem>();
+                var files = DataTransferExtensions.TryGetFiles(e.DataTransfer) ?? Array.Empty<IStorageItem>();
                 foreach (var file in files)
                 {
                     try
                     {
-                        using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(file.Path.LocalPath);
+                        using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(file.Path.AbsolutePath);
                         await ScanImage(img, () =>
                         {
                             Drop(Sender, e);
@@ -209,18 +224,18 @@ public partial class QRCodeView : AppWindow
         {
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                var dialog = new ContentDialog
+                var dialog = new FAContentDialog
                 {
-                    Title = "No barcode detected",
+                    Title = "No code detected",
                     Content = new SelectableTextBlock
                     {
-                        Text = "We couldn't find a code in that area. Try larger selection or higher contrast.",
+                        Text = "SnapX did not find a code in that area. Select a larger area or use higher contrast.",
                         TextWrapping = TextWrapping.Wrap
                     },
-                    PrimaryButtonText = "Try Again",
+                    PrimaryButtonText = "Try again",
                     CloseButtonText = "Dismiss"
                 };
-                if (await dialog.ShowAsync(this) == ContentDialogResult.Primary && onRetry != null)
+                if (await dialog.ShowAsync(this) == FAContentDialogResult.Primary && onRetry != null)
                 {
                     await onRetry();
                 }
@@ -279,12 +294,12 @@ public partial class QRCodeView : AppWindow
             FontSize = 14
         });
 
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
             Title = isUrl ? "External Link Found" : isBinary ? "Binary Data Found" : "Text Content Found",
             Content = contentStack,
             CloseButtonText = "Dismiss",
-            DefaultButton = ContentDialogButton.Close
+            DefaultButton = FAContentDialogButton.Close
         };
 
         if (isBinary && qrImage == null)
@@ -300,7 +315,7 @@ public partial class QRCodeView : AppWindow
         var dialogResult = await dialog.ShowAsync(this);
         var topLevel = TopLevel.GetTopLevel(this);
 
-        if (dialogResult == ContentDialogResult.Primary)
+        if (dialogResult == FAContentDialogResult.Primary)
         {
             if (isBinary && qrImage == null)
             {
@@ -317,12 +332,12 @@ public partial class QRCodeView : AppWindow
             }
             else if (topLevel?.Clipboard is not null)
             {
-                await topLevel.Clipboard.SetTextAsync(content);
+                await App.SetClipboardTextAsync(topLevel.Clipboard, content);
             }
         }
-        else if (dialogResult == ContentDialogResult.Secondary && isUrl && topLevel?.Clipboard is not null)
+        else if (dialogResult == FAContentDialogResult.Secondary && isUrl && topLevel?.Clipboard is not null)
         {
-            await topLevel.Clipboard.SetTextAsync(content);
+            await App.SetClipboardTextAsync(topLevel.Clipboard, content);
         }
     }
 
@@ -394,7 +409,7 @@ public partial class QRCodeView : AppWindow
         }
         catch (Exception ex)
         {
-            await new ContentDialog
+            await new FAContentDialog
             {
                 Title = "Error",
                 Content = new SelectableTextBlock

@@ -19,7 +19,7 @@
             <StackPanel Spacing="5">
                 <TextBlock FontWeight="SemiBold" Text="Language" />
                 <ComboBox
-                    PlaceholderText="Select Language"
+                    PlaceholderText="Select a language"
                     SelectedItem="English"
                     Width="200"
                     x:Name="LanguageComboBox">
@@ -30,7 +30,7 @@
                 </ComboBox>
             </StackPanel>
             <StackPanel Spacing="5">
-                <TextBlock FontWeight="SemiBold" Text="Image Format" />
+                <TextBlock FontWeight="SemiBold" Text="Image format" />
                 <ComboBox
                     ItemsSource="{Binding SupportedFormats}"
                     SelectedItem="{Binding SelectedFormat}"
@@ -43,7 +43,7 @@
                 x:Name="RememberPositionCheckBox" />
             <StackPanel Spacing="5">
                 <CheckBox
-                    Content="Disable Telemetry"
+                    Content="Disable telemetry"
                     IsChecked="{Binding DisableTelemetry}"
                     Name="TelemetryCheckBox" />
 
@@ -51,27 +51,23 @@
                     FontSize="12"
                     Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                     Margin="32,0,0,0"
-                    TextWrapping="Wrap"
-                    xml:space="preserve">
-Help us improve SnapX! Our telemetry is <Bold>anonymous</Bold> and strictly uses privacy-respecting services.
-No personal data or files are ever collected.
- We only see how features are used so we can make them better. We also have usage analytics.</TextBlock>
+                    Text="SnapX sends anonymous usage data. SnapX does not send personal data or files. Disable telemetry to stop this data."
+                    TextWrapping="Wrap" />
 
                 <HyperlinkButton
-                    Content="Read our Privacy Policy"
+                    Content="Read the privacy policy"
                     Margin="28,0,0,0"
                     NavigateUri="https://github.com/SnapXL/SnapX/blob/develop/packaging/PRIVACY.md" />
             </StackPanel>
             <Separator Margin="0,10" />
 
-            <controls:InfoBar
+            <controls:FAInfoBar
                 IsClosable="False"
                 IsOpen="True"
-                Message="I am still working on this section. More settings coming soon!"
+                Message="Use the other settings pages to change more options."
                 Severity="Informational"
-                Title="Development Note" />
+                Title="Information" />
 
         </StackPanel>
     </ScrollViewer>
 </UserControl>
-

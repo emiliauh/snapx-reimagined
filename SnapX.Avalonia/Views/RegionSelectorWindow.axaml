@@ -2,13 +2,10 @@
     Background="Transparent"
     CanResize="False"
     Closed="OnClosed"
-    Cursor="Hand"
+    Cursor="Cross"
     Focusable="True"
     IsVisible="False"
     KeyDown="OnKeyDown"
-    KeyUp="OnKeyDown"
-    Loaded="OnInit"
-    LostFocus="OnLostFocus"
     Opacity="0"
     PointerMoved="OnPointerMoved"
     PointerPressed="OnPointerPressed"
@@ -33,7 +30,7 @@
     </Design.DataContext>
     <Viewbox Stretch="UniformToFill">
 
-        <Canvas x:Name="Canvas">
+        <Canvas Background="Transparent" x:Name="Canvas">
             <Rectangle
                 IsHitTestVisible="False"
                 Stroke="{DynamicResource SystemAccentColorDark1}"
@@ -44,6 +41,7 @@
                 BorderThickness="0"
                 Foreground="{DynamicResource SystemChromeWhiteColor}"
                 HorizontalAlignment="Left"
+                IsHitTestVisible="False"
                 IsReadOnly="True"
                 Margin="9"
                 Padding="5"
@@ -52,4 +50,3 @@
         </Canvas>
     </Viewbox>
 </Window>
-

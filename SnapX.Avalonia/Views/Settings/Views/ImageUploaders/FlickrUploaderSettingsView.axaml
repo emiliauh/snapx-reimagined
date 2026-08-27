@@ -8,20 +8,20 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel Spacing="4">
-        <controls:SettingsExpander
+        <controls:FASettingsExpander
             Header="Account Authentication"
             IconSource="Contact"
             IsExpanded="True">
-            <controls:SettingsExpanderItem Content="Connect">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Connect">
+                <controls:FASettingsExpanderItem.Footer>
                     <Button Name="ConnectButton">
                         <fluent:SymbolIcon FontSize="18" Symbol="PersonAccounts" />
                     </Button>
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-            <controls:SettingsExpanderItem Content="Verification Code" Description="Enter the code received from your provider to link your account.">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Verification Code" Description="Enter the code received from your provider to link your account.">
+                <controls:FASettingsExpanderItem.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBox
                             PasswordChar="*"
@@ -35,26 +35,26 @@
                             VerticalAlignment="Center"
                             x:Name="CompleteAuthButton" />
                     </StackPanel>
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
 
-            <controls:SettingsExpanderItem Content="Status: ???" Name="LoginStatus">
-                <controls:SettingsExpanderItem.Footer>
+            <controls:FASettingsExpanderItem Content="Status: ???" Name="LoginStatus">
+                <controls:FASettingsExpanderItem.Footer>
                     <StackPanel>
                         <Button
                             Classes="accent"
                             Content="Disconnect"
                             x:Name="DisconnectButton" />
                     </StackPanel>
-                </controls:SettingsExpanderItem.Footer>
-            </controls:SettingsExpanderItem>
-        </controls:SettingsExpander>
+                </controls:FASettingsExpanderItem.Footer>
+            </controls:FASettingsExpanderItem>
+        </controls:FASettingsExpander>
 
-        <controls:SettingsExpanderItem Content="Direct Link">
-            <controls:SettingsExpanderItem.Footer>
+        <controls:FASettingsExpanderItem Content="Direct Link">
+            <controls:FASettingsExpanderItem.Footer>
                 <ToggleSwitch Theme="{StaticResource CompactToggleSwitchStyle}" x:Name="DirectLinkSwitch" />
-            </controls:SettingsExpanderItem.Footer>
-        </controls:SettingsExpanderItem>
+            </controls:FASettingsExpanderItem.Footer>
+        </controls:FASettingsExpanderItem>
 
     </StackPanel>
 </UserControl>

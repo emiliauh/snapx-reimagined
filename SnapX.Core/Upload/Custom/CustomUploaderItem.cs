@@ -594,10 +594,10 @@ public class CustomUploaderItem : INotifyPropertyChanged
 
             if (Arguments != null)
             {
-                foreach (string key in Headers.Keys().ToList())
+                foreach (string key in Arguments.Keys().ToList())
                 {
-                    var currentVal = Headers.GetValue(key);
-                    Headers.SetValue(key, MigrateOldSyntax(currentVal));
+                    var currentVal = Arguments.GetValue(key);
+                    Arguments.SetValue(key, MigrateOldSyntax(currentVal));
                 }
             }
 

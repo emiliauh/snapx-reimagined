@@ -14,4 +14,5 @@
   <Project Path="SnapX.Secrets/SnapX.Secrets.csproj">
     <Configuration Solution="Release|*" Project="*|*|NoBuild" />
   </Project>
+  <Project Path="tests\SnapX.Core.Fuzz\SnapX.Core.Fuzz.csproj" />
 </Solution>

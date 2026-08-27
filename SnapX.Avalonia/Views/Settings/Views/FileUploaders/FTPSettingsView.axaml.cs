@@ -1,5 +1,7 @@
 
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using FluentAvalonia.UI.Controls;
@@ -231,7 +233,8 @@ public partial class FTPSettingsView : UserControl
         if (DataContext is not FtpBase daFTP)
             return;
 
-        var window = App.MySettingsWindow;
+        var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
+        var window = App.MySettingsWindow ?? desktop?.MainWindow ?? App.MyMainWindow;
 
         if (window == null)
             return;
@@ -373,7 +376,7 @@ public partial class FTPSettingsView : UserControl
             }
         });
 
-        var dialog = new ContentDialog
+        var dialog = new FAContentDialog
         {
             Title = SnapXL.AppName,
             Content = msg,

@@ -9,9 +9,11 @@ public partial class ApplicationPathSettingsView : UserControl
     public ApplicationPathSettingsView()
     {
         ViewModel = new ApplicationPathSettingsVM();
-        var topLevel = TopLevel.GetTopLevel(this);
-        ViewModel.SetStorageService(new StorageService(topLevel));
         InitializeComponent();
+        AttachedToVisualTree += (_, _) =>
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel != null) ViewModel.SetStorageService(new StorageService(topLevel));
+        };
     }
 }
-

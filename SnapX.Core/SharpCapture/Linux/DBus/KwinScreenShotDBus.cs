@@ -13,10 +13,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
     { }
     public Task<Dictionary<string, VariantValue>> CaptureWindowAsync(string handle, Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle pipe)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -31,10 +31,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
     }
     public Task<Dictionary<string, VariantValue>> CaptureActiveWindowAsync(Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle pipe)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -48,10 +48,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
     }
     public Task<Dictionary<string, VariantValue>> CaptureAreaAsync(int x, int y, uint width, uint height, Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle pipe)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -69,10 +69,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
     }
     public Task<Dictionary<string, VariantValue>> CaptureScreenAsync(string name, Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle pipe)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -87,10 +87,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
     }
     public Task<Dictionary<string, VariantValue>> CaptureActiveScreenAsync(Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle pipe)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -104,10 +104,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
     }
     public Task<Dictionary<string, VariantValue>> CaptureInteractiveAsync(uint kind, Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle pipe)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_aesv(m, (ScreenShot2ServiceObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -122,10 +122,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
     }
     public Task<CaptureWorkspaceResult> CaptureWorkspaceAsync(Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle pipe)
     {
-        return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadWorkspaceResult(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadWorkspaceResult(m, (ScreenShot2ServiceObject)s!), this);
         MessageBuffer CreateMessage()
         {
-            var writer = this.Connection.GetMessageWriter();
+            var writer = this.DBusConnection.GetMessageWriter();
             writer.WriteMethodCallHeader(
                 destination: Service.Destination,
                 path: Path,
@@ -138,10 +138,10 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
         }
     }
     public Task<uint> GetVersionAsync()
-        => this.Connection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "Version"), (Message m, object? s) => ReadMessage_v_u(m, (ScreenShot2ServiceObject)s!), this);
+        => this.DBusConnection.CallMethodAsync(CreateGetPropertyMessage(__Interface, "Version"), (Message m, object? s) => ReadMessage_v_u(m, (ScreenShot2ServiceObject)s!), this);
     public Task<ScreenShot2Properties> GetPropertiesAsync()
     {
-        return this.Connection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (ScreenShot2ServiceObject)s!), this);
+        return this.DBusConnection.CallMethodAsync(CreateGetAllPropertiesMessage(__Interface), (Message m, object? s) => ReadMessage(m, (ScreenShot2ServiceObject)s!), this);
         static ScreenShot2Properties ReadMessage(Message message, ScreenShot2ServiceObject _)
         {
             var reader = message.GetBodyReader();
@@ -198,22 +198,22 @@ partial class ScreenShot2 : ScreenShot2ServiceObject
 }
 partial class ScreenShot2Service
 {
-    public Tmds.DBus.Protocol.Connection Connection { get; }
+    public Tmds.DBus.Protocol.DBusConnection DBusConnection { get; }
     public string Destination { get; }
-    public ScreenShot2Service(Tmds.DBus.Protocol.Connection connection, string destination)
-        => (Connection, Destination) = (connection, destination);
+    public ScreenShot2Service(Tmds.DBus.Protocol.DBusConnection connection, string destination)
+        => (DBusConnection, Destination) = (connection, destination);
     public ScreenShot2 CreateScreenShot2(ObjectPath path) => new ScreenShot2(this, path);
 }
 class ScreenShot2ServiceObject
 {
     public ScreenShot2Service Service { get; }
     public ObjectPath Path { get; }
-    protected Tmds.DBus.Protocol.Connection Connection => Service.Connection;
+    protected Tmds.DBus.Protocol.DBusConnection DBusConnection => Service.DBusConnection;
     protected ScreenShot2ServiceObject(ScreenShot2Service service, ObjectPath path)
         => (Service, Path) = (service, path);
     protected MessageBuffer CreateGetPropertyMessage(string @interface, string property)
     {
-        var writer = this.Connection.GetMessageWriter();
+        var writer = this.DBusConnection.GetMessageWriter();
         writer.WriteMethodCallHeader(
             destination: Service.Destination,
             path: Path,
@@ -226,7 +226,7 @@ class ScreenShot2ServiceObject
     }
     protected MessageBuffer CreateGetAllPropertiesMessage(string @interface)
     {
-        var writer = this.Connection.GetMessageWriter();
+        var writer = this.DBusConnection.GetMessageWriter();
         writer.WriteMethodCallHeader(
             destination: Service.Destination,
             path: Path,
@@ -247,7 +247,7 @@ class ScreenShot2ServiceObject
             Member = "PropertiesChanged",
             Arg0 = @interface
         };
-        return this.Connection.AddMatchAsync(rule, reader,
+        return this.DBusConnection.AddMatchAsync(rule, reader,
             (Exception? ex, PropertyChanges<TProperties> changes, object? rs, object? hs) => ((Action<Exception?, PropertyChanges<TProperties>>)hs!).Invoke(ex, changes),
             this, handler, emitOnCapturedContext, flags);
     }
@@ -261,7 +261,7 @@ class ScreenShot2ServiceObject
             Member = signal,
             Interface = @interface
         };
-        return this.Connection.AddMatchAsync(rule, reader,
+        return this.DBusConnection.AddMatchAsync(rule, reader,
             (Exception? ex, TArg arg, object? rs, object? hs) => ((Action<Exception?, TArg>)hs!).Invoke(ex, arg),
             this, handler, emitOnCapturedContext, flags);
     }
@@ -275,7 +275,7 @@ class ScreenShot2ServiceObject
             Member = signal,
             Interface = @interface
         };
-        return this.Connection.AddMatchAsync<object>(rule, (Message message, object? state) => null!,
+        return this.DBusConnection.AddMatchAsync<object>(rule, (Message message, object? state) => null!,
             (Exception? ex, object v, object? rs, object? hs) => ((Action<Exception?>)hs!).Invoke(ex), this, handler, emitOnCapturedContext, flags);
     }
     protected static Dictionary<string, VariantValue> ReadMessage_aesv(Message message, ScreenShot2ServiceObject _)

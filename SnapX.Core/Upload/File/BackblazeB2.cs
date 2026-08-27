@@ -15,6 +15,7 @@ using SnapX.Core.Upload.BaseUploaders;
 using SnapX.Core.Upload.Utils;
 using SnapX.Core.Utils;
 using SnapX.Core.Utils.Parsers;
+using SnapX.Core.Utils.Miscellaneous;
 using Math = System.Math;
 
 namespace SnapX.Core.Upload.File;
@@ -97,7 +98,7 @@ public sealed class BackblazeB2 : ImageUploader
         string bucketId = auth.allowed?.bucketId;
         if (bucketId == null)
         {
-            DebugHelper.WriteLine("B2 uploader: Key doesn't have a bucket ID set, so I'm looking for a bucket ID.");
+            DebugHelper.WriteLine("B2 uploader: The key has no bucket ID. Searching for a bucket ID.");
 
             string newBucketId = B2ApiGetBucketId(auth, BucketName, out string getBucketError);
             if (getBucketError != null)
@@ -405,7 +406,7 @@ public sealed class BackblazeB2 : ImageUploader
             ["X-Bz-Info-b2-content-disposition"] = URLHelpers.URLEncode(contentDisposition.ToString()),
         };
 
-        string contentType = MimeTypes.GetMimeType(destinationPath);
+        string contentType = MimeTypesPlus.GetMimeType(destinationPath);
 
         using var response = GetResponse(HttpMethod.Post, b2UploadUrl.uploadUrl,
             data: file, contentType: contentType, headers: headers, allowNon2xxResponses: true);

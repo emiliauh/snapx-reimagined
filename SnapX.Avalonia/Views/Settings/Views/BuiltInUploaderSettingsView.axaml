@@ -16,16 +16,16 @@
                 <TextBlock Classes="h1" Text="{Binding SelectedUploader.ServiceName}" />
             </StackPanel>
             <!--    -->
-            <!-- <controls:SettingsExpander Header="Service Details" IsExpanded="True"> -->
-            <!--     <controls:SettingsExpander.IconSource> -->
-            <!--         <controls:SymbolIconSource Symbol="AllApps" /> -->
-            <!--     </controls:SettingsExpander.IconSource> -->
-            <!--     <controls:SettingsExpanderItem Content="Service Identifier" Description="Internal unique ID"> -->
-            <!--         <controls:SettingsExpanderItem.Footer> -->
+            <!-- <controls:FASettingsExpander Header="Service Details" IsExpanded="True"> -->
+            <!--     <controls:FASettingsExpander.IconSource> -->
+            <!--         <controls:FASymbolIconSource Symbol="AllApps" /> -->
+            <!--     </controls:FASettingsExpander.IconSource> -->
+            <!--     <controls:FASettingsExpanderItem Content="Service Identifier" Description="Internal unique ID"> -->
+            <!--         <controls:FASettingsExpanderItem.Footer> -->
             <!--             <TextBlock Text="{Binding SelectedUploader.ServiceIdentifier}" /> -->
-            <!--         </controls:SettingsExpanderItem.Footer> -->
-            <!--     </controls:SettingsExpanderItem> -->
-            <!-- </controls:SettingsExpander> -->
+            <!--         </controls:FASettingsExpanderItem.Footer> -->
+            <!--     </controls:FASettingsExpanderItem> -->
+            <!-- </controls:FASettingsExpander> -->
 
             <Border
                 Background="Transparent"

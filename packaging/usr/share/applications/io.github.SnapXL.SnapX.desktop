@@ -11,6 +11,12 @@ Type=Application
 GenericName=Screenshot tool & sharing tool
 Categories=Graphics;Utility
 StartupNotify=true
+# Associates the toplevel's app_id/WM_CLASS with this entry. SnapX sets both
+# the Wayland app_id and the X11 WM_CLASS to io.github.SnapXL.SnapX, so a
+# shell that maps a running window back to its desktop entry (for an icon, a
+# name, or a task list) resolves it here. Without this key that lookup falls
+# back to matching the entry's file name against the class, which is fragile.
+StartupWMClass=io.github.SnapXL.SnapX
 Keywords=ShareX;sharenix;sharexen;share;imgur;ocr;ftp;gif;screenshot
 MimeType=image/png;image/jpeg;image/jpg;image/gif;image/tiff;image/bmp;image/x-raw;video/mp4;video/x-msvideo;video/x-flv;video/webm;application/zip;application/x-7z-compressed;application/x-sxcu;video/x-matroska;
 Actions=uploadWithSnapX

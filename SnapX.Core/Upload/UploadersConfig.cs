@@ -42,6 +42,13 @@ public class UploadersConfig : SettingsBase<UploadersConfig>
 
     #endregion Flickr
 
+    #region Photobucket
+
+    public OAuthInfo? PhotobucketOAuthInfo { get; set; }
+    public PhotobucketAccountInfo? PhotobucketAccountInfo { get; set; }
+
+    #endregion Photobucket
+
     #region Google Photos
 
     public OAuth2Info GooglePhotosOAuth2Info { get; set; } = null;
@@ -108,6 +115,27 @@ public class UploadersConfig : SettingsBase<UploadersConfig>
     public string OneTimeSecretAPIKey { get; set; } = "";
 
     #endregion OneTimeSecret
+
+    #region uPaste
+
+    [JsonEncrypt]
+    [YamlEncrypt]
+    public string UpasteUserKey { get; set; } = "";
+    public bool UpasteIsPublic { get; set; }
+
+    #endregion uPaste
+
+    #region Pastie
+
+    public bool PastieIsPublic { get; set; }
+
+    #endregion Pastie
+
+    #region PrivateBin
+
+    public PrivateBinSettings PrivateBinSettings { get; set; } = new();
+
+    #endregion PrivateBin
 
     #endregion Text uploaders
 
@@ -286,6 +314,12 @@ public class UploadersConfig : SettingsBase<UploadersConfig>
 
     #endregion Pomf
 
+    #region Lambda
+
+    public LambdaSettings LambdaSettings { get; set; } = new();
+
+    #endregion Lambda
+
     #region s-ul
     [JsonEncrypt]
     [YamlEncrypt]
@@ -386,6 +420,21 @@ public class UploadersConfig : SettingsBase<UploadersConfig>
 
     #region URL shorteners
 
+    #region bit.ly
+
+    public OAuth2Info? BitlyOAuth2Info { get; set; }
+    public string BitlyDomain { get; set; } = "bit.ly";
+
+    #endregion bit.ly
+
+    #region turl.ca
+
+    [JsonEncrypt]
+    [YamlEncrypt]
+    public string TurlApiKey { get; set; } = "";
+
+    #endregion turl.ca
+
     #region yourls.org
 
     public string YourlsAPIURL { get; set; } = "https://yoursite.com/yourls-api.php";
@@ -449,4 +498,3 @@ public class UploadersConfig : SettingsBase<UploadersConfig>
 
     #endregion Other uploaders
 }
-

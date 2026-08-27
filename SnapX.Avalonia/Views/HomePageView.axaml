@@ -22,30 +22,30 @@
     <Design.DataContext>
         <viewModels1:HomePageViewModel />
     </Design.DataContext>
+    <Grid>
     <ScrollViewer DragDrop.AllowDrop="True">
         <Grid DragDrop.AllowDrop="True">
-            <controls:ItemsRepeater
+            <controls:FAItemsRepeater
                 DragDrop.AllowDrop="True"
                 IsVisible="{Binding recentTasks.Count, Converter={StaticResource CountToBoolean}}"
                 ItemsSource="{Binding recentTasks}"
                 Name="RecentTasksItemsRepeater">
-                <controls:ItemsRepeater.Layout>
-                    <controls:UniformGridLayout
+                <controls:FAItemsRepeater.Layout>
+                    <controls:FAUniformGridLayout
                         ItemsJustification="Start"
                         MinColumnSpacing="2"
                         MinRowSpacing="2"
                         Orientation="Horizontal" />
-                </controls:ItemsRepeater.Layout>
-                <controls:ItemsRepeater.ItemTemplate>
+                </controls:FAItemsRepeater.Layout>
+                <controls:FAItemsRepeater.ItemTemplate>
                     <DataTemplate DataType="models:ListTaskTemplate">
 
                         <ToggleButton
                             Classes="draggable"
-                            ClickMode="Press"
+                            Click="HistoryItem_OnClick"
                             DragDrop.AllowDrop="True"
                             Height="200"
                             Margin="5"
-                            Name="{Binding task.TrayMenuText}"
                             UseLayoutRounding="True"
                             Width="205">
                             <ToolTip.Tip>
@@ -63,18 +63,18 @@
                             </ToolTip.Tip>
                             <ToggleButton.ContextFlyout>
                                 <controls:FAMenuFlyout Opening="PopupFlyoutBase_OnOpening" Placement="Bottom">
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutItem
                                         HotKey="Enter"
                                         IconSource="Repair"
                                         IsVisible="False"
                                         Text="{x:Static core:Lang.UI_ShowErrors}" />
-                                    <controls:MenuFlyoutSeparator IsVisible="False" />
-                                    <controls:MenuFlyoutSubItem
+                                    <controls:FAMenuFlyoutSeparator IsVisible="False" />
+                                    <controls:FAMenuFlyoutSubItem
                                         Cursor="Hand"
                                         IconSource="Open"
                                         Text="{x:Static core:Lang.UI_Open}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_Open_ToolTip}">
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
                                             Click="DynamicOpenURL"
                                             HotKey="Enter"
                                             IconSource="Link"
@@ -82,29 +82,29 @@
                                             Tag="{Binding task.URL}"
                                             Text="{x:Static core:Lang.UI_URL}"
                                             ToolTip.Tip="{x:Static core:Lang.UI_URL_ToolTip}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
                                             Click="DynamicOpenURL"
                                             IconSource="Link"
                                             IsEnabled="{Binding task.ShortenedURL, Converter={StaticResource StringValid}}"
                                             Tag="{Binding task.ShortenedURL}"
                                             Text="{x:Static core:Lang.UI_ShortenedURL}"
                                             ToolTip.Tip="{x:Static core:Lang.UI_ShortenedURL_ToolTip}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
                                             Click="DynamicOpenURL"
                                             IconSource="Link"
                                             IsEnabled="{Binding task.ThumbnailURL, Converter={StaticResource StringValid}}"
                                             Tag="{Binding task.ThumbnailURL}"
                                             Text="{x:Static core:Lang.UI_ThumbnailURL}"
                                             ToolTip.Tip="{x:Static core:Lang.UI_ThumbnailURL_ToolTip}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
                                             Click="DynamicOpenURL"
                                             IconSource="Link"
                                             IsEnabled="{Binding task.DeletionURL, Converter={StaticResource StringValid}}"
                                             Tag="{Binding task.DeletionURL}"
                                             Text="{x:Static core:Lang.UI_DeletionURL}"
                                             ToolTip.Tip="{x:Static core:Lang.UI_DeletionURL_ToolTip}" />
-                                        <controls:MenuFlyoutSeparator />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutSeparator />
+                                        <controls:FAMenuFlyoutItem
                                             Command="{Binding $parent[UserControl].((viewModels1:HomePageViewModel)DataContext).OpenFileCommand}"
                                             CommandParameter="{Binding task.FilePath}"
                                             HotKey="CTRL+Enter"
@@ -113,7 +113,7 @@
                                             Text="{x:Static core:Lang.UI_File}"
                                             ToolTip.Tip="{x:Static core:Lang.UI_File_ToolTip}" />
 
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
                                             Command="{Binding $parent[UserControl].((viewModels1:HomePageViewModel)DataContext).OpenPathCommand}"
                                             CommandParameter="{Binding task.FilePath}"
                                             HotKey="Shift+Enter"
@@ -122,99 +122,126 @@
                                             Tag="{Binding task.FilePath}"
                                             Text="{x:Static core:Lang.UI_FolderName}"
                                             ToolTip.Tip="{x:Static core:Lang.UI_Folder_ToolTip}" />
-                                        <controls:MenuFlyoutItem IsVisible="False" Text="{x:Static core:Lang.UI_ThumbnailFile}" />
+                                        <controls:FAMenuFlyoutItem IsVisible="False" Text="{x:Static core:Lang.UI_ThumbnailFile}" />
 
-                                    </controls:MenuFlyoutSubItem>
-                                    <controls:MenuFlyoutSubItem IconSource="Copy" Text="{x:Static core:Lang.UI_Copy}">
-                                        <controls:MenuFlyoutItem
-                                            Click="DynamicCopy"
+                                    </controls:FAMenuFlyoutSubItem>
+                                    <controls:FAMenuFlyoutSubItem IconSource="Copy" Text="{x:Static core:Lang.UI_Copy}">
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             HotKey="CTRL+C"
                                             IconSource="Link"
                                             IsEnabled="{Binding task.URL, Converter={StaticResource StringValid}}"
-                                            Tag="{Binding task.URL}"
+                                            Tag="CopyURL"
                                             Text="{x:Static core:Lang.UI_URL}" />
-                                        <controls:MenuFlyoutItem
-                                            Click="DynamicCopy"
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Link"
                                             IsEnabled="{Binding task.ShortenedURL, Converter={StaticResource StringValid}}"
-                                            Tag="{Binding task.ShortenedURL}"
+                                            Tag="CopyShortenedURL"
                                             Text="{x:Static core:Lang.UI_ShortenedURL}" />
-                                        <controls:MenuFlyoutItem
-                                            Click="DynamicCopy"
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Link"
                                             IsEnabled="{Binding task.ThumbnailURL, Converter={StaticResource StringValid}}"
-                                            Tag="{Binding task.ThumbnailURL}"
+                                            Tag="CopyThumbnailURL"
                                             Text="{x:Static core:Lang.UI_ThumbnailURL}" />
-                                        <controls:MenuFlyoutItem
-                                            Click="DynamicCopy"
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Link"
                                             IsEnabled="{Binding task.DeletionURL, Converter={StaticResource StringValid}}"
-                                            Tag="{Binding task.DeletionURL}"
+                                            Tag="CopyDeletionURL"
                                             Text="{x:Static core:Lang.UI_DeletionURL}" />
-                                        <controls:MenuFlyoutSeparator />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutSeparator />
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             HotKey="Shift+C"
                                             IconSource="Copy"
-                                            IsEnabled="False"
+                                            IsEnabled="{Binding task.FilePath, Converter={StaticResource IsLocalFilePathConverter}}"
+                                            Tag="CopyFile"
                                             Text="{x:Static core:Lang.UI_File}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             HotKey="Alt+C"
                                             IconSource="ImageCopy"
-                                            IsEnabled="False"
+                                            IsEnabled="{Binding task.FilePath, Converter={StaticResource IsLocalFilePathConverter}}"
+                                            Tag="CopyImage"
                                             Text="{x:Static core:Lang.UI_Image}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Copy"
-                                            IsEnabled="False"
+                                            IsEnabled="{Binding task.FilePath, Converter={StaticResource IsLocalFilePathConverter}}"
+                                            Tag="CopyText"
                                             Text="{x:Static core:Lang.UI_Text}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
                                             IconSource="Copy"
                                             IsEnabled="False"
                                             Text="{x:Static core:Lang.UI_ThumbnailFile}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
                                             IconSource="Copy"
                                             IsEnabled="False"
                                             Text="{x:Static core:Lang.UI_ThumbnailImage}" />
 
-                                        <controls:MenuFlyoutSeparator />
+                                        <controls:FAMenuFlyoutSeparator />
 
-                                        <controls:MenuFlyoutItem
-                                            Click="DynamicCopy"
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Copy"
                                             IsEnabled="{Binding task.FilePath, Converter={StaticResource StringValid}}"
-                                            Tag="{Binding task.FilePath}"
+                                            Tag="CopyFilePath"
                                             Text="{x:Static core:Lang.UI_FilePath}" />
-                                        <controls:MenuFlyoutItem
-                                            Click="DynamicCopy"
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Copy"
                                             IsEnabled="{Binding task.FileName, Converter={StaticResource StringValid}}"
-                                            Tag="{Binding task.FileName}"
+                                            Tag="CopyFileName"
                                             Text="{x:Static core:Lang.UI_FileName}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Copy"
                                             IsEnabled="{Binding task.FileName, Converter={StaticResource StringValid}}"
+                                            Tag="CopyFileNameWithExtension"
                                             Text="{x:Static core:Lang.UI_FileNameWithExtension}" />
-                                        <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutItem
+                                            Click="HistoryAction_OnClick"
                                             IconSource="Copy"
                                             IsEnabled="{Binding task.FilePath, Converter={StaticResource StringValid}}"
+                                            Tag="CopyFolder"
                                             Text="{x:Static core:Lang.UI_FolderName}" />
 
-                                    </controls:MenuFlyoutSubItem>
-                                    <controls:MenuFlyoutItem
+                                        <controls:FAMenuFlyoutSeparator />
+                                        <controls:FAMenuFlyoutSubItem Text="HTML">
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyHTMLLink" Text="Link" />
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyHTMLImage" Text="Image" />
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyHTMLLinkedImage" Text="Linked image" />
+                                        </controls:FAMenuFlyoutSubItem>
+                                        <controls:FAMenuFlyoutSubItem Text="Forum (BBCode)">
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyForumLink" Text="Link" />
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyForumImage" Text="Image" />
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyForumLinkedImage" Text="Linked image" />
+                                        </controls:FAMenuFlyoutSubItem>
+                                        <controls:FAMenuFlyoutSubItem Text="Markdown">
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyMarkdownLink" Text="Link" />
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyMarkdownImage" Text="Image" />
+                                            <controls:FAMenuFlyoutItem Click="HistoryAction_OnClick" Tag="CopyMarkdownLinkedImage" Text="Linked image" />
+                                        </controls:FAMenuFlyoutSubItem>
+
+                                    </controls:FAMenuFlyoutSubItem>
+                                    <controls:FAMenuFlyoutItem
                                         Click="UploadButton_OnClick"
                                         HotKey="CTRL+U"
                                         IconSource="Upload"
                                         IsVisible="{extensions:CanUpload}"
                                         Text="{x:Static core:Lang.UI_Upload}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_Upload_ToolTip}" />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutItem
                                         Click="DownloadButton_OnClick"
                                         HotKey="CTRL+D"
                                         IconSource="Download"
                                         IsVisible="{Binding task.URL, Converter={StaticResource StringValid}}"
                                         Text="{x:Static core:Lang.UI_Download}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_Download_ToolTip}" />
-                                    <controls:MenuFlyoutSeparator />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutSeparator />
+                                    <controls:FAMenuFlyoutItem
                                         Command="{Binding $parent[UserControl].((viewModels1:HomePageViewModel)DataContext).OCRImageCommand}"
                                         CommandParameter="{Binding}"
                                         IconSource="ImageAltText"
@@ -222,36 +249,46 @@
                                         IsVisible="{Binding Source={x:Static core1:FeatureFlags.DisableOCR}, Converter={StaticResource NegateBool}}"
                                         Text="{x:Static core:Lang.UI_OCRImage}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_OCRImage_ToolTip}" />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutItem
+                                        Click="HistoryAction_OnClick"
+                                        IconSource="Preview"
+                                        IsEnabled="{Binding task.FilePath, Converter={StaticResource IsLocalFilePathConverter}}"
+                                        Tag="ShowImagePreview"
+                                        Text="Preview" />
+                                    <controls:FAMenuFlyoutItem
+                                        Click="HistoryAction_OnClick"
+                                        Tag="ShowMoreInfo"
+                                        Text="More information" />
+                                    <controls:FAMenuFlyoutItem
                                         HotKey="CTRL+E"
                                         IconSource="ImageEdit"
                                         IsEnabled="False"
                                         Text="{x:Static core:Lang.UI_EditImage}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_EditImage_ToolTip}" />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutItem
                                         IconSource="Emoji"
                                         IsEnabled="False"
                                         Text="{x:Static core:Lang.UI_BeautifyImage}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_BeautifyImage_ToolTip}" />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutItem
                                         IconSource="Preview"
                                         IsEnabled="False"
                                         Text="{x:Static core:Lang.UI_AddImageEffects}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_AddImageEffects_ToolTip}" />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutItem
                                         Command="{Binding $parent[UserControl].((viewModels1:HomePageViewModel)DataContext).ShortenHistoryItemCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding task.URL, Converter={StaticResource StringValid}}"
                                         Text="{x:Static core:Lang.UI_ShortenURL}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_ShortenURL_ToolTip}">
-                                        <controls:MenuFlyoutItem.IconSource>
+                                        <controls:FAMenuFlyoutItem.IconSource>
                                             <fluent:FluentIconSource
                                                 Icon="LinkEdit"
                                                 IconSize="Size24"
                                                 IconVariant="Regular" />
-                                        </controls:MenuFlyoutItem.IconSource>
-                                    </controls:MenuFlyoutItem>
-                                    <controls:MenuFlyoutItem
+                                        </controls:FAMenuFlyoutItem.IconSource>
+                                    </controls:FAMenuFlyoutItem>
+                                    <controls:FAMenuFlyoutItem
                                         Command="{Binding $parent[UserControl].((viewModels1:HomePageViewModel)DataContext).ShareHistoryItemCommand}"
                                         CommandParameter="{Binding}"
                                         IconSource="Share"
@@ -259,15 +296,15 @@
                                         Text="{x:Static core:Lang.UI_ShareURL}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_ShareURL_ToolTip}" />
 
-                                    <controls:MenuFlyoutSeparator />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutSeparator />
+                                    <controls:FAMenuFlyoutItem
                                         Command="{Binding $parent[UserControl].((viewModels1:HomePageViewModel)DataContext).RemoveHistoryItemCommand}"
                                         CommandParameter="{Binding}"
                                         HotKey="Delete"
                                         IconSource="Remove"
                                         Text="{x:Static core:Lang.UI_RemoveTask}"
                                         ToolTip.Tip="{x:Static core:Lang.UI_RemoveTask_ToolTip}" />
-                                    <controls:MenuFlyoutItem
+                                    <controls:FAMenuFlyoutItem
                                         Command="{Binding $parent[UserControl].((viewModels1:HomePageViewModel)DataContext).DeleteHistoryItemLocallyCommand}"
                                         CommandParameter="{Binding}"
                                         HotKey="Shift+Delete"
@@ -278,15 +315,20 @@
                                 </controls:FAMenuFlyout>
                             </ToggleButton.ContextFlyout>
 
-                            <!-- <ToggleButton.Styles> -->
-                            <!--     <Style Selector="ToggleButton:checked SelectableTextBlock#FileNameText"> -->
-                            <!--         <Setter Property="FontWeight" Value="Bold" /> -->
-                            <!--     </Style> -->
-                            <!--     <Style Selector="ToggleButton:unchecked SelectableTextBlock#FileNameText"> -->
-                            <!--         <Setter Property="FontWeight" Value="SemiBold" /> -->
-                            <!--     </Style> -->
-                            <!-- </ToggleButton.Styles> -->
-                            <Border CornerRadius="3">
+                            <ToggleButton.Styles>
+                                <!-- The card content covers the ToggleButton's
+                                     default checked background, so give a
+                                     selected card an explicit visible border. -->
+                                <Style Selector="ToggleButton:checked Border#HistoryCardBorder">
+                                    <Setter Property="Background" Value="#334F8CFF" />
+                                    <Setter Property="BorderBrush" Value="#5B8CFF" />
+                                    <Setter Property="BorderThickness" Value="3" />
+                                </Style>
+                                <Style Selector="ToggleButton:checked SelectableTextBlock#FileNameText">
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                </Style>
+                            </ToggleButton.Styles>
+                            <Border x:Name="HistoryCardBorder" CornerRadius="3">
                                 <StackPanel>
                                     <Image
                                         Height="150"
@@ -304,8 +346,8 @@
                             </Border>
                         </ToggleButton>
                     </DataTemplate>
-                </controls:ItemsRepeater.ItemTemplate>
-            </controls:ItemsRepeater>
+                </controls:FAItemsRepeater.ItemTemplate>
+            </controls:FAItemsRepeater>
             <TextBlock
                 FontSize="24"
                 FontWeight="Black"
@@ -318,4 +360,24 @@
                 VerticalAlignment="Center" />
         </Grid>
     </ScrollViewer>
+        <Border
+            Background="#EE202020"
+            BorderBrush="#55FFFFFF"
+            BorderThickness="1"
+            CornerRadius="8"
+            HorizontalAlignment="Right"
+            IsVisible="{Binding Notification.IsVisible}"
+            Margin="16"
+            MaxWidth="420"
+            Padding="14"
+            VerticalAlignment="Top">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Margin="0,0,14,0">
+                    <TextBlock FontWeight="Bold" Foreground="White" Text="{Binding Notification.Title}" />
+                    <TextBlock Foreground="White" Opacity="0.85" Text="{Binding Notification.Message}" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Click="DismissNotification_OnClick" Grid.Column="1" Content="×" VerticalAlignment="Top" />
+            </Grid>
+        </Border>
+    </Grid>
 </UserControl>

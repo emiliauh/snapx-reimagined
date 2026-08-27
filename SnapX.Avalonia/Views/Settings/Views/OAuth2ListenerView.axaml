@@ -8,14 +8,14 @@
         HorizontalAlignment="Center"
         Spacing="20"
         VerticalAlignment="Center">
-        <controls:ProgressRing
+        <controls:FAProgressRing
             Height="50"
             IsIndeterminate="True"
             Width="50" />
 
         <TextBlock
             HorizontalAlignment="Center"
-            Text="Waiting for authentication in your browser..."
+            Text="Waiting for authentication in your browser."
             Theme="{StaticResource BodyTextBlockStyle}" />
 
         <Button

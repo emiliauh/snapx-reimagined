@@ -12,10 +12,12 @@ public partial class LinuxAPI : NativeAPI
     private const string LibX11 = "libX11.so.6";
     const string XRandR = "libXrandr.so.2";
     public static readonly IntPtr XA_CARDINAL = 6;
-    internal static bool IsWayland()
+    public static bool IsWayland()
     {
-        var display = Environment.GetEnvironmentVariable("WAYLAND_DISPLAY");
-        return !string.IsNullOrEmpty(display);
+        string? sessionType = Environment.GetEnvironmentVariable("XDG_SESSION_TYPE");
+        if (string.Equals(sessionType, "wayland", StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(sessionType, "x11", StringComparison.OrdinalIgnoreCase)) return false;
+        return !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
     }
 
     internal static bool IsPlasma()
@@ -136,6 +138,7 @@ public partial class LinuxAPI : NativeAPI
         var windows = new List<WindowInfo>();
         lock (X11Sync)
         {
+            EnsureNonFatalX11ErrorHandler();
             var display = XOpenDisplay(null);
             if (display == IntPtr.Zero)
             {
@@ -151,11 +154,24 @@ public partial class LinuxAPI : NativeAPI
                 IntPtr windowsPtr = IntPtr.Zero;
                 uint nchildren = 0;
 
-                int status = XGetWindowProperty(
-                    display, root, stackingAtom, IntPtr.Zero, new IntPtr(1024),
-                    false, (IntPtr)33, // XA_WINDOW
-                    out _, out _, out var nItems, out _, out windowsPtr
-                );
+                // XInternAtom with only_if_exists:true returns None (0) when the
+                // window manager never defined the property. Passing None to
+                // XGetWindowProperty is a protocol error, and Xlib's default
+                // error handler calls exit() on it, so this killed the whole
+                // process rather than throwing. Hyprland's XWayland does not
+                // export _NET_CLIENT_LIST_STACKING, which made every native
+                // Wayland call into GetWindowList abort SnapX with
+                // "X Error of failed request: BadAtom ... Atom id 0x0".
+                int status = 1;
+                IntPtr nItems = IntPtr.Zero;
+                if (stackingAtom != IntPtr.Zero)
+                {
+                    status = XGetWindowProperty(
+                        display, root, stackingAtom, IntPtr.Zero, new IntPtr(1024),
+                        false, (IntPtr)33, // XA_WINDOW
+                        out _, out _, out nItems, out _, out windowsPtr
+                    );
+                }
 
                 // Fallback to XQueryTree if the Window Manager doesn't support the stacking atom
                 if (status != 0 || windowsPtr == IntPtr.Zero || nItems == IntPtr.Zero)
@@ -279,6 +295,40 @@ public partial class LinuxAPI : NativeAPI
     }
     [LibraryImport(LibX11, StringMarshalling = StringMarshalling.Utf16)]
     internal static partial IntPtr XOpenDisplay(string? display);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int XErrorHandlerDelegate(IntPtr display, IntPtr errorEvent);
+
+    [LibraryImport(LibX11)]
+    private static partial IntPtr XSetErrorHandler(IntPtr handler);
+
+    // Xlib's default error handler prints the failed request and calls exit(),
+    // which terminates SnapX from inside an X11 call with no managed exception
+    // and no chance to recover. Any X11 protocol error raised by a query
+    // against Hyprland's XWayland server would therefore kill the whole
+    // application. Keep a rooted, non-fatal handler installed instead.
+    private static XErrorHandlerDelegate? _x11ErrorHandler;
+    private static int _x11ErrorHandlerInstalled;
+
+    internal static void EnsureNonFatalX11ErrorHandler()
+    {
+        if (Interlocked.Exchange(ref _x11ErrorHandlerInstalled, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            // Held in a static field so the GC cannot collect the delegate
+            // while Xlib still holds the native function pointer.
+            _x11ErrorHandler = static (_, _) => 0;
+            XSetErrorHandler(Marshal.GetFunctionPointerForDelegate(_x11ErrorHandler));
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to install a non-fatal X11 error handler.");
+        }
+    }
 
     [LibraryImport(LibX11)]
     internal static partial IntPtr XRootWindow(IntPtr display, int screen_number);

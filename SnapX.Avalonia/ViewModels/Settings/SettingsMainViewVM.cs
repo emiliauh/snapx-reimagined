@@ -24,12 +24,12 @@ public partial class SettingsMainViewVM : ViewModelBase
         RegisterPage<SettingsHomePageViewVM>("Home");
         RegisterPage<CustomUploaderVM>("CustomUploader");
         RegisterPage<ImportExportVM>("ImportExport");
-        // RegisterPage<ScreenRecordOptionsVM>("ScreenRecordOptions");
+        RegisterPage<ScreenRecordOptionsVM>("ScreenRecordOptions");
         RegisterPage<DatabaseVM>("Database");
         RegisterPage<CoreUploaderVM>("BuiltInUploader");
-        RegisterPage<NotImplementedVM>("NotImplemented");
-        RegisterPage<GeneralSettingsVM>("General");
-        // RegisterPage<ApplicationUploadSettingsVM>("Upload");
+        // SettingsCategoryVM is resolved on demand for every ordinary settings
+        // tag. This keeps the navigation surface complete without a placeholder
+        // page for each newly added ShareX option.
         RegisterPage<ApplicationPathSettingsVM>("Paths");
 
         foreach (var category in Enum.GetValues<UploaderCategory>())
@@ -109,11 +109,20 @@ public partial class SettingsMainViewVM : ViewModelBase
         }
         else
         {
-            DebugHelper.WriteLine($"SettingsMainViewVM.Navigate: Unknown destination, defaulting to NotImplemented Page");
+            var categoryVM = Design.IsDesignMode
+                ? new SettingsCategoryVM()
+                : Ioc.Default.GetService<SettingsCategoryVM>();
+
+            if (categoryVM is null)
+            {
+                DebugHelper.WriteLine("SettingsMainViewVM.Navigate: SettingsCategoryVM is not registered.");
+                return;
+            }
+
+            categoryVM.Configure(categoryTag, destinationTag);
             _history.Push(CurrentPage);
-            CurrentPage = (Design.IsDesignMode
-                ? Activator.CreateInstance<NotImplementedVM>()
-                : Ioc.Default.GetService<NotImplementedVM>())!;
+            PageTitle = $"Settings for {Core.SnapXL.AppName} : {categoryVM.PageTitle}";
+            CurrentPage = categoryVM;
         }
     }
     public bool TryGetPage(string tag, out Type type)

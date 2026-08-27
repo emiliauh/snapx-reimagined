@@ -51,15 +51,15 @@ public static class Methods
     public static void ShowWindow(WindowInfo window) => NativeAPI.ShowWindow(window);
     public static void RestoreWindow(WindowInfo window) => ShowWindow(window);
     public static void CopyText(string text) => NativeAPI.CopyText(text);
-    public static async Task<Image?> CaptureScreen(Screen Screen) => await SharpCapture.CaptureScreen(Screen);
-    public static async Task<Image?> CaptureScreen(string name) => await SharpCapture.CaptureScreen(name);
-    public static async Task<Image?> CaptureScreen(Rectangle bounds) => await SharpCapture.CaptureScreen(bounds);
-    public static async Task<Image?> CaptureScreen(Point pos) => await SharpCapture.CaptureScreen(pos);
+    public static async Task<Image?> CaptureScreen(Screen Screen) => await SharpCapture.CaptureScreen(Screen).ConfigureAwait(false);
+    public static async Task<Image?> CaptureScreen(string name) => await SharpCapture.CaptureScreen(name).ConfigureAwait(false);
+    public static async Task<Image?> CaptureScreen(Rectangle bounds) => await SharpCapture.CaptureScreen(bounds).ConfigureAwait(false);
+    public static async Task<Image?> CaptureScreen(Point pos) => await SharpCapture.CaptureScreen(pos).ConfigureAwait(false);
 
-    public static async Task<Image?> CaptureFullscreen() => await SharpCapture.CaptureFullscreen();
-    public static async Task<Image?> CaptureRectangle(Rectangle rect) => await SharpCapture.CaptureRectangle(rect);
-    public static async Task<Image?> CaptureWindow(Point pos) => await SharpCapture.CaptureWindow(pos);
-    public static async Task<Image?> CaptureWindow(WindowInfo WindowInfo) => await SharpCapture.CaptureWindow(WindowInfo);
+    public static async Task<Image?> CaptureFullscreen() => await SharpCapture.CaptureFullscreen().ConfigureAwait(false);
+    public static async Task<Image?> CaptureRectangle(Rectangle rect) => await SharpCapture.CaptureRectangle(rect).ConfigureAwait(false);
+    public static async Task<Image?> CaptureWindow(Point pos) => await SharpCapture.CaptureWindow(pos).ConfigureAwait(false);
+    public static async Task<Image?> CaptureWindow(WindowInfo WindowInfo) => await SharpCapture.CaptureWindow(WindowInfo).ConfigureAwait(false);
     public static async Task<Rectangle> GetWorkingArea() => await SharpCapture.GetWorkingArea();
     public static async Task<Rectangle> GetPrimaryScreen() => await SharpCapture.GetPrimaryScreen();
     public static async Task<Rectangle> GetActiveScreen() => await SharpCapture.GetScreen(GetCursorPosition());
@@ -116,4 +116,3 @@ NativeAPI.GetWindowRectangle(window);
     }
 
 }
-

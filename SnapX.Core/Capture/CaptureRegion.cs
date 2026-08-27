@@ -1,11 +1,15 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-
 using SnapX.Core.Job;
+using SnapX.Core.ScreenCapture;
 
 namespace SnapX.Core.Capture;
 
+/// <summary>
+/// Interactive rectangle capture shared by the hotkey, CLI, and UI paths.
+/// The actual selector is supplied by the desktop frontend through
+/// <see cref="RegionCaptureTasks.SetRegionSelector"/>.
+/// </summary>
 public class CaptureRegion : CaptureBase
 {
     protected static RegionCaptureType lastRegionCaptureType = RegionCaptureType.Default;
@@ -21,125 +25,62 @@ public class CaptureRegion : CaptureBase
         RegionCaptureType = regionCaptureType;
     }
 
-    protected override TaskMetadata Execute(TaskSettings taskSettings)
+    // A selector is UI-owned. Running the synchronous legacy Capture API on a
+    // worker keeps the Avalonia dispatcher free to show and drive the selector.
+    protected override bool ExecuteOnBackgroundThread => true;
+
+    protected override TaskMetadata? Execute(TaskSettings taskSettings)
     {
-        switch (RegionCaptureType)
+        return RegionCaptureType switch
         {
-            default:
-            case RegionCaptureType.Default:
-                return ExecuteRegionCapture(taskSettings);
-            case RegionCaptureType.Light:
-                return ExecuteRegionCaptureLight(taskSettings);
-            case RegionCaptureType.Transparent:
-                return ExecuteRegionCaptureTransparent(taskSettings);
+            RegionCaptureType.Light => ExecuteRegionCapture(taskSettings, RegionCaptureType.Light),
+            RegionCaptureType.Transparent => ExecuteRegionCapture(taskSettings, RegionCaptureType.Transparent),
+            _ => ExecuteRegionCapture(taskSettings, RegionCaptureType.Default)
+        };
+    }
+
+    protected TaskMetadata? ExecuteRegionCapture(TaskSettings taskSettings) =>
+        ExecuteRegionCapture(taskSettings, RegionCaptureType.Default);
+
+    protected TaskMetadata? ExecuteRegionCaptureLight(TaskSettings taskSettings)
+    {
+        DebugHelper.Logger?.Information(
+            "Light region capture is using the cross-platform rectangle selector fallback.");
+        return ExecuteRegionCapture(taskSettings, RegionCaptureType.Light);
+    }
+
+    protected TaskMetadata? ExecuteRegionCaptureTransparent(TaskSettings taskSettings)
+    {
+        DebugHelper.Logger?.Information(
+            "Transparent region capture is using the cross-platform rectangle selector fallback.");
+        return ExecuteRegionCapture(taskSettings, RegionCaptureType.Transparent);
+    }
+
+    private static TaskMetadata? ExecuteRegionCapture(TaskSettings taskSettings, RegionCaptureType captureType)
+    {
+        if (captureType != RegionCaptureType.Default)
+        {
+            DebugHelper.Logger?.Information(
+                "{CaptureType} region capture is using the cross-platform rectangle selector fallback.",
+                captureType);
         }
-    }
 
-    protected TaskMetadata ExecuteRegionCapture(TaskSettings taskSettings)
-    {
-        // Bitmap canvas;
-        // var screenshot = TaskHelpers.GetScreenshot(taskSettings);
-        // screenshot.CaptureCursor = false;
-        //
-        // canvas = screenshot.CaptureFullscreen();
-        //
-        // CursorData cursorData = null;
-        //
-        // if (taskSettings.CaptureSettings.ShowCursor)
-        // {
-        //     cursorData = new CursorData();
-        // }
-        //
-        // using (RegionCaptureForm form = new RegionCaptureForm(mode, taskSettings.CaptureSettingsReference.SurfaceOptions, canvas))
-        // {
-        //     if (cursorData != null && cursorData.IsVisible)
-        //     {
-        //         form.AddCursor(cursorData.ToBitmap(), form.PointToClient(cursorData.DrawPosition));
-        //     }
-        //
-        //     form.ShowDialog();
-        //
-        //     Bitmap result = form.GetResultImage();
-        //
-        //     if (result != null)
-        //     {
-        //         TaskMetadata metadata = new TaskMetadata(result);
-        //
-        //         if (form.IsImageModified)
-        //         {
-        //             AllowAnnotation = false;
-        //         }
-        //
-        //         if (form.Result == RegionResult.Region)
-        //         {
-        //             WindowInfo windowInfo = form.GetWindowInfo();
-        //             metadata.UpdateInfo(windowInfo);
-        //         }
-        //
-        //         lastRegionCaptureType = RegionCaptureType.Default;
-        //
-        //         return metadata;
-        //     }
-        // }
+        RegionCaptureSelection? selection = RegionCaptureTasks.SelectRegionAsync(
+                taskSettings.CaptureSettings.SurfaceOptions,
+                captureType,
+                captureImage: true)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
 
-        return null;
-    }
+        if (selection?.Image is null)
+        {
+            return null;
+        }
 
-    protected TaskMetadata ExecuteRegionCaptureLight(TaskSettings taskSettings)
-    {
-        // Bitmap canvas;
-        // Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
-        //
-        // if (taskSettings.CaptureSettings.SurfaceOptions.ActiveMonitorMode)
-        // {
-        //     canvas = screenshot.CaptureActiveMonitor();
-        // }
-        // else
-        // {
-        //     canvas = screenshot.CaptureFullscreen();
-        // }
-        //
-        // bool activeMonitorMode = taskSettings.CaptureSettings.SurfaceOptions.ActiveMonitorMode;
-        //
-        // using (RegionCaptureLightForm rectangleLight = new RegionCaptureLightForm(canvas, activeMonitorMode))
-        // {
-        //     if (rectangleLight.ShowDialog() == DialogResult.OK)
-        //     {
-        //         Bitmap result = rectangleLight.GetAreaImage();
-        //
-        //         if (result != null)
-        //         {
-        //             lastRegionCaptureType = RegionCaptureType.Light;
-        //
-        //             return new TaskMetadata(result);
-        //         }
-        //     }
-        // }
-
-        return null;
-    }
-
-    protected TaskMetadata ExecuteRegionCaptureTransparent(TaskSettings taskSettings)
-    {
-        // bool activeMonitorMode = taskSettings.CaptureSettings.SurfaceOptions.ActiveMonitorMode;
-        //
-        // using (RegionCaptureTransparentForm rectangleTransparent = new RegionCaptureTransparentForm(activeMonitorMode))
-        // {
-        //     if (rectangleTransparent.ShowDialog() == DialogResult.OK)
-        //     {
-        //         Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
-        //         Bitmap result = rectangleTransparent.GetAreaImage(screenshot);
-        //
-        //         if (result != null)
-        //         {
-        //             lastRegionCaptureType = RegionCaptureType.Transparent;
-        //
-        //             return new TaskMetadata(result);
-        //         }
-        //     }
-        // }
-
-        return null;
+        var metadata = new TaskMetadata(selection.Image);
+        metadata.UpdateInfo(selection.WindowInfo);
+        lastRegionCaptureType = captureType;
+        return metadata;
     }
 }
-

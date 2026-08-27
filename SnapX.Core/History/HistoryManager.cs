@@ -135,7 +135,7 @@ public abstract class HistoryManager
         HistoryItem historyItem = new HistoryItem()
         {
             FileName = "Example.png",
-            FilePath = "/home/romvnly/Pictures/Mister_Brit.png",
+            FilePath = "/home/example/Pictures/example.png",
             DateTime = DateTime.Now,
             Type = "Image",
             Host = "Imgur",
@@ -158,4 +158,3 @@ public abstract class HistoryManager
         Load(filePath);
     }
 }
-
