@@ -105,7 +105,7 @@ public class MSI(IBuildLogger Logger, CommandRunner CommandRunner, FS FileSystem
                 {
                     HelpLink = $"{repo}/issues",
                     UrlInfoAbout = repo,
-                    Contact = "brycengranville+snapx.cpi@outlook.com",
+                    Contact = "https://github.com/emiliauh/snapx-reimagined/issues",
                     Manufacturer = manufacturer,
                     ProductIcon = Path.Combine(config.ProjectsToBuild[0], "Assets", $"{product}_Icon.ico" ),
                     Readme = RTFReadmeContents
@@ -114,7 +114,7 @@ public class MSI(IBuildLogger Logger, CommandRunner CommandRunner, FS FileSystem
                 BannerImage = Path.Combine(config.PackagingDirectory, "banner.bmp"),
                 SignAllFiles = signBinaries
                 // Probably not a good idea to put Linux branding in MSI, right? lmfao
-                // BackgroundImage = Path.Combine(config.PackagingUsrDir,  "share", "icons", "hicolor", "256x256", "apps",  "io.github.SnapXL.SnapX.png" ),
+                // BackgroundImage = Path.Combine(config.PackagingUsrDir,  "share", "icons", "hicolor", "256x256", "apps",  "io.emiliauh.SnapXL.SnapX.png" ),
             };
         project.AddProperty(buildNumberSearch);
         project.LaunchConditions.Add(winVersionCondition);

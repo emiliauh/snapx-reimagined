@@ -1,5 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+using System;
+using System.Linq;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using SnapX.Core;
 
 namespace SnapX.Avalonia.Utils;
@@ -7,19 +13,58 @@ namespace SnapX.Avalonia.Utils;
 /// <summary>
 /// Supplies the xdg_toplevel app_id missing from Avalonia.Wayland 12.1.x.
 ///
-/// Avalonia has a public AppId option under upstream review, but the pinned
-/// runtime exposes only the underlying NWayland call. This bridge is narrowly
-/// version-gated by the concrete backend shape and dispatches through its own
-/// Wayland worker, so it is a no-op on every other platform/backend.
+/// Avalonia's persistent xdg-toplevel wrapper exposes no SetAppId method,
+/// so this bridge reaches the raw NWayland XdgToplevel protocol object
+/// (WindowImpl -> WXdgTopLevelProxy -> WXdgShellSurfaceProxy._target ->
+/// WXdgTopLevel._xdgTopLevel) and invokes its SetAppId through the
+/// wrapper's Wayland-thread marshaller. Reflection targets are pinned with
+/// DynamicDependency because the shipped binary is AOT-compiled with full
+/// IL trimming. This is a no-op on every other platform/backend.
 /// </summary>
 internal static class WaylandAppIdentity
 {
-    private const string AppId = "io.github.SnapXL.SnapX";
+    private const string AppId = "io.emiliauh.SnapXL.SnapX";
+    private const int MaximumAttempts = 10;
+    private const int RetryIntervalMilliseconds = 250;
 
-    public static bool TrySet(TopLevel topLevel)
+    [DynamicDependency(DynamicallyAccessedMemberTypes.NonPublicFields, "Avalonia.Wayland.WindowImpl", "Avalonia.Wayland")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.NonPublicFields, "Avalonia.Wayland.Server.Persistent.WXdgShellSurfaceProxy", "Avalonia.Wayland")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.NonPublicFields, "Avalonia.Wayland.Server.Persistent.WXdgTopLevel", "Avalonia.Wayland")]
+    [DynamicDependency("SetAppId", "NWayland.Protocols.XdgShell.XdgToplevel", "NWayland")]
+    public static void Attach(TopLevel topLevel)
     {
-        if (!OperatingSystem.IsLinux() ||
-            !string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland", StringComparison.OrdinalIgnoreCase))
+        if (!IsWaylandSession())
+        {
+            return;
+        }
+
+        // The xdg surface is configured shortly after the platform window is
+        // created; sending app_id before the first commit is protocol-ideal,
+        // so try immediately and retry briefly until the bridge is ready.
+        if (TrySet(topLevel))
+        {
+            return;
+        }
+
+        int attempts = 1;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(RetryIntervalMilliseconds) };
+        timer.Tick += (_, _) =>
+        {
+            if (TrySet(topLevel) || ++attempts >= MaximumAttempts)
+            {
+                timer.Stop();
+                if (attempts >= MaximumAttempts)
+                {
+                    DebugHelper.WriteLine("Wayland app-id bridge gave up after {0} attempts.", attempts);
+                }
+            }
+        };
+        timer.Start();
+    }
+
+    private static bool TrySet(TopLevel topLevel)
+    {
+        if (!IsWaylandSession())
         {
             return false;
         }
@@ -29,49 +74,72 @@ internal static class WaylandAppIdentity
             object? platformImpl = topLevel.PlatformImpl;
             if (platformImpl?.GetType().FullName != "Avalonia.Wayland.WindowImpl")
             {
-                return false;
+                return NotReady("platform implementation is not the Avalonia Wayland WindowImpl");
             }
 
             const BindingFlags instanceFields = BindingFlags.Instance | BindingFlags.NonPublic;
             object? surfaceProxy = platformImpl.GetType()
                 .GetField("_surfaceProxy", instanceFields)
                 ?.GetValue(platformImpl);
-            object? persistentSurface = surfaceProxy?.GetType()
-                .GetField("_target", instanceFields)
-                ?.GetValue(surfaceProxy);
-            object? xdgTopLevel = persistentSurface?.GetType()
-                .GetField("_xdgTopLevel", instanceFields)
-                ?.GetValue(persistentSurface);
-            MethodInfo? setAppId = xdgTopLevel?.GetType().GetMethod("SetAppId", [typeof(string)]);
-            Delegate? marshaller = surfaceProxy?.GetType()
-                .GetField("_marshaller", instanceFields)
-                ?.GetValue(surfaceProxy) as Delegate;
-
-            if (xdgTopLevel is null || setAppId is null || marshaller is null)
+            if (surfaceProxy is null)
             {
-                DebugHelper.WriteLine("Wayland app-id bridge was not ready; retrying after the main window opens.");
-                return false;
+                return NotReady("WindowImpl._surfaceProxy");
             }
 
-            // WXdgTopLevelProxy is deliberately a UI-to-Wayland-thread bridge.
-            // Use its private dispatcher rather than invoking NWayland from the
-            // Avalonia UI thread, which would race the connection event loop.
+            object? persistentTopLevel = surfaceProxy.GetType()
+                .GetField("_target", instanceFields)
+                ?.GetValue(surfaceProxy);
+           if (persistentTopLevel is null)
+           {
+                var fields = string.Join(", ", surfaceProxy.GetType()
+                    .GetFields(instanceFields)
+                    .Select(f => f.FieldType.FullName + " " + f.Name));
+                return NotReady("proxy._target (fields: " + fields + ")");
+           }
+
+            object? xdgTopLevel = persistentTopLevel.GetType()
+                .GetField("_xdgTopLevel", instanceFields)
+                ?.GetValue(persistentTopLevel);
+            if (xdgTopLevel is null)
+            {
+                return NotReady("persistent top level._xdgTopLevel");
+            }
+
+            MethodInfo? setAppId = xdgTopLevel.GetType().GetMethod("SetAppId", [typeof(string)]);
+            if (setAppId is null)
+            {
+                return NotReady("NWayland XdgToplevel.SetAppId");
+            }
+
+            Delegate? marshaller = surfaceProxy.GetType()
+                .GetField("_marshaller", instanceFields)
+                ?.GetValue(surfaceProxy) as Delegate;
+            if (marshaller is null)
+            {
+                return NotReady("proxy._marshaller");
+            }
+
+            // WXdgShellSurfaceProxy._marshaller is deliberately a
+            // UI-to-Wayland-thread bridge. Use it rather than invoking
+            // NWayland from the Avalonia UI thread, which would race the
+            // connection event loop. Its second parameter is the private
+            // WaylandDispatchPriority enum; resolve it dynamically.
+            Type priorityType = marshaller.GetType().GetMethod("Invoke")!
+                .GetParameters()[1].ParameterType;
+            object priority = Enum.Parse(priorityType, "Normal");
             Action request = () =>
             {
                 try
                 {
                     setAppId.Invoke(xdgTopLevel, [AppId]);
+                    DebugHelper.WriteLine($"Requested native Wayland app_id: {AppId}");
                 }
                 catch (Exception ex)
                 {
                     DebugHelper.WriteException(ex, "Failed to send Wayland xdg_toplevel app_id");
                 }
             };
-            Type priorityType = marshaller.GetType().GetMethod("Invoke")!
-                .GetParameters()[1].ParameterType;
-            object priority = Enum.Parse(priorityType, "Normal");
             marshaller.DynamicInvoke(request, priority);
-            DebugHelper.WriteLine($"Requested native Wayland app_id: {AppId}");
             return true;
         }
         catch (Exception ex)
@@ -82,4 +150,15 @@ internal static class WaylandAppIdentity
             return false;
         }
     }
+
+    private static bool NotReady(string missing)
+    {
+        DebugHelper.WriteLine($"Wayland app-id bridge was not ready ({missing}); retrying.");
+        return false;
+    }
+
+    private static bool IsWaylandSession() =>
+        OperatingSystem.IsLinux() &&
+        (string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland", StringComparison.OrdinalIgnoreCase) ||
+         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
 }

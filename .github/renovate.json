@@ -30,7 +30,7 @@
 			  "enabled": false
 		  },
           {
-            "description": "Merge Brycen's amazing packages soon as possible",
+            "description": "Merge maintained BrycensRanch packages soon as possible",
             "matchDepNames": ["*BrycensRanch*", "WaylandSharper"],
             "minimumReleaseAge": "0 minutes"
           },

@@ -1,4 +1,4 @@
-id: io.github.SnapXL.SnapX
+id: io.emiliauh.SnapXL.SnapX
 runtime: org.freedesktop.Platform
 runtime-version: "25.08"
 sdk: org.freedesktop.Sdk
@@ -45,8 +45,8 @@ modules:
       - rm ${FLATPAK_DEST}/bin/snapx ${FLATPAK_DEST}/lib/snapx/snapx # Remove duplicate CLI, available in snapx-ui binary already.
     sources:
       - type: git
-        url: https://github.com/SnapXL/SnapX.git
-        commit: 2dd8d4fb3aaf280d0ff6b18ad5710f4c04fc0593
+        url: https://github.com/emiliauh/snapx-reimagined.git
+        commit: 62a5e5b43e39a229b41a0eb54b90a05d0acd7da7
       - sources.json
       - build-sources.json
   # XRandr is a required dependency.

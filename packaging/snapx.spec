@@ -1,7 +1,7 @@
 #
 # spec file for package snapx, and snapx-ui
 #
-# Copyright (c) 2024-2025 Brycen Granville <brycengranville@outlook.com>
+# Copyright (c) 2024-2025 Brycen Granville; 2026 emiliauh
 #
 # All modifications and additions to the file contributed by third parties
 # remain the property of their copyright owners, unless otherwise agreed
@@ -12,7 +12,7 @@
 # license that conforms to the Open Source Definition (Version 1.9)
 # published by the Open Source Initiative.
 
-# Please submit bugfixes or comments via https://github.com/SnapXL/SnapX/issues
+# Please submit bugfixes or comments via https://github.com/emiliauh/snapx-reimagined/issues
 
 
 # This spec requires internet access! This is only meant to be built on GitHub Actions at the moment!
@@ -31,7 +31,7 @@
     %{!?build_with_aot:%global build_with_aot false}
 %endif
 
-%define github_path %{?github_repo}%{!?github_repo:SnapXL/SnapX}
+%define github_path %{?github_repo}%{!?github_repo:emiliauh/snapx-reimagined}
 
 %define repo_name   %(basename %{github_path})
 
@@ -46,7 +46,7 @@ Name:           snapx
 Version:        %{version}
 Release:        %{base_release}.%{?gitversion}%{?dist}
 Summary:        Screenshot tool that handles images, text, and video.
-Packager:       Brycen G <brycengranville@outlook.com>
+Packager:       emiliauh <emiliauh@users.noreply.github.com>
 
 License:        GPL-3.0-or-later
 URL:            https://github.com/%{github_path}
@@ -158,8 +158,7 @@ if [ "$1" -eq 1 ]; then
     echo ""
     echo "  If you enjoy the project, please consider:                  "
     echo "  ⭐ Starring on GitHub: https://github.com/%{github_path}"
-    echo "  🚲 Donating to help me fund my bus fare and keep my scooter charged!"
-    echo "     https://liberapay.com/BrycensRanch"
+    echo "  Sharing feedback and bug reports on the issue tracker."
     echo "--------------------------------------------------------------"
 fi
 
@@ -184,12 +183,12 @@ fi
 %{_bindir}/%{name}-ui
 %{_prefix}/lib/%{name}/libHarfBuzzSharp.so
 %{_prefix}/lib/%{name}/libSkiaSharp.so
-%{_datadir}/applications/io.github.SnapXL.SnapX.desktop
-%{_datadir}/metainfo/io.github.SnapXL.SnapX.metainfo.xml
-%{_datadir}/icons/hicolor/48x48/apps/io.github.SnapXL.SnapX.png
-%{_datadir}/icons/hicolor/128x128/apps/io.github.SnapXL.SnapX.png
-%{_datadir}/icons/hicolor/256x256/apps/io.github.SnapXL.SnapX.png
-%{_datadir}/icons/hicolor/scalable/apps/io.github.SnapXL.SnapX.svg
+%{_datadir}/applications/io.emiliauh.SnapXL.SnapX.desktop
+%{_datadir}/metainfo/io.emiliauh.SnapXL.SnapX.metainfo.xml
+%{_datadir}/icons/hicolor/48x48/apps/io.emiliauh.SnapXL.SnapX.png
+%{_datadir}/icons/hicolor/128x128/apps/io.emiliauh.SnapXL.SnapX.png
+%{_datadir}/icons/hicolor/256x256/apps/io.emiliauh.SnapXL.SnapX.png
+%{_datadir}/icons/hicolor/scalable/apps/io.emiliauh.SnapXL.SnapX.svg
 %license LICENSE.md
 
 
@@ -200,6 +199,6 @@ fi
 
 
 %changelog
-* Mon Nov 18 2024 Brycen G <brycengranville@outlook.com> - 0.0.0-1
+* Mon Nov 18 2024 Brycen G - 0.0.0-1
 - Initial package
 %endif

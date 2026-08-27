@@ -15,7 +15,7 @@ internal sealed class PortalGlobalHotkeyBackend : IHotkeyBackend
 {
     private const string Destination = "org.freedesktop.portal.Desktop";
     private const string DesktopPath = "/org/freedesktop/portal/desktop";
-    private const string DefaultApplicationId = "io.github.SnapXL.SnapX";
+    private const string DefaultApplicationId = "io.emiliauh.SnapXL.SnapX";
     private const string ApplicationIdEnvironmentVariable = "SNAPX_DESKTOP_APP_ID";
 
     private readonly SemaphoreSlim lifecycleGate = new(1, 1);

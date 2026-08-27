@@ -38,6 +38,9 @@
     <!-- During development on Windows though, this is very helpful. -->
     <OutputType>WinExe</OutputType>
   </PropertyGroup>
+  <ItemGroup Condition="'$(PublishAot)' == 'true'">
+    <TrimmerRootDescriptor Include="$(MSBuildThisFileDirectory)../build/SnapX.Trimming.Roots.xml" />
+  </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <AvaloniaResource Include="*.ico" />

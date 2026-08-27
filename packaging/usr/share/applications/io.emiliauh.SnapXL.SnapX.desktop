@@ -1,22 +1,24 @@
-# Copyright 2024-2025 BrycensRanch <brycengranville@outlook.com> & ShareX Team
+# Copyright 2024-2025 BrycensRanch & ShareX Team; 2026 emiliauh
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 [Desktop Entry]
 Name=SnapX
 Comment=Capture, share, and boost productivity.
 Exec=snapx-ui %U
-Icon=io.github.SnapXL.SnapX
+Icon=io.emiliauh.SnapXL.SnapX
 Terminal=false
 Type=Application
+X-Author=emiliauh
+X-ProjectHomepage=https://github.com/emiliauh/snapx-reimagined
 GenericName=Screenshot tool & sharing tool
 Categories=Graphics;Utility
 StartupNotify=true
 # Associates the toplevel's app_id/WM_CLASS with this entry. SnapX sets both
-# the Wayland app_id and the X11 WM_CLASS to io.github.SnapXL.SnapX, so a
+# the Wayland app_id and the X11 WM_CLASS to io.emiliauh.SnapXL.SnapX, so a
 # shell that maps a running window back to its desktop entry (for an icon, a
 # name, or a task list) resolves it here. Without this key that lookup falls
 # back to matching the entry's file name against the class, which is fragile.
-StartupWMClass=io.github.SnapXL.SnapX
+StartupWMClass=io.emiliauh.SnapXL.SnapX
 Keywords=ShareX;sharenix;sharexen;share;imgur;ocr;ftp;gif;screenshot
 MimeType=image/png;image/jpeg;image/jpg;image/gif;image/tiff;image/bmp;image/x-raw;video/mp4;video/x-msvideo;video/x-flv;video/webm;application/zip;application/x-7z-compressed;application/x-sxcu;video/x-matroska;
 Actions=uploadWithSnapX
@@ -25,5 +27,5 @@ X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
 
 [Desktop Action uploadWithSnapX]
 Name=Upload with SnapX
-Icon=io.github.SnapXL.SnapX
+Icon=io.emiliauh.SnapXL.SnapX
 Exec=snapx-ui %U

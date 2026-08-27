@@ -38,7 +38,7 @@ All this data helps to improve SnapX as it is [free software](https://www.fsf.or
 
 ## Services Used
 
-All the services used for telemetry are transparent about their code. [None of our telemetry code is secret](https://github.com/SnapXL/SnapX/blob/2b1843d973424d737c195664efdadc75f21122a4/SnapX.Core/SnapX.cs#L326).
+All the services used for telemetry are transparent about their code. The telemetry integrations can be reviewed in the SnapX.Core project source.
 
 - [Sentry](https://github.com/getsentry/sentry) - Application crash information & traces & performance analytics, i.e., specific code function taking a long time)
 - [Aptabase](https://github.com/aptabase/aptabase) - Usage analytics, i.e., how many users are using a specific function, such as uploading)

@@ -14,19 +14,15 @@ description: |
   Cross-platform OCR powered by PaddleOCR that rivals PowerToys OCR, TesseractOCR, & Windows 10 built in OCR in accuracy
 version: '0.5.0'
 license: GPL-3.0-or-later
-source-code: "https://github.com/SnapXL/SnapX"
+source-code: "https://github.com/emiliauh/snapx-reimagined"
 adopt-info: ui-snapx
 grade: devel
 base: core24
 confinement: strict
 compression: lzo
-contact: "brycengranville+snapcraft.snapx@outlook.com"
-issues: "https://github.com/SnapXL/SnapX/issues"
-icon: "./usr/share/icons/256x256/apps/io.github.SnapXL.SnapX.png"
-donation:
-  - https://liberapay.com/BrycensRanch
-  - https://ko-fi.com/BrycensRanch
-  - https://github.com/sponsors/BrycensRanch
+contact: "emiliauh@users.noreply.github.com"
+issues: "https://github.com/emiliauh/snapx-reimagined/issues"
+icon: "./usr/share/icons/256x256/apps/io.emiliauh.SnapXL.SnapX.png"
 # By default, snaps have an epoch of ‘0’. When a new version breaks data compatibility with this old version, incrementing the epoch in the new release stops those old users automatically refreshing to the new version.
 epoch: "0"
 
@@ -59,7 +55,7 @@ apps:
     extensions: [gnome]
     command: usr/lib/snapx/snapx-ui
     # Snap has a issue detecting our icons and thus produces an error. Working on it.
-    desktop: usr/share/applications/io.github.SnapXL.SnapX.desktop
+    desktop: usr/share/applications/io.emiliauh.SnapXL.SnapX.desktop
     environment:
       LD_LIBRARY_PATH: $SNAP/ffmpeg-platform/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR:$LD_LIBRARY_PATH
       PATH: $SNAP/ffmpeg-platform/usr/bin:$SNAP/bin:$PATH
@@ -87,7 +83,7 @@ apps:
 
 parts:
   ui-snapx:
-    parse-info: [usr/share/metainfo/io.github.SnapXL.SnapX.metainfo.xml]
+    parse-info: [usr/share/metainfo/io.emiliauh.SnapXL.SnapX.metainfo.xml]
     plugin: nil
     override-build: |
       ./build.sh install --no-color --no-extended-chars --prefix /usr --dest-dir $SNAPCRAFT_PART_INSTALL

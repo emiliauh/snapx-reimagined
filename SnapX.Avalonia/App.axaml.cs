@@ -1571,11 +1571,7 @@ public partial class App : Application
                     }
 
                     var Window = new MainWindow(vm);
-                    bool appIdSet = WaylandAppIdentity.TrySet(Window);
-                    if (!appIdSet)
-                    {
-                        Window.Opened += (_, _) => WaylandAppIdentity.TrySet(Window);
-                    }
+                    WaylandAppIdentity.Attach(Window);
                     Window.Show();
                     DebugHelper.WriteLine("MainWindow startup time: {0} ms", SnapX.getStartupTime());
 

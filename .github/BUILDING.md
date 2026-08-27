@@ -140,7 +140,7 @@ To successfully compile SnapX from source, ensure your system meets the followin
 * **Disk Space:** At least **15 GiB** of free disk space is recommended, preferably on a Solid State Drive (SSD) for optimal compilation speed.
 
 ```bash
-git clone https://github.com/SnapXL/SnapX
+git clone https://github.com/emiliauh/snapx-reimagined
 cd SnapX
 ./build.sh # Linux/macOS
 .\build.ps1 # Windows

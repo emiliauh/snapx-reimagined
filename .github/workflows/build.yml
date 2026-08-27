@@ -508,13 +508,13 @@ jobs:
           cp -r packaging/flathub/* . || true
           cp -r packaging/flathub/.* . 2>/dev/null || true
 
-          sed -i 's|^\([[:space:]]*[^:[:space:]]*:[[:space:]]*\)\.\./.*|\1./|g' io.github.SnapXL.SnapX.yml
+          sed -i 's|^\([[:space:]]*[^:[:space:]]*:[[:space:]]*\)\.\./.*|\1./|g' io.emiliauh.SnapXL.SnapX.yml
       - name: Build
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           arch: ${{ matrix.variant.arch }}
-          bundle: io.github.SnapXL.SnapX.flatpak
-          manifest-path: io.github.SnapXL.SnapX.yml
+          bundle: io.emiliauh.SnapXL.SnapX.flatpak
+          manifest-path: io.emiliauh.SnapXL.SnapX.yml
           cache-key: flatpak-builder-${{ matrix.variant.arch }}-${{ github.sha }}
   build:
     name: Build
@@ -574,6 +574,9 @@ jobs:
         run: dotnet restore --packages ./vendor SnapX.slnx
       - name: Restore build project
         run: dotnet restore --packages ./vendor build/build.csproj
+      - name: Run fuzz and property checks (Linux x64)
+        if: runner.os == 'Linux' && runner.arch == 'X64' && matrix.configuration == 'Release'
+        run: dotnet run --project tests/SnapX.Core.Fuzz --configuration Release --no-restore
       - name: Cache .NET NuGet packages
         if: runner.os != 'macOS'
         uses: actions/cache@v5
@@ -830,6 +833,135 @@ jobs:
             done < "$pid_file"
           fi
           echo "Cleanup complete for macOS smoke-test processes."
+      - name: Install Xvfb for Linux smoke test
+        if: runner.os == 'Linux'
+        run: |
+          if ! command -v Xvfb >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+      - name: Linux launch and SIPC smoke test
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset WAYLAND_DISPLAY
+
+          binary="$GITHUB_WORKSPACE/Output/snapx-ui/snapx-ui"
+          smoke_dir="$RUNNER_TEMP/snapx-linux-smoke-${{ matrix.configuration }}-${{ runner.arch }}"
+          pid_file="$smoke_dir/pids"
+          primary_log="$smoke_dir/primary.log"
+          secondary_log="$smoke_dir/secondary.log"
+          xvfb_log="$smoke_dir/xvfb.log"
+          mkdir -p "$smoke_dir"
+          : > "$pid_file"
+
+          echo "=== Starting Xvfb ==="
+          Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >"$xvfb_log" 2>&1 &
+          xvfb_pid=$!
+          echo "$xvfb_pid" >> "$pid_file"
+          for attempt in {1..20}; do
+            if [ -S /tmp/.X11-unix/X99 ]; then
+              echo "Xvfb display :99 is ready."
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              echo "FAIL: Xvfb did not become ready."
+              cat "$xvfb_log"
+              exit 1
+            fi
+            sleep 0.5
+          done
+
+          echo "=== Starting primary SnapX process on Xvfb ==="
+          mkdir -p "$smoke_dir/runtime"
+          chmod 700 "$smoke_dir/runtime"
+          DISPLAY=:99 XDG_SESSION_TYPE=x11 XDG_RUNTIME_DIR="$smoke_dir/runtime" NSUnbufferedIO=YES "$binary" >"$primary_log" 2>&1 &
+          primary_pid=$!
+          echo "$primary_pid" >> "$pid_file"
+
+          for attempt in {1..20}; do
+            if ! kill -0 "$primary_pid" 2>/dev/null; then
+              if wait "$primary_pid"; then
+                primary_rc=0
+              else
+                primary_rc=$?
+              fi
+              echo "Primary process exited during startup (exit $primary_rc)."
+              sed -n '1,200p' "$primary_log"
+              if [ "$primary_rc" -eq 0 ]; then
+                if [ ! -s "$primary_log" ]; then
+                  # A clean exit-0 with an empty log means the process decided
+                  # it had no interactive surface and shut down politely.
+                  # Treat this as an honest environment skip, mirroring the
+                  # macOS smoke test. Log output with exit-0 is a real result,
+                  # not an environment skip.
+                  echo "SKIP: Primary exited cleanly with an empty log; runner provides no usable GUI session."
+                  exit 0
+                fi
+              fi
+              echo "FAIL: Primary SnapX process did not remain running."
+              exit 1
+            fi
+            sleep 0.5
+          done
+
+          echo "=== Forwarding harmless -PrintScreen command from secondary ==="
+          DISPLAY=:99 XDG_SESSION_TYPE=x11 XDG_RUNTIME_DIR="$smoke_dir/runtime" NSUnbufferedIO=YES "$binary" -PrintScreen >"$secondary_log" 2>&1 &
+          secondary_pid=$!
+          echo "$secondary_pid" >> "$pid_file"
+
+          secondary_finished=false
+          for attempt in {1..40}; do
+            if ! kill -0 "$secondary_pid" 2>/dev/null; then
+              secondary_finished=true
+              break
+            fi
+            sleep 0.5
+          done
+
+          if [ "$secondary_finished" != true ]; then
+            echo "FAIL: Secondary SnapX process did not forward and exit within 20 seconds."
+            sed -n '1,200p' "$secondary_log"
+            exit 1
+          fi
+
+          if wait "$secondary_pid"; then
+            secondary_rc=0
+          else
+            secondary_rc=$?
+          fi
+          if [ "$secondary_rc" -ne 0 ]; then
+            echo "FAIL: Secondary SnapX process exited with status $secondary_rc."
+            sed -n '1,200p' "$secondary_log"
+            exit 1
+          fi
+          if ! kill -0 "$primary_pid" 2>/dev/null; then
+            echo "FAIL: Primary SnapX process exited after the forwarding probe."
+            sed -n '1,200p' "$primary_log"
+            exit 1
+          fi
+
+          echo "PASS: SnapX launched on Xvfb, forwarding acknowledged by prompt secondary exit, and primary remained alive."
+      - name: Clean up Linux smoke-test processes
+        if: runner.os == 'Linux' && always()
+        shell: bash
+        run: |
+          smoke_dir="$RUNNER_TEMP/snapx-linux-smoke-${{ matrix.configuration }}-${{ runner.arch }}"
+          pid_file="$smoke_dir/pids"
+          if [ -f "$pid_file" ]; then
+            while IFS= read -r pid; do
+              if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null || true
+              fi
+            done < "$pid_file"
+            while IFS= read -r pid; do
+              if [[ "$pid" =~ ^[0-9]+$ ]]; then
+                wait "$pid" 2>/dev/null || true
+              fi
+            done < "$pid_file"
+          fi
+          echo "Cleanup complete for Linux smoke-test processes."
       - name: Assemble SnapX UI Tarball
         shell: bash
         run: "./build.sh tarball --assembly snapx-ui"

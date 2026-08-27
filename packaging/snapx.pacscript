@@ -1,20 +1,20 @@
-# Maintainer: Brycen Granville <brycengranville@outlook.com>
+# Maintainer: emiliauh <emiliauh@users.noreply.github.com>
 pkgbase=snapx-core
 pkgname=(snapx-core snapx snapx-ui)
 pkgver=0.5.0
 pkgrel=1
 pkgdesc="Screenshot tool that handles images, text, and video (fork of ShareX)"
 arch=('x86_64' 'aarch64' 'armv7h')
-url="https://github.com/SnapXL/SnapX"
+url="https://github.com/emiliauh/snapx-reimagined"
 license=('GPL-3.0-or-later')
 makedepends=(
     'git'
     'clang'
     'zlib1g'
 )
-source=("$pkgbase::git+https://github.com/SnapXL/SnapX.git#branch=develop")
+source=("$pkgbase::git+https://github.com/emiliauh/snapx-reimagined.git#branch=main")
 sha256sums=('SKIP')
-maintainer=("Brycen Granville <brycengranville@outlook.com>")
+maintainer=("emiliauh <emiliauh@users.noreply.github.com>")
 external_connection=true
 
 pkgver() {

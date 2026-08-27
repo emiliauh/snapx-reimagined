@@ -1,0 +1,18 @@
+<!-- Explicit trimmer roots for the Wayland app-id bridge.
+     WaylandAppIdentity reflects over private Avalonia.Wayland and
+     NWayland members that no static call path keeps alive under
+     PublishAot + TrimMode=full. Root them so app_id can be set on
+     Linux Wayland sessions (tray/Dock/taskbar identification). -->
+<linker>
+  <assembly fullname="Avalonia.Wayland">
+    <type fullname="Avalonia.Wayland.WindowImpl" preserve="fields" />
+    <type fullname="Avalonia.Wayland.Server.Persistent.WXdgShellSurfaceProxy" preserve="all" />
+    <type fullname="Avalonia.Wayland.Server.Persistent.WXdgTopLevelProxy" preserve="all" />
+    <type fullname="Avalonia.Wayland.Server.Persistent.WXdgTopLevel" preserve="all" />
+  </assembly>
+  <assembly fullname="NWayland">
+    <type fullname="NWayland.Protocols.XdgShell.XdgToplevel">
+      <method name="SetAppId" />
+    </type>
+  </assembly>
+</linker>
