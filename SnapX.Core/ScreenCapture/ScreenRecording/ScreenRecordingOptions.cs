@@ -5,6 +5,9 @@
 using System.Globalization;
 using System.Text;
 using SixLabors.ImageSharp;
+#if WINDOWS
+using Vortice.DXGI;
+#endif
 
 namespace SnapX.Core.ScreenCapture.ScreenRecording;
 
@@ -64,6 +67,12 @@ public class ScreenRecordingOptions
             return null;
         }
 
+        if (IsRecording && FFmpeg.IsVideoSourceSelected && OperatingSystem.IsMacOS())
+        {
+            throw new PlatformNotSupportedException(
+                "Generated FFmpeg desktop-capture commands are not available on macOS. Configure custom FFmpeg commands that use avfoundation.");
+        }
+
         StringBuilder args = new StringBuilder();
 
         string framerate = isCustom ? "$fps$" : FPS.ToString();
@@ -73,7 +82,8 @@ public class ScreenRecordingOptions
             if (FFmpeg.IsVideoSourceSelected)
             {
                 if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase)
-                    && !OperatingSystem.IsLinux())
+                    && !OperatingSystem.IsLinux()
+                    && !OperatingSystem.IsMacOS())
                 {
                     if (FFmpeg.IsAudioSourceSelected)
                     {
@@ -128,46 +138,35 @@ public class ScreenRecordingOptions
                 }
                 else if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.DDAGrab.Value, StringComparison.OrdinalIgnoreCase))
                 {
+                    DdaCaptureTarget? target = TryResolveDdaCaptureTarget(CaptureArea);
+
+                    if (target is not null)
+                    {
+                        // Experimental: A Windows run must confirm DDA behavior on mixed-GPU and rotated-monitor systems.
+                        args.Append($"-init_hw_device d3d11va=snapx_dda:{target.AdapterIndex} ");
+                        args.Append("-filter_hw_device snapx_dda ");
+                    }
+
                     if (FFmpeg.IsAudioSourceSelected)
                     {
                         AppendInputDevice(args, "dshow", true);
                         args.Append($"-i audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
                     }
 
-                    // Screen[] screens = Screen.AllScreens.OrderBy(x => !x.Primary).ToArray();
-                    int monitorIndex = 0;
-                    // Rectangle captureArea = screens[0].Bounds;
-                    int maxIntersectionArea = 0;
-
-                    // for (int i = 0; i < screens.Length; i++)
-                    // {
-                    //     Screen screen = screens[i];
-                    //     Rectangle intersection = Rectangle.Intersect(screen.Bounds, CaptureArea);
-                    //     int intersectionArea = intersection.Width * intersection.Height;
-                    //
-                    //     if (intersectionArea > maxIntersectionArea)
-                    //     {
-                    //         maxIntersectionArea = intersectionArea;
-                    //
-                    //         monitorIndex = i;
-                    //         captureArea = new Rectangle(intersection.X - screen.Bounds.X, intersection.Y - screen.Bounds.Y, intersection.Width, intersection.Height);
-                    //     }
-                    // }
-                    //
-                    // if (FFmpeg.IsEvenSizeRequired)
-                    // {
-                    //     captureArea = CaptureHelpers.EvenRectangleSize(captureArea);
-                    // }
-
                     // https://ffmpeg.org/ffmpeg-filters.html#ddagrab
                     AppendInputDevice(args, "lavfi", false);
                     args.Append("-i ddagrab=");
-                    args.Append($"output_idx={monitorIndex}:"); // DXGI Output Index to capture.
+                    args.Append($"output_idx={target?.OutputIndex ?? 0}:"); // Select the output on the D3D11 adapter.
                     args.Append($"draw_mouse={DrawCursor.ToString().ToLowerInvariant()}:"); // Whether to draw the mouse cursor.
                     args.Append($"framerate={framerate}:"); // Framerate at which the desktop will be captured.
-                    // args.Append($"offset_x={captureArea.X}:"); // Horizontal offset of the captured video.
-                    //args.Append($"offset_y={captureArea.Y}:"); // Vertical offset of the captured video.
-                    //args.Append($"video_size={captureArea.Width}x{captureArea.Height}:"); // Specify the size of the captured video.
+
+                    if (target is not null)
+                    {
+                        args.Append($"offset_x={target.LocalRectangle.X}:");
+                        args.Append($"offset_y={target.LocalRectangle.Y}:");
+                        args.Append($"video_size={target.LocalRectangle.Width}x{target.LocalRectangle.Height}:");
+                    }
+
                     args.Append("output_fmt=bgra"); // Desired filter output format.
 
                     if (FFmpeg.VideoCodec != FFmpegVideoCodec.h264_nvenc && FFmpeg.VideoCodec != FFmpegVideoCodec.hevc_nvenc)
@@ -332,6 +331,162 @@ public class ScreenRecordingOptions
 
         return args.ToString();
     }
+
+    private sealed record DdaOutput(
+        int AdapterIndex,
+        int OutputIndex,
+        string Name,
+        Rectangle Bounds);
+
+    private sealed record DdaCaptureTarget(
+        int AdapterIndex,
+        int OutputIndex,
+        Rectangle LocalRectangle);
+
+    private DdaCaptureTarget? TryResolveDdaCaptureTarget(Rectangle requested)
+    {
+#if WINDOWS
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            List<DdaOutput> outputs = EnumerateDdaOutputs();
+            if (outputs.Count == 0)
+            {
+                DebugHelper.WriteLine(
+                    "DDA output resolution found no attached DXGI outputs; using adapter 0, output 0 without a crop.");
+                return null;
+            }
+
+            int centerX = requested.X + requested.Width / 2;
+            int centerY = requested.Y + requested.Height / 2;
+            var candidates = outputs
+                .Select(output => new
+                {
+                    Output = output,
+                    Intersection = Rectangle.Intersect(requested, output.Bounds)
+                })
+                .Select(candidate => new
+                {
+                    candidate.Output,
+                    candidate.Intersection,
+                    Area = (long)Math.Max(0, candidate.Intersection.Width) *
+                        Math.Max(0, candidate.Intersection.Height),
+                    ContainsCenter = candidate.Output.Bounds.Contains(centerX, centerY)
+                })
+                .Where(candidate => candidate.Area > 0)
+                .OrderByDescending(candidate => candidate.Area)
+                .ThenByDescending(candidate => candidate.ContainsCenter)
+                .ThenBy(candidate => candidate.Output.AdapterIndex)
+                .ThenBy(candidate => candidate.Output.OutputIndex)
+                .ToList();
+
+            DdaOutput chosen;
+            Rectangle clipped;
+            long overlapArea;
+            if (candidates.Count > 0)
+            {
+                chosen = candidates[0].Output;
+                clipped = candidates[0].Intersection;
+                overlapArea = candidates[0].Area;
+            }
+            else
+            {
+                chosen = outputs[0];
+                clipped = chosen.Bounds;
+                overlapArea = 0;
+                DebugHelper.WriteLine(
+                    $"DDA capture area {FormatDdaRectangle(requested)} did not intersect an attached output; " +
+                    $"using adapter={chosen.AdapterIndex}, output={chosen.OutputIndex} ({chosen.Name}).");
+            }
+
+            Rectangle local = new(
+                clipped.X - chosen.Bounds.X,
+                clipped.Y - chosen.Bounds.Y,
+                clipped.Width,
+                clipped.Height);
+            if (FFmpeg.IsEvenSizeRequired)
+            {
+                local.Width -= local.Width & 1;
+                local.Height -= local.Height & 1;
+            }
+
+            if (local.Width <= 0 || local.Height <= 0)
+            {
+                throw new InvalidOperationException("The DDA crop is empty after applying encoder size constraints.");
+            }
+
+            bool wasClipped = clipped != requested || local.Size != clipped.Size;
+            DebugHelper.WriteLine(
+                $"DDA capture target (experimental): requested={FormatDdaRectangle(requested)}, " +
+                $"adapter={chosen.AdapterIndex}, output={chosen.OutputIndex} ({chosen.Name}), " +
+                $"bounds={FormatDdaRectangle(chosen.Bounds)}, overlap={FormatDdaRectangle(clipped)}, " +
+                $"localCrop={FormatDdaRectangle(local)}, overlapArea={overlapArea}, clipped={wasClipped}.");
+
+            return new DdaCaptureTarget(
+                chosen.AdapterIndex,
+                chosen.OutputIndex,
+                local);
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine(
+                $"DDA output resolution failed: {ex.Message}; using adapter 0, output 0 without a crop.");
+            return null;
+        }
+#else
+        DebugHelper.WriteLine(
+            "DDA output resolution is available only in Windows builds; using output 0 without a crop.");
+        return null;
+#endif
+    }
+
+#if WINDOWS
+    private static List<DdaOutput> EnumerateDdaOutputs()
+    {
+        var outputs = new List<DdaOutput>();
+        using IDXGIFactory1 factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+
+        for (uint adapterIndex = 0;
+             factory.EnumAdapters1(adapterIndex, out IDXGIAdapter1? adapter).Success;
+             adapterIndex++)
+        {
+            using (adapter)
+            {
+                for (uint outputIndex = 0;
+                     adapter.EnumOutputs(outputIndex, out IDXGIOutput? output).Success;
+                     outputIndex++)
+                {
+                    using (output)
+                    {
+                        OutputDescription description = output.Description;
+                        Rectangle bounds = new(
+                            description.DesktopCoordinates.Left,
+                            description.DesktopCoordinates.Top,
+                            description.DesktopCoordinates.Right - description.DesktopCoordinates.Left,
+                            description.DesktopCoordinates.Bottom - description.DesktopCoordinates.Top);
+                        if (description.AttachedToDesktop && bounds.Width > 0 && bounds.Height > 0)
+                        {
+                            outputs.Add(new DdaOutput(
+                                (int)adapterIndex,
+                                (int)outputIndex,
+                                description.DeviceName,
+                                bounds));
+                        }
+                    }
+                }
+            }
+        }
+
+        return outputs;
+    }
+#endif
+
+    private static string FormatDdaRectangle(Rectangle rectangle) =>
+        $"{rectangle.X},{rectangle.Y} {rectangle.Width}x{rectangle.Height}";
 
     private void AppendInputDevice(StringBuilder args, string inputDevice, bool audioSource)
     {

@@ -1073,6 +1073,12 @@ public static class ScreenRecordManager
         bool hasCustomCommands = ffmpeg.UseCustomCommands && !string.IsNullOrWhiteSpace(ffmpeg.CustomCommands);
         bool hasFfmpegExecutableOverride = ffmpeg.OverrideCLIPath && !string.IsNullOrWhiteSpace(ffmpeg.CLIPath);
 
+        if (OperatingSystem.IsMacOS() && outputType != ScreenRecordOutput.GIF && !hasCustomCommands)
+        {
+            throw new PlatformNotSupportedException(
+                "Screen recording on macOS requires custom FFmpeg commands that use avfoundation. Generated desktop-capture commands are not supported.");
+        }
+
         if (outputType == ScreenRecordOutput.GIF)
         {
             if (IsWaylandSession() && !hasCustomCommands && !ScreenRecorder.IsWfRecorderAvailable())
@@ -1123,12 +1129,6 @@ public static class ScreenRecordManager
         {
             throw new PlatformNotSupportedException(
                 "Wayland custom-command recording currently supports direct single-pass output only.");
-        }
-
-        if (OperatingSystem.IsMacOS() && !hasCustomCommands)
-        {
-            throw new PlatformNotSupportedException(
-                "Generated FFmpeg desktop-capture commands are not available on macOS; configure custom FFmpeg commands.");
         }
 
         string? ffmpegPath = ffmpeg.FFmpegPath;

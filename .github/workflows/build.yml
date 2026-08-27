@@ -673,6 +673,156 @@ jobs:
       - name: Publish
         shell: bash
         run: ./build.sh --configuration ${{ matrix.configuration }}
+      - name: Assemble and ad-hoc sign macOS app bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          published_dir="Output/snapx-ui"
+          bundle="SnapX.app"
+          executable="$published_dir/snapx-ui"
+
+          if [ ! -x "$executable" ]; then
+            echo "FAIL: Published macOS executable is missing or not executable: $executable"
+            exit 1
+          fi
+
+          mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
+          cp -R "$published_dir/." "$bundle/Contents/MacOS/"
+
+          /usr/libexec/PlistBuddy -c 'Clear dict' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string com.emiliauh.snapx' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string SnapX' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string SnapX' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string snapx-ui' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 1' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleShortVersionString string 1.0' "$bundle/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :LSUIElement bool false' "$bundle/Contents/Info.plist"
+
+          icon_path=$(find packaging -type f -name '*.icns' -print -quit)
+          if [ -n "$icon_path" ]; then
+            cp "$icon_path" "$bundle/Contents/Resources/SnapX.icns"
+            /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string SnapX.icns' "$bundle/Contents/Info.plist"
+            echo "Bundled icon: $icon_path"
+          else
+            echo "No packaging/*.icns icon found; continuing without CFBundleIconFile."
+          fi
+
+          chmod +x "$bundle/Contents/MacOS/snapx-ui"
+          codesign --force --deep -s - "$bundle"
+          codesign --verify --deep --strict --verbose=2 "$bundle"
+
+          archive="SnapX-UI-${{ matrix.configuration }}-macOS-${{ runner.arch }}.app.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$bundle" "$archive"
+          echo "PASS: Created and ad-hoc signed $archive"
+      - name: macOS launch and SIPC smoke test
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          binary="$GITHUB_WORKSPACE/SnapX.app/Contents/MacOS/snapx-ui"
+          smoke_dir="$RUNNER_TEMP/snapx-macos-smoke-${{ matrix.configuration }}-${{ runner.arch }}"
+          pid_file="$smoke_dir/pids"
+          primary_log="$smoke_dir/primary.log"
+          secondary_log="$smoke_dir/secondary.log"
+          mkdir -p "$smoke_dir"
+          : > "$pid_file"
+
+          echo "=== macOS capture capability probe (informational) ==="
+          if command -v ffmpeg >/dev/null 2>&1; then
+            ffmpeg -hide_banner -devices 2>&1 | tee "$smoke_dir/ffmpeg-devices.log" || true
+            if grep -qi avfoundation "$smoke_dir/ffmpeg-devices.log"; then
+              echo "CAPABILITY: ffmpeg avfoundation device is available"
+            else
+              echo "CAPABILITY: ffmpeg is present but avfoundation was not reported"
+            fi
+          else
+            echo "CAPABILITY: ffmpeg is not installed on this runner"
+          fi
+
+          echo "=== Starting primary SnapX process ==="
+          NSUnbufferedIO=YES "$binary" >"$primary_log" 2>&1 &
+          primary_pid=$!
+          echo "$primary_pid" >> "$pid_file"
+
+          for attempt in {1..20}; do
+            if ! kill -0 "$primary_pid" 2>/dev/null; then
+              if wait "$primary_pid"; then
+                primary_rc=0
+              else
+                primary_rc=$?
+              fi
+              echo "Primary process exited during startup (exit $primary_rc)."
+              sed -n '1,200p' "$primary_log"
+              if grep -Eqi 'WindowServer|CGS.*connection|could not connect to.*(WindowServer|display)|no (screens|window server)|NSApplication.*(initialize|failed)|Failed to initialize.*(Cocoa|Avalonia)' "$primary_log"; then
+                echo "SKIP: macOS runner has no usable WindowServer for GUI application launch."
+                exit 0
+              fi
+              echo "FAIL: Primary SnapX process did not remain running."
+              exit 1
+            fi
+            sleep 0.5
+          done
+
+          echo "=== Forwarding harmless -PrintScreen command from secondary ==="
+          NSUnbufferedIO=YES "$binary" -PrintScreen >"$secondary_log" 2>&1 &
+          secondary_pid=$!
+          echo "$secondary_pid" >> "$pid_file"
+
+          secondary_finished=false
+          for attempt in {1..40}; do
+            if ! kill -0 "$secondary_pid" 2>/dev/null; then
+              secondary_finished=true
+              break
+            fi
+            sleep 0.5
+          done
+
+          if [ "$secondary_finished" != true ]; then
+            echo "FAIL: Secondary SnapX process did not forward and exit within 20 seconds."
+            sed -n '1,200p' "$secondary_log"
+            exit 1
+          fi
+
+          if wait "$secondary_pid"; then
+            secondary_rc=0
+          else
+            secondary_rc=$?
+          fi
+          if [ "$secondary_rc" -ne 0 ]; then
+            echo "FAIL: Secondary SnapX process exited with status $secondary_rc."
+            sed -n '1,200p' "$secondary_log"
+            exit 1
+          fi
+          if ! kill -0 "$primary_pid" 2>/dev/null; then
+            echo "FAIL: Primary SnapX process exited after the forwarding probe."
+            sed -n '1,200p' "$primary_log"
+            exit 1
+          fi
+
+          echo "PASS: SnapX launched, forwarding acknowledged by prompt secondary exit, and primary remained alive."
+      - name: Clean up macOS smoke-test processes
+        if: runner.os == 'macOS' && always()
+        shell: bash
+        run: |
+          smoke_dir="$RUNNER_TEMP/snapx-macos-smoke-${{ matrix.configuration }}-${{ runner.arch }}"
+          pid_file="$smoke_dir/pids"
+          if [ -f "$pid_file" ]; then
+            while IFS= read -r pid; do
+              if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null || true
+              fi
+            done < "$pid_file"
+            while IFS= read -r pid; do
+              if [[ "$pid" =~ ^[0-9]+$ ]]; then
+                wait "$pid" 2>/dev/null || true
+              fi
+            done < "$pid_file"
+          fi
+          echo "Cleanup complete for macOS smoke-test processes."
       - name: Assemble SnapX UI Tarball
         shell: bash
         run: "./build.sh tarball --assembly snapx-ui"

@@ -32,6 +32,9 @@ public sealed class SingleInstanceManager : IDisposable
     private const int ForwardRetryDelayMilliseconds = 50;
     private const int SocketDirectoryMode = 0b111000000; // 0o700
     private const int SocketFileMode = 0b110000000; // 0o600
+    private const int MacOSSetLockCommand = 8; // This value is F_SETLK on macOS.
+    private const short MacOSWriteLockType = 3; // This value is F_WRLCK on macOS.
+    private const short SeekFromStart = 0; // This value is SEEK_SET on macOS.
     private readonly Socket? _listener;
     // Keep an advisory file lock for the complete lifetime of the listener.
     // Besides electing the primary, this prevents a stale-socket cleanup from
@@ -53,14 +56,6 @@ public sealed class SingleInstanceManager : IDisposable
     public static bool TryForward(string[] args, out SingleInstanceManager? primary)
     {
         primary = null;
-        // FileStream.Lock is unavailable on macOS. Do not turn that platform's
-        // unsupported advisory-lock operation into a false "secondary" result
-        // that immediately closes the only application window.
-        if (OperatingSystem.IsMacOS())
-        {
-            return false;
-        }
-
         string socketPath = SocketPath();
         try
         {
@@ -112,7 +107,7 @@ public sealed class SingleInstanceManager : IDisposable
             }
             listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             listener!.Bind(new UnixDomainSocketEndPoint(socketPath));
-            if (OperatingSystem.IsLinux())
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
             {
                 // Only the owning user may talk to the single-instance socket:
                 // other local users must not be able to inject CLI arguments.
@@ -155,7 +150,7 @@ public sealed class SingleInstanceManager : IDisposable
         }
 
         Directory.CreateDirectory(directory);
-        if (OperatingSystem.IsLinux())
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             // The socket directory must not be world-traversable, otherwise
             // any local user could reach (or replace) the single-instance socket.
@@ -165,6 +160,11 @@ public sealed class SingleInstanceManager : IDisposable
 
     private static bool TryAcquireInstanceLock(out FileStream? instanceLock)
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            return TryAcquireMacOSInstanceLock(out instanceLock);
+        }
+
         instanceLock = null;
         try
         {
@@ -183,6 +183,41 @@ public sealed class SingleInstanceManager : IDisposable
         }
         catch
         {
+            return false;
+        }
+    }
+
+    private static bool TryAcquireMacOSInstanceLock(out FileStream? instanceLock)
+    {
+        instanceLock = null;
+        FileStream? stream = null;
+        try
+        {
+            stream = new FileStream(
+                Path.Combine(SnapXL.LockDirectory, LockName),
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.ReadWrite);
+            var fileLock = new MacOSFileLock
+            {
+                Type = MacOSWriteLockType,
+                Whence = SeekFromStart,
+                Start = 0,
+                Length = 1
+            };
+            int fileDescriptor = stream.SafeFileHandle.DangerousGetHandle().ToInt32();
+            if (FcntlSetLock(fileDescriptor, MacOSSetLockCommand, ref fileLock) != 0)
+            {
+                stream.Dispose();
+                return false;
+            }
+
+            instanceLock = stream;
+            return true;
+        }
+        catch
+        {
+            stream?.Dispose();
             return false;
         }
     }
@@ -437,7 +472,7 @@ public sealed class SingleInstanceManager : IDisposable
     /// <summary>
     /// Restricts the single-instance socket and its directory to the owning
     /// user. There is no cross-platform permission API in the current
-    /// dependency set, so this shells down to libc directly (Linux-only path).
+    /// dependency set, so this calls libc directly on Linux and macOS.
     /// </summary>
     private static void Chmod(string path, int mode)
     {
@@ -449,6 +484,19 @@ public sealed class SingleInstanceManager : IDisposable
 
     [DllImport("libc", SetLastError = true)]
     private static extern int chmod(string path, int mode);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MacOSFileLock
+    {
+        public long Start;
+        public long Length;
+        public int ProcessId;
+        public short Type;
+        public short Whence;
+    }
+
+    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int FcntlSetLock(int fileDescriptor, int command, ref MacOSFileLock fileLock);
 
     public void Dispose()
     {

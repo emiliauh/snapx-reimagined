@@ -1556,11 +1556,10 @@ public partial class App : Application
                     }
 
                     // Recording UI and lifecycle must not depend on a tray
-                    // implementation. On native Wayland the controller owns
-                    // the layer-shell Pause/Stop/Abort surface directly.
-                    if (LinuxAPI.IsWayland() && _recordingTrayController is null)
+                    // implementation. This also covers X11 desktops without
+                    // a tray host and later non-Linux platforms.
+                    if (_recordingTrayController is null)
                     {
-                        _recordingTrayController?.Dispose();
                         _recordingTrayController = new RecordingTrayController();
                     }
 

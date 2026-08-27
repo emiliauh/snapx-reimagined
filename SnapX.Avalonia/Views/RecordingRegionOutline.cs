@@ -64,6 +64,9 @@ public static class RecordingRegionOutline
                 Thickness, captureRectangle.Height);
             Add(captureRectangle.X + captureRectangle.Width, captureRectangle.Y,
                 Thickness, captureRectangle.Height);
+            DebugHelper.WriteLine(
+                $"Recording outline Avalonia top-levels opened: {Segments.Count}; " +
+                "topmost=true, taskbar=false.");
         });
     }
 
@@ -456,7 +459,7 @@ public static class RecordingRegionOutline
             SystemDecorations = WindowDecorations.None;
             ShowInTaskbar = false;
             ShowActivated = false;
-            Title = "\u200B";
+            Title = "SnapX Recording Outline";
             Topmost = true;
             CanResize = false;
             Focusable = false;
@@ -464,18 +467,12 @@ public static class RecordingRegionOutline
             Height = height;
             Position = position;
             Background = Brushes.Transparent;
-            TransparencyBackgroundFallback = Brushes.Transparent;
+            // A solid red fallback keeps the one-pixel edge visible on X11
+            // servers that do not provide an alpha visual, such as Xvfb.
+            TransparencyBackgroundFallback = Brushes.Red;
             TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
             Content = new DashSurface(width, height, width > height);
             IsHitTestVisible = false;
-            Opened += (_, _) =>
-            {
-                if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
-                {
-                    Close();
-                    Segments.Remove(this);
-                }
-            };
         }
     }
 

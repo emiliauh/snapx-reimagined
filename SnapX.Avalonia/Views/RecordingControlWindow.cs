@@ -2,7 +2,6 @@
 
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -24,17 +23,17 @@ namespace SnapX.Avalonia.Views;
 /// be invisible or clipped. The native layer surface is compact, anchored to
 /// the recording output, and has no task-view entry.
 ///
-/// Non-Wayland platforms retain the in-window OverlayLayer fallback.
+/// Non-Wayland platforms use an independent top-level window. The recording
+/// controls therefore stay available when the main window is closed.
 /// </summary>
 public sealed class RecordingControlWindow
 {
     private static RecordingControlWindow? _current;
 
-    private readonly Window? _owner;
-    private readonly OverlayLayer? _overlay;
     private readonly Border _card;
     private readonly TextBlock _status;
     private readonly Button _pauseResume;
+    private Window? _fallbackWindow;
     private Process? _nativeController;
     private bool _usesNativeLayer;
 
@@ -50,7 +49,7 @@ public sealed class RecordingControlWindow
             // disappear.
             if (OperatingSystem.IsLinux() && SnapX.Core.Utils.Native.LinuxAPI.IsWayland())
             {
-                var nativeController = new RecordingControlWindow(null, null, captureRectangle);
+                var nativeController = new RecordingControlWindow(captureRectangle);
                 _current = nativeController;
                 if (nativeController.Show(captureRectangle))
                 {
@@ -67,21 +66,9 @@ public sealed class RecordingControlWindow
                 return;
             }
 
-            // The non-Wayland fallback needs a visible owner and an Avalonia
-            // overlay. Native Wayland always returned above.
-            if (App.MyMainWindow is not { IsVisible: true } owner)
-            {
-                DebugHelper.WriteLine("Recording controller skipped: no available Wayland layer surface or visible SnapX window.");
-                return;
-            }
-            OverlayLayer? overlay = OverlayLayer.GetOverlayLayer(owner);
-            if (overlay is null)
-            {
-                DebugHelper.WriteLine("Recording controller skipped: SnapX overlay layer is unavailable.");
-                return;
-            }
-
-            var controller = new RecordingControlWindow(owner, overlay, captureRectangle);
+            // Keep the fallback independent from the main window. An owner
+            // would close this window when SnapX changes to tray-only mode.
+            var controller = new RecordingControlWindow(captureRectangle);
             _current = controller;
             controller.Show(captureRectangle);
         });
@@ -101,10 +88,8 @@ public sealed class RecordingControlWindow
         Dispatcher.UIThread.Post(() => _current?.UpdateLabels());
     }
 
-    private RecordingControlWindow(Window? owner, OverlayLayer? overlay, ImageRectangle captureRectangle)
+    private RecordingControlWindow(ImageRectangle captureRectangle)
     {
-        _owner = owner;
-        _overlay = overlay;
         var panel = new StackPanel
         {
             Margin = new Thickness(12),
@@ -161,14 +146,10 @@ public sealed class RecordingControlWindow
                 Blur = 16,
                 Color = Color.FromArgb(128, 0, 0, 0)
             }),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(16),
             Child = panel
         };
-        _owner?.Closed += Owner_OnClosed;
 
-        DebugHelper.WriteLine($"Recording control popup opened for capture rectangle {captureRectangle}.");
+        DebugHelper.WriteLine($"Recording controller created for capture rectangle {captureRectangle}.");
     }
 
     private static Button MakeButton(string text, Action onClick)
@@ -195,31 +176,101 @@ public sealed class RecordingControlWindow
             return true;
         }
 
-        if (_overlay is not null)
-        {
-            DebugHelper.WriteLine("Recording controller using Avalonia overlay fallback.");
-            _overlay.Children.Add(_card);
-            return true;
-        }
-
-        return false;
+        ShowFallbackWindow(captureRectangle);
+        return true;
     }
 
     private void Close()
     {
-        _owner?.Closed -= Owner_OnClosed;
         if (_usesNativeLayer)
         {
             StopNativeController();
         }
         else
         {
-            _overlay?.Children.Remove(_card);
+            Window? window = _fallbackWindow;
+            _fallbackWindow = null;
+            window?.Close();
         }
         if (ReferenceEquals(_current, this)) _current = null;
     }
 
-    private void Owner_OnClosed(object? sender, EventArgs e) => Close();
+    private void ShowFallbackWindow(ImageRectangle captureRectangle)
+    {
+        var window = new Window
+        {
+            Title = "SnapX Recording Controls",
+            SystemDecorations = WindowDecorations.None,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Topmost = true,
+            CanResize = false,
+            Width = _card.Width,
+            Height = _card.Height,
+            Background = _card.Background,
+            Content = _card,
+            WindowStartupLocation = WindowStartupLocation.Manual
+        };
+
+        window.Position = GetFallbackPosition(window, captureRectangle);
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_fallbackWindow, window))
+            {
+                _fallbackWindow = null;
+            }
+        };
+        _fallbackWindow = window;
+        window.Show();
+        DebugHelper.WriteLine(
+            $"Recording controller Avalonia top-level opened at {window.Position}; " +
+            $"topmost={window.Topmost}, taskbar={window.ShowInTaskbar}.");
+    }
+
+    private static PixelPoint GetFallbackPosition(Window window, ImageRectangle region)
+    {
+        const int gap = 12;
+        const int cardWidth = 340;
+        const int cardHeight = 118;
+
+        var center = new PixelPoint(
+            region.X + region.Width / 2,
+            region.Y + region.Height / 2);
+        var screen = window.Screens.ScreenFromPoint(center) ?? window.Screens.Primary;
+        PixelRect workArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080);
+        int maxX = Math.Max(workArea.X, workArea.Right - cardWidth);
+        int maxY = Math.Max(workArea.Y, workArea.Bottom - cardHeight);
+        int alignedX = Math.Clamp(region.X + region.Width - cardWidth, workArea.X, maxX);
+        int alignedY = Math.Clamp(region.Y + (region.Height - cardHeight) / 2, workArea.Y, maxY);
+
+        int belowY = region.Y + region.Height + gap;
+        if (belowY <= maxY)
+        {
+            return new PixelPoint(alignedX, belowY);
+        }
+
+        int aboveY = region.Y - cardHeight - gap;
+        if (aboveY >= workArea.Y)
+        {
+            return new PixelPoint(alignedX, aboveY);
+        }
+
+        int rightX = region.X + region.Width + gap;
+        if (rightX <= maxX)
+        {
+            return new PixelPoint(rightX, alignedY);
+        }
+
+        int leftX = region.X - cardWidth - gap;
+        if (leftX >= workArea.X)
+        {
+            return new PixelPoint(leftX, alignedY);
+        }
+
+        // A full-screen region has no outside space. Keep the controls in the
+        // work area's lower-right corner so Stop and Abort stay reachable.
+        return new PixelPoint(maxX, maxY);
+    }
 
     private void UpdateLabels()
     {
@@ -239,10 +290,17 @@ public sealed class RecordingControlWindow
         // UI thread's Dispatcher or the watchdog's Interlocked.CompareExchange,
         // so Volatile.Read is enough for lock-free visibility of ownership.
         Process? process = Volatile.Read(ref _nativeController);
-        if (_usesNativeLayer && process is { HasExited: false })
+        // HasExited can throw ObjectDisposedException when the watchdog
+        // disposes the process concurrently. Keep every process member
+        // access inside one guarded block.
+        if (_usesNativeLayer && process is not null)
         {
             try
             {
+                if (process.HasExited)
+                {
+                    return;
+                }
                 process.StandardInput.WriteLine(ScreenRecordManager.IsPaused ? "paused" : "recording");
                 process.StandardInput.Flush();
             }

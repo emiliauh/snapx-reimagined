@@ -24,6 +24,7 @@ public sealed class RecordingTrayController : IDisposable
     private readonly TrayIcon? _trayIcon;
     private readonly Bitmap? _normalIcon;
     private readonly Bitmap? _recordingIcon;
+    private bool _recordingUiVisible;
     private bool _disposed;
 
     public RecordingTrayController(TrayIcon? trayIcon = null)
@@ -52,6 +53,7 @@ public sealed class RecordingTrayController : IDisposable
         ScreenRecordManager.StateChanged -= OnStateChanged;
         ScreenRecordManager.RecordingCompleted -= OnRecordingCompleted;
         ScreenRecordManager.RecordingFailed -= OnRecordingFailed;
+        RecordingRegionOutline.Hide();
         RecordingControlWindow.HideRecording();
         _recordingIcon?.Dispose();
         _normalIcon?.Dispose();
@@ -93,13 +95,21 @@ public sealed class RecordingTrayController : IDisposable
         bool isRecording = IsActiveRecordingState(state);
         Dispatcher.UIThread.Post(() =>
         {
-            if (isRecording)
+            // A state change can be queued right before Dispose. Recheck so a
+            // stale callback cannot recreate the recording UI after shutdown.
+            if (_disposed)
+            {
+                return;
+            }
+            if (isRecording && !_recordingUiVisible)
             {
                 ShowRecordingUi();
+                _recordingUiVisible = true;
             }
-            else
+            else if (!isRecording && _recordingUiVisible)
             {
                 HideRecordingUi();
+                _recordingUiVisible = false;
             }
             RecordingControlWindow.RefreshState();
         });
@@ -109,8 +119,7 @@ public sealed class RecordingTrayController : IDisposable
     {
         return state is ScreenRecordManager.RecordingManagerState.Recording
             or ScreenRecordManager.RecordingManagerState.Pausing
-            or ScreenRecordManager.RecordingManagerState.Paused
-            or ScreenRecordManager.RecordingManagerState.Encoding;
+            or ScreenRecordManager.RecordingManagerState.Paused;
     }
 
     private void ShowRecordingUi()
