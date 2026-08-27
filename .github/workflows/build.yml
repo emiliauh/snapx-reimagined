@@ -252,6 +252,8 @@ jobs:
              tar
              uutils-coreutils
              onnxruntime
+             wayland-dev
+             wayland-protocols
        - name: Symlink ONNXRuntime
          run: sudo ln -sf /usr/lib/libonnxruntime.so.1 /usr/lib/libonnxruntime.so
          shell: alpine.sh {0}
