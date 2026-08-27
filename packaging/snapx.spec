@@ -56,6 +56,8 @@ Source:         %{url}/archive/%{git_ref}.tar.gz
 ExclusiveArch:  x86_64 aarch64 ppc64le s390x armhf armv7hl armv7l
 
 BuildRequires:  pkgconfig(icu-i18n)
+BuildRequires:  pkgconfig(wayland-client)
+BuildRequires:  wayland-protocols-devel
 
 %if "%{build_with_aot}" == "true"
 # When installing AOT support, also install all dependencies needed to build

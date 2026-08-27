@@ -11,6 +11,8 @@ makedepends=(
     'git'
     'clang'
     'zlib1g'
+    'libwayland-dev'
+    'wayland-protocols'
 )
 source=("$pkgbase::git+https://github.com/emiliauh/snapx-reimagined.git#branch=main")
 sha256sums=('SKIP')
