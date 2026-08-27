@@ -249,8 +249,6 @@ public static class SettingManager
     {
         if (File.Exists(SnapXL.ApplicationConfigPathOld)) Settings = MigrateJsonConfig<ApplicationConfig>(SnapXL.ApplicationConfigPathOld);
 
-        if (File.Exists(ApplicationConfigFilePath)) MigrateApplicationConfig();
-
         var assembly = Assembly.GetExecutingAssembly();
 
         var resourceNames = assembly.GetManifestResourceNames()
@@ -413,14 +411,6 @@ public static class SettingManager
         var migratedPath = path + $"{timestamp}.migrated";
         File.Move(path, migratedPath);
         return settings;
-    }
-
-    private static void MigrateApplicationConfig()
-    {
-        if (Settings.DisableUpload)
-        {
-            DefaultTaskSettings.AfterCaptureJob = DefaultTaskSettings.AfterCaptureJob.Remove(AfterCaptureTasks.UploadImageToHost);
-        }
     }
 
     private static async Task MigrateHistoryFile()
@@ -690,4 +680,3 @@ public static class SettingManager
         }
     }
 }
-
