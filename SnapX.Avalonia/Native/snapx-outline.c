@@ -614,7 +614,11 @@ static const struct wl_pointer_listener pointer_listener = {
     .button = pointer_button, .axis = pointer_axis, .frame = pointer_frame,
     .axis_source = pointer_axis_source, .axis_stop = pointer_axis_stop,
     .axis_discrete = pointer_axis_discrete, .axis_value120 = pointer_axis_value120,
-    .axis_relative_direction = pointer_axis_relative_direction, .warp = pointer_warp
+    .axis_relative_direction = pointer_axis_relative_direction,
+#ifdef WL_POINTER_WARP_SINCE_VERSION
+    /* The warp member exists only on newer libwayland headers. */
+    .warp = pointer_warp
+#endif
 };
 
 static void relative_motion(void *data, struct zwp_relative_pointer_v1 *rp,
