@@ -73,7 +73,7 @@ public static class TaskHelpers
         DebugHelper.WriteAlways("Executing: " + job.GetLocalizedDescription());
 
         var safeTaskSettings = TaskSettings.GetSafeTaskSettings(taskSettings);
-        if (useWaylandWindowOrRegionPicker && OperatingSystem.IsLinux() && LinuxAPI.IsWayland() &&
+        if (useWaylandWindowOrRegionPicker &&
             job is HotkeyType.RectangleRegion or HotkeyType.ScreenRecorder)
         {
             RegionCaptureOptions options = RegionCaptureTasks.GetRegionCaptureOptions(
@@ -81,7 +81,7 @@ public static class TaskHelpers
             options.WindowOrRegionPickerMode = true;
             safeTaskSettings.CaptureSettings.SurfaceOptions = options;
             DebugHelper.WriteLine(
-                $"Wayland hotkey {job} is using the native window-or-region selector.");
+                $"Hotkey {job} is using the window-or-region selector.");
         }
 
         switch (job)

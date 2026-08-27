@@ -9,6 +9,7 @@ using FluentAvalonia.UI.Controls;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -33,6 +34,8 @@ public partial class RegionSelectorWindow : Window
     private const string NativePickerHelperName = "snapx-picker";
     private static int selectorOpen;
     private Point _startPoint;
+    private const int DragDistanceSquaredLimit = 25;
+    private Point _pressedPoint;
     private bool _isSelecting;
     private bool _selectionCompleted;
     private bool _captureReady;
@@ -1040,6 +1043,7 @@ public partial class RegionSelectorWindow : Window
 
         _startPoint = E.GetPosition(_canvas);
         _isSelecting = true;
+        RecordPressPoint(_startPoint);
         E.Pointer.Capture(_canvas);
 
         _selectionRect.Width = 0;
@@ -1143,15 +1147,45 @@ public partial class RegionSelectorWindow : Window
 
         _isSelecting = false;
         E?.Pointer.Capture(null);
+
+        if (_captureOptions.WindowOrRegionPickerMode)
+        {
+            // The native Wayland picker treats a short pointer movement on
+            // open desktop space as a window click, not a region drag. The
+            // release point can differ from the press point after a small
+            // drag, so the distance between them decides the outcome.
+            // A real pointer release is required: synthetic commits from
+            // SelectHoveredWindow and the Enter key arrive with no event.
+            if (E is not null &&
+                !IsDragBeyondThreshold(_pressedPoint, E.GetPosition(_canvas)))
+            {
+                UpdateWindowHover(E.GetPosition(_canvas));
+                if (_hoveredWindow is { } clickedWindow)
+                {
+                    SelectHoveredWindow(clickedWindow);
+                    return;
+                }
+            }
+        }
+
+        // Do not read _selectionRect.Bounds here: programmatic Width, Height,
+        // and Margin changes do not refresh layout bounds until the next
+        // layout pass, so freshly drawn selections would look empty. Derive
+        // the current rectangle from the explicit shape properties.
+        var drawnRect = new Rect(
+            _selectionRect.Margin.Left,
+            _selectionRect.Margin.Top,
+            _selectionRect.Width,
+            _selectionRect.Height);
         _selectionRect.IsVisible = false;
         _infoBox.IsVisible = false;
-        if (_selectionRect.Bounds.Width <= 0 || _selectionRect.Bounds.Height <= 0)
+        if (drawnRect.Width <= 0 || drawnRect.Height <= 0)
         {
             await CancelSelection();
             return;
         }
 
-        var selectedRegion = _imageBounds.Intersect(_selectionRect.Bounds);
+        var selectedRegion = _imageBounds.Intersect(drawnRect);
 
         if (selectedRegion.Width <= 0 || selectedRegion.Height <= 0 ||
             selectedRegion.Width > _imageBounds.Width || selectedRegion.Height > _imageBounds.Height)
@@ -1245,7 +1279,8 @@ public partial class RegionSelectorWindow : Window
 
         WindowInfo? hovered = _pickableWindows.FirstOrDefault(window => window.Rectangle.Contains(screenPoint));
 
-        if (ReferenceEquals(hovered, _hoveredWindow)) return;
+        if (!_captureOptions.WindowOrRegionPickerMode &&
+            ReferenceEquals(hovered, _hoveredWindow)) return;
         _hoveredWindow = hovered;
 
         if (hovered is null)
@@ -1268,14 +1303,56 @@ public partial class RegionSelectorWindow : Window
         _infoBox.IsVisible = true;
     }
 
+    private void SelectHoveredWindow(WindowInfo window)
+    {
+        double x = window.Rectangle.X - _screenBounds.X;
+        double y = window.Rectangle.Y - _screenBounds.Y;
+        _selectionRect.Width = window.Rectangle.Width;
+        _selectionRect.Height = window.Rectangle.Height;
+        _selectionRect.Margin = new Thickness(x, y, 0, 0);
+        _isSelecting = true;
+        OnPointerReleased(this, null);
+    }
+
+    private bool IsPressInsideHoveredWindow(WindowInfo window, PointerPressedEventArgs e)
+    {
+        // The pointer press lands on the selector canvas. A press that is
+        // inside the hovered window rectangle picks the window. A press in
+        // open space starts a region drag. This matches the native Wayland
+        // picker: click for a window, drag for a region.
+        Point pressPoint = e.GetPosition(_canvas);
+        return pressPoint.X >= window.Rectangle.X - _screenBounds.X &&
+               pressPoint.Y >= window.Rectangle.Y - _screenBounds.Y &&
+               pressPoint.X <= (window.Rectangle.X - _screenBounds.X) + window.Rectangle.Width &&
+               pressPoint.Y <= (window.Rectangle.Y - _screenBounds.Y) + window.Rectangle.Height;
+    }
+
+    private void RecordPressPoint(Point canvasPoint)
+    {
+        _pressedPoint = canvasPoint;
+    }
+
+    private static bool IsDragBeyondThreshold(Point pressPoint, Point releasePoint)
+    {
+        // Squared distance keeps a small movement a click instead of a drag.
+        // A release more than five pixels from the press becomes a region.
+        // This matches the native Wayland picker click threshold.
+        double dx = pressPoint.X - releasePoint.X;
+        double dy = pressPoint.Y - releasePoint.Y;
+        return dx * dx + dy * dy > DragDistanceSquaredLimit;
+    }
+
     private async void OnPointerMoved(object? Sender, PointerEventArgs E)
     {
-        if (_captureOptions.WindowPickerMode)
+        if (!_isSelecting)
         {
-            if (!_isSelecting) UpdateWindowHover(E.GetPosition(_canvas));
+            if (_captureOptions.WindowPickerMode ||
+                _captureOptions.WindowOrRegionPickerMode)
+            {
+                UpdateWindowHover(E.GetPosition(_canvas));
+            }
             return;
         }
-        if (!_isSelecting) return;
         var endPoint = E.GetPosition(_canvas);
         var x = Math.Min(_startPoint.X, endPoint.X);
         var y = Math.Min(_startPoint.Y, endPoint.Y);
@@ -1498,6 +1575,29 @@ public partial class RegionSelectorWindow : Window
                     .OrderBy(window => window.Rectangle.Width * (long)window.Rectangle.Height)
                     .ToList();
             }
+            else if (_captureOptions.WindowOrRegionPickerMode && !IsNativeWayland)
+            {
+                List<WindowInfo> topLevelWindows = Methods.GetWindowList();
+
+                // Bare X11 sessions have no EWMH client list, so augment the
+                // platform list with a raw window-tree walk. This extra walk
+                // is Linux only: libX11 is absent on Windows and macOS.
+                IEnumerable<WindowInfo> candidates = topLevelWindows;
+                if (OperatingSystem.IsLinux())
+                {
+                    List<WindowInfo> treeWindows = GetPickableX11TreeWindows();
+                    candidates = candidates.Concat(treeWindows);
+                }
+
+                _pickableWindows = candidates
+                    // SetupWindowBoundsAsync assigns _screenBounds after this
+                    // preparation step. Keep all visible X11 windows here;
+                    // hover lookup naturally ignores windows outside the
+                    // selector's screen once those bounds are available.
+                    .Where(window => window.IsVisible && !window.Rectangle.IsEmpty)
+                    .OrderBy(window => window.Rectangle.Width * (long)window.Rectangle.Height)
+                    .ToList();
+            }
 
             _preparedForDisplay = true;
             _captureReady = true;
@@ -1511,6 +1611,131 @@ public partial class RegionSelectorWindow : Window
             return false;
         }
     }
+
+    private static List<WindowInfo> GetPickableX11TreeWindows()
+    {
+        var windows = new List<WindowInfo>();
+        IntPtr display = PickerXOpenDisplay(null);
+        if (display == IntPtr.Zero)
+        {
+            return windows;
+        }
+
+        try
+        {
+            IntPtr root = PickerXDefaultRootWindow(display);
+            AddPickableX11ChildWindows(display, root, 0, 0, windows);
+        }
+        finally
+        {
+            PickerXCloseDisplay(display);
+        }
+
+        return windows;
+    }
+
+    private static void AddPickableX11ChildWindows(
+        IntPtr display,
+        IntPtr parent,
+        int parentX,
+        int parentY,
+        List<WindowInfo> windows)
+    {
+        if (PickerXQueryTree(display, parent, out _, out _, out IntPtr children, out uint childCount) == 0 ||
+            children == IntPtr.Zero)
+        {
+            return;
+        }
+
+        try
+        {
+            for (uint index = 0; index < childCount; index++)
+            {
+                IntPtr child = Marshal.ReadIntPtr(children, checked((int)(index * IntPtr.Size)));
+                if (PickerXGetWindowAttributes(display, child, out PickerXWindowAttributes attributes) == 0 ||
+                    attributes.MapState != 2 || attributes.Width <= 1 || attributes.Height <= 1)
+                {
+                    continue;
+                }
+
+                int childX = parentX + attributes.X;
+                int childY = parentY + attributes.Y;
+
+                // Bare X servers do not publish an EWMH client list. Include
+                // every visible descendant because test tools and similar X11
+                // surfaces can live below a top-level window and would
+                // otherwise never become pickable.
+                windows.Add(new WindowInfo
+                {
+                    Handle = child,
+                    IsVisible = true,
+                    Rectangle = new SixLabors.ImageSharp.Rectangle(
+                        childX, childY, attributes.Width, attributes.Height)
+                });
+
+                AddPickableX11ChildWindows(display, child, childX, childY, windows);
+            }
+        }
+        finally
+        {
+            PickerXFree(children);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PickerXWindowAttributes
+    {
+        public int X;
+        public int Y;
+        public int Width;
+        public int Height;
+        public int BorderWidth;
+        public int Depth;
+        public IntPtr Visual;
+        public IntPtr Root;
+        public int Class;
+        public int BitGravity;
+        public int WindowGravity;
+        public int BackingStore;
+        public IntPtr BackingPlanes;
+        public IntPtr BackingPixel;
+        public int SaveUnder;
+        public IntPtr Colormap;
+        public int MapInstalled;
+        public int MapState;
+        public IntPtr AllEventMasks;
+        public IntPtr YourEventMask;
+        public IntPtr DoNotPropagateMask;
+        public int OverrideRedirect;
+        public IntPtr Screen;
+    }
+
+    [LibraryImport("libX11.so.6", EntryPoint = "XOpenDisplay", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr PickerXOpenDisplay(string? displayName);
+
+    [LibraryImport("libX11.so.6", EntryPoint = "XCloseDisplay")]
+    private static partial int PickerXCloseDisplay(IntPtr display);
+
+    [LibraryImport("libX11.so.6", EntryPoint = "XDefaultRootWindow")]
+    private static partial IntPtr PickerXDefaultRootWindow(IntPtr display);
+
+    [LibraryImport("libX11.so.6", EntryPoint = "XQueryTree")]
+    private static partial int PickerXQueryTree(
+        IntPtr display,
+        IntPtr window,
+        out IntPtr root,
+        out IntPtr parent,
+        out IntPtr children,
+        out uint childCount);
+
+    [LibraryImport("libX11.so.6", EntryPoint = "XGetWindowAttributes")]
+    private static partial int PickerXGetWindowAttributes(
+        IntPtr display,
+        IntPtr window,
+        out PickerXWindowAttributes attributes);
+
+    [LibraryImport("libX11.so.6", EntryPoint = "XFree")]
+    private static partial int PickerXFree(IntPtr data);
 
     private void HideSnapXWindows()
     {
@@ -1641,25 +1866,35 @@ public partial class RegionSelectorWindow : Window
             // Sample a grid of 9 points. This is deliberately cheap and does
             // not need to be pixel-perfect; any bright pixel means the frame is
             // a real desktop/application frame rather than an empty black one.
+            // Only the local clone may be disposed here. When the caller's
+            // image is already RGBA, the alias stays alive.
             int[] samples = { 1, 4, 7 };
-            using Image<Rgba32> rgba = image as Image<Rgba32> ?? image.CloneAs<Rgba32>();
-            int bright = 0;
-            foreach (int xStep in samples)
+            Image<Rgba32>? ownedClone = null;
+            try
             {
-                foreach (int yStep in samples)
+                Image<Rgba32> rgba = image as Image<Rgba32>
+                    ?? (ownedClone = image.CloneAs<Rgba32>());
+                int bright = 0;
+                foreach (int xStep in samples)
                 {
-                    int x = Math.Clamp(rgba.Width * xStep / 8, 0, rgba.Width - 1);
-                    int y = Math.Clamp(rgba.Height * yStep / 8, 0, rgba.Height - 1);
-                    Rgba32 pixel = rgba[x, y];
-                    if (pixel.R > 24 || pixel.G > 24 || pixel.B > 24)
+                    foreach (int yStep in samples)
                     {
-                        bright++;
+                        int x = Math.Clamp(rgba.Width * xStep / 8, 0, rgba.Width - 1);
+                        int y = Math.Clamp(rgba.Height * yStep / 8, 0, rgba.Height - 1);
+                        Rgba32 pixel = rgba[x, y];
+                        if (pixel.R > 24 || pixel.G > 24 || pixel.B > 24)
+                        {
+                            bright++;
+                        }
                     }
                 }
-            }
 
-            // Treat the frame as black only when every sampled pixel is dark.
-            return bright == 0;
+                return bright == 0;
+            }
+            finally
+            {
+                ownedClone?.Dispose();
+            }
         }
         catch
         {

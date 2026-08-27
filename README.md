@@ -1,76 +1,119 @@
-<p align="center">
-  <a href="https://github.com/emiliauh/snapx-reimagined">
-    <img src="./.github/Linux.png" alt="SnapX Reimagined banner" />
-  </a>
-</p>
-<h1 align="center">SnapX Reimagined</h1>
-<h3 align="center">Capture, record, and share your screen. Built on ShareX, rebuilt for Linux.</h3>
+# SnapX
 
-> [!NOTE]
-> This is a fork of [SnapX](https://github.com/SnapXL/SnapX), which is a cross-platform port of [ShareX](https://getsharex.com).
-> It keeps the ShareX capture-and-upload design and adds a native Wayland capture stack, and many UI changes.
+## What is SnapX
 
-## What this fork changes
+SnapX is a desktop application for screen capture, screen recording, and file upload. It provides capture tools, upload tasks, history, and settings in one user interface. It runs on Linux, Windows, and macOS, but each platform has different support limits. The table below lists the verified support and the known gaps.
 
-- A native Wayland capture stack: layer-shell overlays draw the region selector, the recording outline, and the recording controls. No XWayland is needed.
-- A two-in-one selector: press the region hotkey, hover to pick a window, or drag to pick an area. One flow covers both.
-- Correct multi-monitor recording: the recorder picks the correct output for any region, including regions that cross two monitors.
-- Fast overlays: the overlays repaint only the pixels that change. Hover and drag stay smooth, and video playback on the desktop is not affected.
-- Settings inside the main window: settings open as a page in the app, with a Back button. The separate settings window still exists for the tray menu.
-- One instance only: a second start forwards its command to the running instance and exits. The forwarding socket accepts only the owner of the session (0700 directory, 0600 socket), with timeouts and client limits.
-- One tray icon: the tray registers a single StatusNotifier item.
-- Telemetry off by default. Set `SNAPX_TELEMETRY=1` to turn it on.
-- Clean, uniformly aligned menus and an in-app settings layout.
+## Feature overview
 
-## Features from upstream SnapX
-
-- High-DPI screens, including HDR screenshots that keep correct colors on KDE Plasma Wayland.
-- OCR on all platforms, powered by PaddleOCR.
-- About 95% of the ShareX uploaders. The custom uploader format (`.sxcu`) works.
-- Image formats: PNG (also animated), WEBP (also animated), AVIF, JPEG, GIF, TIFF, and BMP.
-- GPU-accelerated UI on .NET 10. Users do not need to install .NET.
-- Full configuration from the command line, with flags and environment variables.
-- History and image metadata in SQLite. Configuration in YAML, with auto migration from JSON.
-- XDG base-directory layout on Linux and macOS.
+- Capture a screen, window, or region.
+- Record a screen or region on supported platforms.
+- Edit images after capture.
+- Upload files, text, and images with built-in or custom upload tasks.
+- Copy results to the clipboard or save them to a file.
+- Store task history and image metadata in SQLite.
+- Store settings in YAML files.
+- Run capture and upload tasks from hotkeys or command-line arguments on supported platforms.
+- Open settings in the main window or from the tray menu.
+- Keep telemetry off unless the user enables it.
 
 ## Platform support
 
-| Platform | Capture | This fork adds |
-| --- | --- | --- |
-| Linux (Wayland) | XDG portals, plus native layer-shell overlays | Region/window picker, recording outline, native recording controls |
-| Linux (X11) | Direct X11 capture | Upstream SnapX behavior; fork-specific UX is being ported |
-| Windows | Direct3D 11 and WinRT | Upstream SnapX behavior; fork-specific UX is being ported |
-| macOS | SnapXRust stills; video backend in progress | Upstream SnapX behavior; macOS port planned - see handoff `SNAPX_HANDOFF_2026-08-26_cross-platform-parity-and-macos.md` |
+| Platform | Status | Capture and recording | Application integration |
+| --- | --- | --- | --- |
+| Linux/Wayland (Hyprland) | Verified on Hyprland for these listed behaviors. | The native two-in-one picker selects a window with a click or a region with a drag; both are runtime verified on Hyprland. Native overlays show the recording outline and recording controls. `wf-recorder` records video and selects the output with the largest overlap. | Single-instance forwarding and the tray are runtime verified. Other Wayland compositors are not yet verified. |
+| Linux/X11 | In progress verification | The managed window-or-region picker is source-present in this change set. Runtime verification is in progress. FFmpeg uses `x11grab` for recording. | Single-instance forwarding is present. |
+| Windows | Partial; runtime verification is incomplete | Core capture and upload features are present. Recording uses DDA or FFmpeg `gdigrab`. The combined picker and recording outline are source-present but runtime-unverified. | Single-instance forwarding is present. Tray code is source-present but runtime-unverified. |
+| macOS | Partial | SnapXRust provides still capture. Video recording is not supported. A clear unsupported error is planned. | Single-instance forwarding is not ported. Supported builds use CI Native AOT on macOS. Runtime verification is incomplete. |
 
-The native Wayland work targets wlroots-based compositors and is tested on Hyprland. KDE Plasma and GNOME use the portal paths from upstream.
+## Build and run
 
-## Build
+Install the .NET 10 SDK. Run all commands from the repository root.
 
-You need .NET 10 SDK, `gcc`, and the Wayland client libraries (`libwayland-client`).
+### Linux
+
+Install `gcc`, the Wayland client development files, FFmpeg, and `wf-recorder` for a Wayland session.
 
 ```sh
 dotnet build SnapX.slnx --no-incremental -m:1
 ```
 
-The build compiles the native helpers and puts them next to the app binary.
+Run the debug build:
 
-To make a release package:
+```sh
+./SnapX.Avalonia/bin/Debug/net10.0/linux-x64/snapx-ui
+```
+
+Create the release output:
 
 ```sh
 dotnet run --project build --no-restore -- build --no-color
 ```
 
-## Configuration
+Run the release output:
 
-- `SNAPX_TELEMETRY=1` turns telemetry on. The default is off.
-- `SENTRY_DSN` sets a Sentry endpoint for maintainers. It works only when telemetry is on.
+```sh
+./Output/snapx-ui/snapx-ui
+```
+
+### Windows
+
+Use PowerShell or a terminal with the .NET 10 SDK.
+
+```powershell
+dotnet build SnapX.slnx --no-incremental -m:1
+```
+
+Run the debug build:
+
+```powershell
+.\SnapX.Avalonia\bin\Debug\net10.0-windows10.0.26100.0\win-x64\snapx-ui.exe
+```
+
+Create the release output:
+
+```powershell
+dotnet run --project build --no-restore -- build --no-color
+```
+
+Run the release output:
+
+```powershell
+.\Output\snapx-ui\snapx-ui.exe
+```
+
+### macOS
+
+macOS builds are available only through CI Native AOT. The CI runner supplies Xcode and the Apple SDK. A Linux host cannot link the macOS Native AOT output.
+
+The CI build step is:
+
+```sh
+dotnet build SnapX.slnx --no-incremental -m:1
+```
+
+The CI package step is:
+
+```sh
+dotnet run --project build --no-restore -- build --no-color
+```
+
+After you extract the CI artifact, run:
+
+```sh
+./snapx-ui
+```
+
+## Configuration and environment variables
+
+- `SNAPX_TELEMETRY=1` enables telemetry. Telemetry is off when this value is not `1`.
+- `SNAPX_USE_VULKAN=1` adds Vulkan as the first X11 rendering option on Linux.
+- `SNAPX_WAYLAND_GPU=1` enables EGL rendering on the native Wayland user interface. The default uses software rendering.
+- `SNAPX_REGISTER_PORTAL_HOST=0` disables host application ID registration for the Linux global-shortcut portal.
+- `SNAPX_SANDBOX` enables sandbox mode when the variable exists. This mode uses an in-memory history database and disables system integration registration.
 
 ## License
 
-GPL-3.0. See [LICENSE.md](./LICENSE.md). This project keeps the license of ShareX and SnapX.
+SnapX uses the GPL-3 license. See [LICENSE.md](./LICENSE.md).
 
-## Credits
-
-- [ShareX](https://getsharex.com) - the original Windows tool.
-- [SnapX](https://github.com/SnapXL/SnapX) and its team - the cross-platform base of this fork.
-- The upstream README lists the upstream contributors and backers.
+Forked from ShareX (sharex/ShareX) and the SnapX cross-platform effort.

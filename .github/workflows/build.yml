@@ -543,6 +543,7 @@ jobs:
     env:
       SOLUTION_FILE_PATH: SnapX.slnx
       ASSEMBLY_INFO_PATH: Directory.build.props
+      DisableGitVersionTask: "true"
 
     steps:
       - name: Checkout
