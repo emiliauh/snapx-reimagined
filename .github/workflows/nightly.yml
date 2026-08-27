@@ -4,10 +4,8 @@ name: Nightly Release (disabled)
 # workflow uploaded DEB/RPM packages to a third-party repository and Snaps
 # to the Snapcraft Store using upstream secrets, which do not exist here.
 # Re-enable only after configuring equivalent infrastructure and secrets.
-true: # disabled
-  schedule:
-    - cron: '0 9 * * *'
-  workflow_dispatch:
+on:
+  workflow_dispatch: # manual runs only; scheduled publishing is disabled
 
 permissions:
 #   contents: write
