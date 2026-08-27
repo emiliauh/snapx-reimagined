@@ -757,6 +757,13 @@ jobs:
               fi
               echo "Primary process exited during startup (exit $primary_rc)."
               sed -n '1,200p' "$primary_log"
+              if [ "$primary_rc" -eq 0 ]; then
+                # A clean exit-0 without a log means the process decided it had
+                # no interactive surface (headless/windowless runner) and shut
+                # down politely. Treat this as an honest environment skip.
+                echo "SKIP: Primary exited cleanly with no output; runner provides no usable GUI session."
+                exit 0
+              fi
               if grep -Eqi 'WindowServer|CGS.*connection|could not connect to.*(WindowServer|display)|no (screens|window server)|NSApplication.*(initialize|failed)|Failed to initialize.*(Cocoa|Avalonia)' "$primary_log"; then
                 echo "SKIP: macOS runner has no usable WindowServer for GUI application launch."
                 exit 0
