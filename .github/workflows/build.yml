@@ -108,7 +108,7 @@ jobs:
             curl -fsSL https://github.com/Thefrank/ffmpeg-static-freebsd/releases/download/v8.0/ffmpeg -o /usr/local/bin/ffmpeg
             echo "5aa91471cf9c56af033b451fe5c3cb56769eb33f4f6824aabf22551bbfb0f625  /usr/local/bin/ffmpeg" | sha256sum -c -
             chmod +x /usr/local/bin/ffmpeg
-            curl -fsSL https://svn.exactcode.de/t2/trunk/package/xorg/xorg-server/xvfb-run.sh -o /usr/local/bin/xvfb-run
+            curl -fsSL https://svn.exactcode.de/t2/!svn/rvr/89446/trunk/package/xorg/xorg-server/xvfb-run.sh -o /usr/local/bin/xvfb-run
             echo "68902b9151219d0e954306d3dc309cee3924cd17b92349acfe3f05fdeaf0e71c  /usr/local/bin/xvfb-run" | sha256sum -c -
             chmod +x /usr/local/bin/xvfb-run
             chsh -s /usr/local/bin/bash
@@ -231,6 +231,28 @@ jobs:
        - uses: actions/checkout@v6
          with:
            fetch-depth: 0
+       - name: Cache Alpine bootstrapper
+         shell: bash
+         run: |
+           set -euo pipefail
+           case "$(uname -m)" in
+             x86_64)
+               architecture=x86_64
+               checksum=34bb1a96f0258982377a289392d4ea9f3f4b767a4bb5806b1b87179b79ad8a1c
+               ;;
+             aarch64)
+               architecture=aarch64
+               checksum=e471d35aa221d031abe9b6288aede12a8e9f1a398954e5a2e1d1bce1727b4ef4
+               ;;
+             *)
+               echo "Unsupported Alpine bootstrap architecture: $(uname -m)" >&2
+               exit 1
+               ;;
+           esac
+           curl --retry 5 --retry-all-errors --connect-timeout 30 --max-time 300 -fsSL \
+             "https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.10/${architecture}/apk.static" \
+             -o "$RUNNER_TEMP/apk"
+           echo "${checksum}  $RUNNER_TEMP/apk" | sha256sum -c -
        - name: Setup Alpine Linux
          uses: bgilbert/setup-alpine@aarch64
          with:
