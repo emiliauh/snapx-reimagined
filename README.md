@@ -8,7 +8,7 @@
 
 > [!NOTE]
 > This is a fork of [SnapX](https://github.com/SnapXL/SnapX), which is a cross-platform port of [ShareX](https://getsharex.com).
-> It keeps the ShareX capture-and-upload design and adds a native Wayland capture stack, many UI changes, and security hardening.
+> It keeps the ShareX capture-and-upload design and adds a native Wayland capture stack, and many UI changes.
 
 ## What this fork changes
 
