@@ -219,6 +219,7 @@ jobs:
      timeout-minutes: 50
      env:
        ALLOW_DOTNET_DOWNLOAD: 1
+       DisableGitVersionTask: 1
      strategy:
        fail-fast: false
        matrix:
