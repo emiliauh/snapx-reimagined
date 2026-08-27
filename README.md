@@ -38,9 +38,9 @@
 | Platform | Capture | This fork adds |
 | --- | --- | --- |
 | Linux (Wayland) | XDG portals, plus native layer-shell overlays | Region/window picker, recording outline, native recording controls |
-| Linux (X11) | Direct X11 capture | The standard SnapX behavior |
-| Windows | Direct3D 11 and WinRT | The standard SnapX behavior |
-| macOS | XCap | The standard SnapX behavior |
+| Linux (X11) | Direct X11 capture | Upstream SnapX behavior; fork-specific UX is being ported |
+| Windows | Direct3D 11 and WinRT | Upstream SnapX behavior; fork-specific UX is being ported |
+| macOS | SnapXRust stills; video backend in progress | Upstream SnapX behavior; macOS port planned - see handoff `SNAPX_HANDOFF_2026-08-26_cross-platform-parity-and-macos.md` |
 
 The native Wayland work targets wlroots-based compositors and is tested on Hyprland. KDE Plasma and GNOME use the portal paths from upstream.
 
