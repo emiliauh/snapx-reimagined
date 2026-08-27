@@ -97,6 +97,7 @@ parts:
       - libicu74
     build-environment:
       - PKGTYPE: SNAP
+      - DisableGitVersionTask: 1
     stage-packages:
       - x11-xserver-utils  # for `xrandr`
       - pciutils           # for `lspci`
