@@ -160,6 +160,10 @@ jobs:
         if: matrix.pretty_arch == ''
         working-directory: packaging
         run: |
+          # Pin the pacscript source to the exact commit being built so pacstall's
+          # git-integrity check cannot race the flathub-vendor bot that advances main.
+          sed -i "s|#branch=main|#commit=${GITHUB_SHA}|g" snapx.pacscript
+          grep -n '^source=' snapx.pacscript
           pacstall -B -K -I -P -Q snapx.pacscript
       - name: Build Snap
         id: build_snap  # Add this ID
