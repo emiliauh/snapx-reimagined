@@ -1,6 +1,6 @@
 ﻿<Project>
   <ItemGroup>
-    <PackageReference Include="GitVersion.MsBuild" Condition="!Exists('packages.config')" Version="6.7.0" PrivateAssets="all"/>
+    <PackageReference Include="GitVersion.MsBuild" Condition="!Exists('packages.config')" Version="6.8.2" PrivateAssets="all"/>
   </ItemGroup>
   <PropertyGroup>
     <Company>BrycensRanch and ShareX Team</Company>
@@ -8,6 +8,7 @@
     <Title>SnapX</Title>
     <Description>Capture, share, and boost productivity. All in one.</Description>
     <Copyright>Copyright (c) 2026 BrycensRanch and ShareX Team</Copyright>
+    <RepositoryUrl>https://github.com/emiliauh/snapx-reimagined</RepositoryUrl>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <IncludeDebugSymbolsProjectOutputGroup>false</IncludeDebugSymbolsProjectOutputGroup>
     <Optimize>true</Optimize>
@@ -24,6 +25,9 @@
     <RollForward>LatestMajor</RollForward>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <Version>0.5.0</Version>
+    <!-- Commit the resolved dependency graph and reject unexpected version drift. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
   </PropertyGroup>
   <PropertyGroup Condition="!Exists('.git')">
     <UpdateAssemblyInfo>false</UpdateAssemblyInfo>

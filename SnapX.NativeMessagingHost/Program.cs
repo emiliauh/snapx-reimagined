@@ -20,28 +20,39 @@ try
         host.Write(input);
         var snapXPath = FindSnapX();
 
-        var tempFilePath = GetTempFilePath("json");
-        File.WriteAllText(tempFilePath, input, Encoding.UTF8);
-
-        var startInfo = new ProcessStartInfo
+        string? tempFilePath = null;
+        try
         {
-            FileName = snapXPath,
-            Arguments = $"-NativeMessagingInput \"{tempFilePath}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            tempFilePath = WritePrivateTempFile(input);
 
-        using var process = Process.Start(startInfo);
-        if (process == null) return;
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        Debug.WriteLine($"Output: {output}");
-        if (process.ExitCode == 0) return;
-        Console.Error.WriteLine($"Process exited with error code {process.ExitCode}");
-        Console.Error.WriteLine($"Error output: {error}");
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = snapXPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("-NativeMessagingInput");
+            startInfo.ArgumentList.Add(tempFilePath);
+
+            using var process = Process.Start(startInfo);
+            if (process == null) return;
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Debug.WriteLine($"Output: {output}");
+            if (process.ExitCode == 0) return;
+            Console.Error.WriteLine($"Process exited with error code {process.ExitCode}");
+            Console.Error.WriteLine($"Error output: {error}");
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+            }
+        }
     }
 }
 catch (Exception e)
@@ -62,31 +73,28 @@ static string FindSnapX(string? binary = null)
         };
     if (OperatingSystem.IsWindows()) knownBinaryNames = knownBinaryNames.Select(name => name + ".exe").ToArray();
 
-    var path = Environment.GetEnvironmentVariable("PATH");
-
     if (!string.IsNullOrWhiteSpace(binary))
     {
-        var foundBinary = FindBinaryInPath(binary, path);
-        if (foundBinary != null)
-            return foundBinary;
-
-        // Check if the binary exists in the base directory
         var baseDirBinary = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, binary);
         if (File.Exists(baseDirBinary))
             return baseDirBinary;
-    }
 
-    // If no binary is provided, search through the known binary names in the PATH and BaseDirectory
-    foreach (var knownBinary in knownBinaryNames)
-    {
-        var foundBinary = FindBinaryInPath(knownBinary, path);
+        var foundBinary = FindBinaryInPath(binary, Environment.GetEnvironmentVariable("PATH"));
         if (foundBinary != null)
             return foundBinary;
+    }
 
-        // Check if the known binary exists in the base directory
+    // Prefer the installed peer binary. Falling back to PATH keeps development and
+    // legacy layouts working without allowing PATH to override a packaged peer.
+    foreach (var knownBinary in knownBinaryNames)
+    {
         var baseDirBinary = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, knownBinary);
         if (File.Exists(baseDirBinary))
             return baseDirBinary;
+
+        var foundBinary = FindBinaryInPath(knownBinary, Environment.GetEnvironmentVariable("PATH"));
+        if (foundBinary != null)
+            return foundBinary;
     }
 
     // Return null if no binary is found
@@ -100,15 +108,54 @@ static string? FindBinaryInPath(string binaryName, string? path)
     var pathEntries = path?.Split(Path.PathSeparator);
 
     // Search for the binary in each path entry
-    return pathEntries?.Select(entry => Path.Combine(entry, binaryName)).FirstOrDefault(File.Exists);
+    return pathEntries?
+        .Where(entry => !string.IsNullOrWhiteSpace(entry))
+        .Select(entry => Path.Combine(entry, binaryName))
+        .FirstOrDefault(File.Exists);
 
     // Return null if the binary is not found in the PATH
 }
-static string GetTempFilePath(string extension)
+static string WritePrivateTempFile(string input)
 {
-    var tempFolder = Path.GetTempPath();
-    Directory.CreateDirectory(tempFolder);
-    var tempFilePath = Path.ChangeExtension(Path.Combine(tempFolder, Path.GetRandomFileName()), extension);
-    File.Create(tempFilePath).Dispose();
-    return tempFilePath;
+    for (var attempt = 0; attempt < 10; attempt++)
+    {
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"snapx-native-{Path.GetRandomFileName()}.json");
+        try
+        {
+            using var stream = CreatePrivateTempStream(tempFilePath);
+
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false, true), 4096, leaveOpen: true);
+            writer.Write(input);
+            writer.Flush();
+            stream.Flush(flushToDisk: true);
+            return tempFilePath;
+        }
+        catch (IOException) when (attempt < 9)
+        {
+            // Extremely unlikely random-name collision; try a fresh path.
+        }
+    }
+
+    throw new IOException("Could not create a private native-messaging temporary file.");
 }
+
+static FileStream CreatePrivateTempStream(string path)
+{
+    if (OperatingSystem.IsWindows())
+    {
+        return new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough);
+    }
+
+    return CreateUnixPrivateTempStream(path);
+}
+
+[System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+static FileStream CreateUnixPrivateTempStream(string path) => new(path, new FileStreamOptions
+{
+    Mode = FileMode.CreateNew,
+    Access = FileAccess.Write,
+    Share = FileShare.None,
+    BufferSize = 4096,
+    Options = FileOptions.WriteThrough,
+    UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+});

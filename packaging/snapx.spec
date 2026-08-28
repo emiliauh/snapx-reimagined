@@ -57,6 +57,7 @@ ExclusiveArch:  x86_64 aarch64 ppc64le s390x armhf armv7hl armv7l
 
 BuildRequires:  pkgconfig(icu-i18n)
 BuildRequires:  pkgconfig(wayland-client)
+BuildRequires:  pkgconfig(pangocairo)
 BuildRequires:  wayland-protocols-devel
 
 %if "%{build_with_aot}" == "true"
@@ -85,6 +86,7 @@ Requires:       dotnet-runtime-10.0
 %endif
 
 Recommends:     /usr/bin/ffmpeg
+Recommends:     /usr/bin/wf-recorder
 Recommends:     /usr/bin/glxinfo
 Recommends:     /usr/bin/lspci
 Recommends:     /usr/bin/xrandr
@@ -103,6 +105,7 @@ Summary:        SnapX Avalonia-based UI
 Requires:       snapx-core = %{version}-%{release}
 # libicu was removed because we now compile with InvariantGlobalization
 Requires:       fontconfig, freetype, openssl, glibc, at, sudo, libXrandr, libxcb, dbus
+Requires:       pango, cairo, libwayland-client
 
 %description ui
 This is a port of the original ShareX application to Linux.
@@ -129,16 +132,10 @@ export PKGTYPE=RPM
     %{!?build_extra_args:%global build_extra_args %{nil}}
 %endif
 
-set +x  # Prevent secrets leaking.
-if [ -n "${API_KEYS:-}" ]; then
-    curl -fsSL "$API_KEYS" -o SnapX.Core/Upload/APIKeysLocal.cs
-    echo "🔐 API Keys have been DEPLOYED into this build."
-else
-    echo "⚠️ No API_KEYS environment variable defined, skipping API key download."
-fi
-set -x
+bash build/download_api_keys.sh
 
 ./build.sh --no-color --no-extended-chars --configuration Release %{build_extra_args}
+rm -f SnapX.Core/Upload/APIKeysLocal.cs
 
 %install
 export ELEVATION_NOT_NEEDED=1

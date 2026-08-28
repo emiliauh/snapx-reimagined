@@ -106,14 +106,14 @@ modules:
     sources:
       - type: git
         url: https://github.com/microsoft/msquic.git
-        tag: v2.5.6
+        commit: ac83e946bba303901dd34ff3d1d772e4c4061f1e
 # For diagnostics & telemetry.
   - name: lspci
     buildsystem: simple
     sources:
       - type: git
         url: https://github.com/pciutils/pciutils.git
-        tag: v3.14.0
+        commit: c6030ae1576b6bf1de9b41f53a9ed76137181d99
     build-commands:
       - make
       - make PREFIX=/app install

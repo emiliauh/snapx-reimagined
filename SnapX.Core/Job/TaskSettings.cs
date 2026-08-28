@@ -389,7 +389,7 @@ public class TaskSettingsImage
 
     #region Image / Effects
 
-    // public List<ImageEffectPreset> ImageEffectPresets { get; set; } = [ImageEffectPreset.GetDefaultPreset()];
+    public List<ImageEffectPreset> ImageEffectPresets { get; set; } = [ImageEffectPreset.GetDefaultPreset()];
     public int SelectedImageEffectPreset { get; set; } = 0;
 
     public bool ShowImageEffectsWindowAfterCapture { get; set; } = false;
@@ -449,7 +449,7 @@ public class TaskSettingsCapture
 
     #region Capture / Scrolling capture
 
-    // public ScrollingCaptureOptions ScrollingCaptureOptions { get; set; } = new ScrollingCaptureOptions();
+    public ScrollingCaptureOptions ScrollingCaptureOptions { get; set; } = new();
 
     #endregion Capture / Scrolling capture
 

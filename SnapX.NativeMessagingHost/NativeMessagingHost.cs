@@ -1,35 +1,57 @@
-﻿using System.Text;
+﻿using System.Buffers.Binary;
+using System.Text;
 
 namespace SnapX.NativeMessagingHost;
 
 public class NativeMessagingHost
 {
-    public string Read()
-    {
-        string input = null;
+    // Native messaging is a trusted-extension boundary, not an unbounded IPC channel.
+    // This still permits substantial text and data-URL payloads while preventing a
+    // malformed length prefix from forcing an arbitrary allocation.
+    public const int MaximumMessageSize = 32 * 1024 * 1024;
 
-        Stream inputStream = Console.OpenStandardInput();
+    public string? Read() => Read(Console.OpenStandardInput());
+
+    public static string? Read(Stream inputStream)
+    {
+        ArgumentNullException.ThrowIfNull(inputStream);
 
         byte[] bytesLength = new byte[4];
         inputStream.ReadExactly(bytesLength);
-        int inputLength = BitConverter.ToInt32(bytesLength, 0);
+        int inputLength = BinaryPrimitives.ReadInt32LittleEndian(bytesLength);
 
-        if (inputLength > 0)
+        if (inputLength < 0 || inputLength > MaximumMessageSize)
         {
-            byte[] bytesInput = new byte[inputLength];
-            inputStream.ReadExactly(bytesInput);
-            input = Encoding.UTF8.GetString(bytesInput);
+            throw new InvalidDataException(
+                $"Native messaging payload length {inputLength} is outside the allowed range.");
         }
 
-        return input;
+        if (inputLength == 0)
+        {
+            return null;
+        }
+
+        byte[] bytesInput = GC.AllocateUninitializedArray<byte>(inputLength);
+        inputStream.ReadExactly(bytesInput);
+        return new UTF8Encoding(false, true).GetString(bytesInput);
     }
 
-    public void Write(string data)
-    {
-        Stream outputStream = Console.OpenStandardOutput();
+    public void Write(string data) => Write(Console.OpenStandardOutput(), data);
 
-        byte[] bytesData = Encoding.UTF8.GetBytes(data);
-        byte[] bytesLength = BitConverter.GetBytes(bytesData.Length);
+    public static void Write(Stream outputStream, string data)
+    {
+        ArgumentNullException.ThrowIfNull(outputStream);
+        ArgumentNullException.ThrowIfNull(data);
+
+        byte[] bytesData = new UTF8Encoding(false, true).GetBytes(data);
+        if (bytesData.Length > MaximumMessageSize)
+        {
+            throw new InvalidDataException(
+                $"Native messaging payload length {bytesData.Length} exceeds the allowed maximum.");
+        }
+
+        byte[] bytesLength = new byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(bytesLength, bytesData.Length);
 
         outputStream.Write(bytesLength, 0, bytesLength.Length);
 
@@ -41,5 +63,4 @@ public class NativeMessagingHost
         outputStream.Flush();
     }
 }
-
 

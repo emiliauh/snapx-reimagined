@@ -20,19 +20,8 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
     private string _startDelayText = string.Empty;
     private string _durationText = string.Empty;
 
-    public IReadOnlyList<FFmpegCaptureDevice> VideoSources { get; } =
-    [
-        FFmpegCaptureDevice.None,
-        FFmpegCaptureDevice.X11Grab,
-        FFmpegCaptureDevice.GDIGrab,
-        FFmpegCaptureDevice.DDAGrab,
-        FFmpegCaptureDevice.ScreenCaptureRecorder
-    ];
-    public IReadOnlyList<FFmpegCaptureDevice> AudioSources { get; } =
-    [
-        FFmpegCaptureDevice.None,
-        FFmpegCaptureDevice.VirtualAudioCapturer
-    ];
+    public IReadOnlyList<FFmpegCaptureDevice> VideoSources { get; }
+    public IReadOnlyList<FFmpegCaptureDevice> AudioSources { get; }
     public FFmpegVideoCodec[] VideoCodecs { get; } = Enum.GetValues<FFmpegVideoCodec>();
     public FFmpegAudioCodec[] AudioCodecs { get; } = Enum.GetValues<FFmpegAudioCodec>();
     public FFmpegPreset[] Presets { get; } = Enum.GetValues<FFmpegPreset>();
@@ -161,7 +150,53 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
 
     public ScreenRecordOptionsVM()
     {
+        VideoSources = BuildVideoSources();
+        AudioSources = BuildAudioSources();
+
         RefreshTextValues();
+    }
+
+    private static IReadOnlyList<FFmpegCaptureDevice> BuildVideoSources()
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            // Wayland recording is driven by wf-recorder; X11 uses x11grab.
+            // DirectShow-only devices are meaningless here and if selected they
+            // would only produce a platform error at record time.
+            return
+            [
+                FFmpegCaptureDevice.None,
+                FFmpegCaptureDevice.X11Grab
+            ];
+        }
+
+        return
+        [
+            FFmpegCaptureDevice.None,
+            FFmpegCaptureDevice.GDIGrab,
+            FFmpegCaptureDevice.DDAGrab,
+            FFmpegCaptureDevice.ScreenCaptureRecorder
+        ];
+    }
+
+    private static IReadOnlyList<FFmpegCaptureDevice> BuildAudioSources()
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            return
+            [
+                FFmpegCaptureDevice.None,
+                FFmpegCaptureDevice.SystemAudioMonitor,
+                FFmpegCaptureDevice.PulseAudioDefault
+            ];
+        }
+
+        return
+        [
+            FFmpegCaptureDevice.None,
+            FFmpegCaptureDevice.VirtualAudioCapturer,
+            FFmpegCaptureDevice.SystemAudioMonitor
+        ];
     }
 
     [RelayCommand]

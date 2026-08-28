@@ -87,8 +87,7 @@ public class ScreenRecordingOptions
                 {
                     if (FFmpeg.IsAudioSourceSelected)
                     {
-                        AppendInputDevice(args, "dshow", true);
-                        args.Append($"-i audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
+                        AppendAudioInput(args);
                     }
 
                     string x = isCustom ? "$area_x$" : CaptureArea.X.ToString();
@@ -110,12 +109,6 @@ public class ScreenRecordingOptions
                     || OperatingSystem.IsLinux()
                     && FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (FFmpeg.IsAudioSourceSelected)
-                    {
-                        throw new PlatformNotSupportedException(
-                            "X11 recording does not currently have a portable audio-input configuration. Use custom FFmpeg commands for audio capture.");
-                    }
-
                     string x = isCustom ? "$area_x$" : CaptureArea.X.ToString(CultureInfo.InvariantCulture);
                     string y = isCustom ? "$area_y$" : CaptureArea.Y.ToString(CultureInfo.InvariantCulture);
                     string width = isCustom ? "$area_width$" : CaptureArea.Width.ToString(CultureInfo.InvariantCulture);
@@ -126,6 +119,11 @@ public class ScreenRecordingOptions
                     {
                         throw new PlatformNotSupportedException("X11 recording requires the DISPLAY environment variable.");
                     }
+
+                    // The audio input must be declared before the video input
+                    // so ffmpeg maps input 0 to audio and input 1 to video the
+                    // same way the Windows dshow path does.
+                    AppendAudioInput(args);
 
                     AppendInputDevice(args, "x11grab", false);
                     args.Append($"-framerate {framerate} ");
@@ -149,8 +147,7 @@ public class ScreenRecordingOptions
 
                     if (FFmpeg.IsAudioSourceSelected)
                     {
-                        AppendInputDevice(args, "dshow", true);
-                        args.Append($"-i audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
+                        AppendAudioInput(args);
                     }
 
                     // https://ffmpeg.org/ffmpeg-filters.html#ddagrab
@@ -179,25 +176,38 @@ public class ScreenRecordingOptions
                 }
                 else
                 {
-                    // https://ffmpeg.org/ffmpeg-devices.html#dshow
-                    AppendInputDevice(args, "dshow", FFmpeg.IsAudioSourceSelected);
-                    args.Append($"-framerate {framerate} ");
-                    args.Append($"-i video={Core.Utils.Helpers.EscapeCLIText(FFmpeg.VideoSource)}");
-
-                    if (FFmpeg.IsAudioSourceSelected)
+                    // A dshow device pair only exists on Windows. On Linux the
+                    // audio device belongs to the sound server, so it must be
+                    // opened as its own pulse input instead of being appended
+                    // to the video device specifier.
+                    if (OperatingSystem.IsLinux() && FFmpeg.IsAudioSourceSelected)
                     {
-                        args.Append($":audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
+                        AppendAudioInput(args);
+                        AppendInputDevice(args, "dshow", false);
+                        args.Append($"-framerate {framerate} ");
+                        args.Append($"-i video={Core.Utils.Helpers.EscapeCLIText(FFmpeg.VideoSource)} ");
                     }
                     else
                     {
-                        args.Append(" ");
+                        // https://ffmpeg.org/ffmpeg-devices.html#dshow
+                        AppendInputDevice(args, "dshow", FFmpeg.IsAudioSourceSelected);
+                        args.Append($"-framerate {framerate} ");
+                        args.Append($"-i video={Core.Utils.Helpers.EscapeCLIText(FFmpeg.VideoSource)}");
+
+                        if (FFmpeg.IsAudioSourceSelected)
+                        {
+                            args.Append($":audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
+                        }
+                        else
+                        {
+                            args.Append(" ");
+                        }
                     }
                 }
             }
             else if (FFmpeg.IsAudioSourceSelected)
             {
-                AppendInputDevice(args, "dshow", true);
-                args.Append($"-i audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
+                AppendAudioInput(args);
             }
         }
         else
@@ -301,9 +311,19 @@ public class ScreenRecordingOptions
 
         if (FFmpeg.IsAudioSourceSelected)
         {
-            switch (FFmpeg.AudioCodec)
+            // The Wayland wf-recorder path writes an AAC/MP4 intermediate.
+            // Keep the final MP4 compatible with that capture path even when
+            // a legacy Windows configuration still selects MP3. This is a
+            // finalization-only override; it does not alter the user's saved
+            // codec preference or non-Wayland recording behavior.
+            FFmpegAudioCodec audioCodec = !IsRecording && OperatingSystem.IsLinux()
+                && SnapX.Core.Utils.Native.LinuxAPI.IsWayland()
+                ? FFmpegAudioCodec.aac
+                : FFmpeg.AudioCodec;
+
+            switch (audioCodec)
             {
-                case FFmpegAudioCodec.libvoaacenc: // http://trac.ffmpeg.org/wiki/Encode/AAC
+                case FFmpegAudioCodec.aac:
                     args.Append($"-c:a aac -ac 2 -b:a {FFmpeg.AAC_Bitrate}k "); // -ac 2 required otherwise failing with 7.1
                     break;
                 case FFmpegAudioCodec.libopus: // https://www.ffmpeg.org/ffmpeg-codecs.html#libopus-1
@@ -498,5 +518,34 @@ public class ScreenRecordingOptions
         {
             args.Append("-audio_buffer_size 80 "); // Set audio device buffer size in milliseconds (which can directly impact latency, depending on the device).
         }
+    }
+
+    /// <summary>
+    /// Appends the selected audio capture device as its own FFmpeg input.
+    /// The stored audio source is a portable placeholder, so it is resolved to
+    /// a device name the local platform's capture backend can actually open
+    /// (DirectShow on Windows, PulseAudio/PipeWire on Linux).
+    /// </summary>
+    private void AppendAudioInput(StringBuilder args)
+    {
+        if (!FFmpeg.IsAudioSourceSelected)
+        {
+            return;
+        }
+
+        string inputFormat = FFmpegCaptureDevice.GetAudioInputFormat();
+        string audioSource = FFmpegCaptureDevice.ResolveAudioSource(FFmpeg.AudioSource);
+
+        // -audio_buffer_size is a DirectShow-only option. Passing it to the
+        // pulse demuxer makes FFmpeg reject the whole argument list, which
+        // would fail the recording outright rather than just drop the audio.
+        bool isPulse = inputFormat.Equals("pulse", StringComparison.Ordinal);
+        AppendInputDevice(args, inputFormat, audioSource: !isPulse);
+
+        // The pulse demuxer takes the source name directly as the input URL,
+        // whereas dshow requires the "audio=" device-type prefix.
+        args.Append(isPulse
+            ? $"-i {Core.Utils.Helpers.EscapeCLIText(audioSource)} "
+            : $"-i audio={Core.Utils.Helpers.EscapeCLIText(audioSource)} ");
     }
 }

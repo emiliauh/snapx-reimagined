@@ -11,7 +11,7 @@
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
-    <AvaloniaVersion>12.1.0</AvaloniaVersion>
+    <AvaloniaVersion>12.1.1</AvaloniaVersion>
     <SkiaSharpVersion>3.119.4</SkiaSharpVersion>
     <HarfBuzzSharpVersion>8.3.1.3</HarfBuzzSharpVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -58,7 +58,7 @@
     <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="$(AvaloniaVersion)" />
     <PackageReference Include="FluentAvaloniaUI" Version="3.1.0" />
     <PackageReference Include="FluentIcons.Avalonia.Fluent" Version="2.1.337" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
     <PackageReference Include="HarfBuzzSharp" Version="$(HarfBuzzSharpVersion)" />
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="$(HarfBuzzSharpVersion)" />
@@ -109,7 +109,7 @@
     <!-- Keep the small layer-shell helper next to the Debug executable too.
          Recording controls rely on it at runtime; the packaging build already
          compiles the same source for release output. -->
-    <Exec Command="gcc &quot;$(MSBuildProjectDirectory)/Native/snapx-outline.c&quot; &quot;$(MSBuildProjectDirectory)/Native/layer-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/xdg-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/relative-pointer-code.c&quot; -o &quot;$(TargetDir)snapx-outline&quot; -I&quot;$(MSBuildProjectDirectory)/Native&quot; -lwayland-client -lm" />
+    <Exec Command="gcc &quot;$(MSBuildProjectDirectory)/Native/snapx-outline.c&quot; &quot;$(MSBuildProjectDirectory)/Native/layer-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/xdg-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/relative-pointer-code.c&quot; -o &quot;$(TargetDir)snapx-outline&quot; -I&quot;$(MSBuildProjectDirectory)/Native&quot; -I/usr/include/pango-1.0 -I/usr/include/cairo -I/usr/include/pixman-1 -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/fribidi -I/usr/include/harfbuzz -I/usr/include/freetype2 -I/usr/include/libpng16 -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/include/sysprof-6 -pthread -lwayland-client -lpangocairo-1.0 -lpango-1.0 -lcairo -lharfbuzz -lgobject-2.0 -lglib-2.0 -lm" />
     <Exec Command="gcc &quot;$(MSBuildProjectDirectory)/Native/snapx-picker.c&quot; &quot;$(MSBuildProjectDirectory)/Native/layer-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/xdg-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/relative-pointer-code.c&quot; -o &quot;$(TargetDir)snapx-picker&quot; -I&quot;$(MSBuildProjectDirectory)/Native&quot; -lwayland-client -lm" />
   </Target>
 </Project>

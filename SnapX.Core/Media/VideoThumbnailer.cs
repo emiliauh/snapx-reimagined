@@ -3,6 +3,7 @@
 
 
 using System.Diagnostics;
+using System.Globalization;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -77,10 +78,19 @@ public class VideoThumbnailer
                 ProcessStartInfo psi = new ProcessStartInfo()
                 {
                     FileName = FFmpegPath,
-                    Arguments = $"-ss {timeSliceElapsed} -i \"{MediaPath}\" -frames:v 1 -update 1 -y \"{tempThumbnailPath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("-ss");
+                psi.ArgumentList.Add(timeSliceElapsed.ToString(CultureInfo.InvariantCulture));
+                psi.ArgumentList.Add("-i");
+                psi.ArgumentList.Add(MediaPath);
+                psi.ArgumentList.Add("-frames:v");
+                psi.ArgumentList.Add("1");
+                psi.ArgumentList.Add("-update");
+                psi.ArgumentList.Add("1");
+                psi.ArgumentList.Add("-y");
+                psi.ArgumentList.Add(tempThumbnailPath);
 
                 process.StartInfo = psi;
                 process.Start();

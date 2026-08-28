@@ -11,5 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../SnapX.Core/SnapX.Core.csproj" />
+    <Compile Include="../../SnapX.NativeMessagingHost/NativeMessagingHost.cs"
+             Link="NativeMessagingHost.cs" />
   </ItemGroup>
 </Project>

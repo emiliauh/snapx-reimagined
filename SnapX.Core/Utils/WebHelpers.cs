@@ -12,6 +12,10 @@ namespace SnapX.Core.Utils;
 
 public static class WebHelpers
 {
+    private const int MaximumRedirects = 5;
+    private const int MaximumImageDownloadBytes = 64 * 1024 * 1024;
+    private const int MaximumDataUrlBytes = 64 * 1024 * 1024;
+
     public static async Task DownloadFileAsync(string url, string? filePath)
     {
         if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(filePath))
@@ -21,8 +25,7 @@ public static class WebHelpers
 
         FileHelpers.CreateDirectoryFromFilePath(filePath);
 
-        var client = HttpClientFactory.Get();
-        using var responseMessage = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        using var responseMessage = await SendSafeExternalRequestAsync(HttpMethod.Get, url);
 
         if (!responseMessage.IsSuccessStatusCode)
         {
@@ -54,6 +57,10 @@ public static class WebHelpers
         }
 
         var base64Data = match.Groups["data"].Value;
+        if (base64Data.Length > MaximumDataUrlBytes * 4L / 3L + 4)
+        {
+            throw new InvalidDataException("The data URL exceeds the supported image size.");
+        }
 
         byte[] imageBytes = Convert.FromBase64String(base64Data);
 
@@ -69,8 +76,7 @@ public static class WebHelpers
             return null;
         }
 
-        var client = HttpClientFactory.Get();
-        using var responseMessage = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        using var responseMessage = await SendSafeExternalRequestAsync(HttpMethod.Get, url);
         if (!responseMessage.IsSuccessStatusCode)
         {
             DebugHelper.Logger.Error("{url}: {responseMessage.ReasonPhrase}", url, responseMessage);
@@ -86,10 +92,7 @@ public static class WebHelpers
     {
         if (string.IsNullOrEmpty(url)) return null;
 
-        var client = HttpClientFactory.Get();
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Head, url);
-
-        using var responseMessage = await client.SendAsync(requestMessage);
+        using var responseMessage = await SendSafeExternalRequestAsync(HttpMethod.Head, url);
 
         return responseMessage.Content.Headers.ContentDisposition?.FileName;
     }
@@ -101,9 +104,7 @@ public static class WebHelpers
         try
         {
 
-            var client = HttpClientFactory.Get();
-
-            using var responseMessage = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            using var responseMessage = await SendSafeExternalRequestAsync(HttpMethod.Get, url);
 
             if (!responseMessage.IsSuccessStatusCode)
             {
@@ -125,7 +126,7 @@ public static class WebHelpers
                 return null;
             }
 
-            var data = await responseMessage.Content.ReadAsByteArrayAsync();
+            var data = await ReadContentWithLimitAsync(responseMessage.Content, MaximumImageDownloadBytes);
 
             using var memoryStream = new MemoryStream(data);
             return await Image.LoadAsync(memoryStream);
@@ -158,5 +159,77 @@ public static class WebHelpers
             listener.Stop();
         }
     }
-}
 
+    private static async Task<HttpResponseMessage> SendSafeExternalRequestAsync(
+        HttpMethod method,
+        string url,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var target))
+        {
+            throw new ArgumentException("The external URL is invalid.", nameof(url));
+        }
+
+        var client = HttpClientFactory.GetSafeExternalClient();
+        for (var redirectCount = 0; redirectCount <= MaximumRedirects; redirectCount++)
+        {
+            if (!await URLHelpers.IsSafePublicHttpUrlAsync(target.AbsoluteUri, cancellationToken).ConfigureAwait(false))
+            {
+                throw new InvalidOperationException("The external URL does not resolve to a public Internet address.");
+            }
+
+            var request = new HttpRequestMessage(method, target);
+            var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!IsRedirect(response.StatusCode))
+            {
+                return response;
+            }
+
+            var location = response.Headers.Location;
+            response.Dispose();
+            request.Dispose();
+
+            if (location is null)
+            {
+                throw new HttpRequestException("The external server returned a redirect without a Location header.");
+            }
+
+            target = location.IsAbsoluteUri ? location : new Uri(target, location);
+        }
+
+        throw new HttpRequestException($"The external URL exceeded the redirect limit of {MaximumRedirects}.");
+    }
+
+    private static bool IsRedirect(HttpStatusCode statusCode) => (int)statusCode is >= 300 and < 400;
+
+    private static async Task<byte[]> ReadContentWithLimitAsync(
+        HttpContent content,
+        long maximumBytes,
+        CancellationToken cancellationToken = default)
+    {
+        if (content.Headers.ContentLength is > 0 and var length && length > maximumBytes)
+        {
+            throw new InvalidDataException($"The response exceeds the maximum allowed size of {maximumBytes} bytes.");
+        }
+
+        await using var input = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var output = new MemoryStream();
+        var buffer = new byte[81920];
+        long totalRead = 0;
+        int read;
+        while ((read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            totalRead += read;
+            if (totalRead > maximumBytes)
+            {
+                throw new InvalidDataException($"The response exceeds the maximum allowed size of {maximumBytes} bytes.");
+            }
+
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+        }
+
+        return output.ToArray();
+    }
+}

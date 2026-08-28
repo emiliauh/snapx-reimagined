@@ -36,7 +36,7 @@ public class MSI(IBuildLogger Logger, CommandRunner CommandRunner, FS FileSystem
             .GetCustomAttribute<AssemblyProductAttribute>()?
             .Product ?? string.Empty;
         var manufacturer = "SnapXL";
-        var repo = $"https://github.com/{manufacturer}/{product}";
+        var repo = "https://github.com/emiliauh/snapx-reimagined";
         var RTFReadmeContents =
             MarkdownToRtfConverter.Convert(
                 await File.ReadAllTextAsync(Path.Combine(config.RootDirectory, "README.md")));

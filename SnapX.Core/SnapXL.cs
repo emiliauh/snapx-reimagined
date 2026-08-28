@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using SnapX.Core.CLI;
+using SnapX.Core.Capture;
 using SnapX.Core.Hotkey;
 using SnapX.Core.Job;
 using SnapX.Core.Upload;
@@ -708,6 +709,7 @@ public class SnapXL
 
         DebugHelper.WriteLine("SnapX closing!");
         TaskManager.StopAllTasks();
+        AutoCaptureManager.Stop();
         HotkeyManager?.Dispose();
         WatchFolderManager?.Dispose();
         SettingManager.SaveAllSettings();
@@ -810,7 +812,7 @@ public class SnapXL
         {
             try
             {
-                // @see https://github.com/SnapXL/SnapX/blob/c650e315ab51e9100e4c63d61e5915fcf530d96c/Progress.md
+                // @see https://github.com/emiliauh/snapx-reimagined/blob/main/.github/Progress.md
                 var InformalPath = Path.Join(UserDirectory.DocumentsDir, AppName);
                 if (Directory.Exists(UserDirectory.DocumentsDir) && !Directory.Exists(InformalPath) && !File.Exists(InformalPath)) Directory.CreateSymbolicLink(InformalPath, PersonalFolder);
             }

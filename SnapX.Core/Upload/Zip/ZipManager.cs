@@ -27,7 +27,9 @@ public static class ZipManager
             }
         }
 
-        var fullName = Directory.CreateDirectory(Path.GetFullPath(destination)).FullName;
+        ArgumentException.ThrowIfNullOrWhiteSpace(destination);
+        var fullName = Path.TrimEndingDirectorySeparator(
+            Directory.CreateDirectory(Path.GetFullPath(destination)).FullName);
 
         foreach (var entry in archive.Entries)
         {
@@ -39,12 +41,17 @@ public static class ZipManager
             var entryName = retainDirectoryStructure ? entry.FullName : entry.Name;
 
             var fullPath = Path.GetFullPath(Path.Combine(fullName, entryName));
-            if (!fullPath.StartsWith(fullName, StringComparison.OrdinalIgnoreCase)) continue;
+            var relativePath = Path.GetRelativePath(fullName, fullPath);
+            if (Path.IsPathRooted(relativePath) || relativePath == ".." ||
+                relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException($"Archive entry '{entry.FullName}' escapes the extraction directory.");
+            }
 
             if (Path.GetFileName(fullPath).Length == 0 && entry.Length == 0)
             {
                 Directory.CreateDirectory(fullPath);
-                return;
+                continue;
             }
             var directory = Path.GetDirectoryName(fullPath);
             if (directory == null) continue;
@@ -135,4 +142,3 @@ public static class ZipManager
     }
 
 }
-

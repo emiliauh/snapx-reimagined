@@ -22,12 +22,19 @@ public class ImageEffectPreset
         {
             foreach (var effect in Effects.Where(x => x.Enabled))
             {
-                img = effect.Apply(img);
+                Image? applied = effect.Apply(img);
 
-                if (img == null)
+                if (applied == null)
                 {
                     break;
                 }
+
+                if (!ReferenceEquals(applied, img))
+                {
+                    img.Dispose();
+                }
+
+                img = applied;
             }
         }
 

@@ -140,7 +140,8 @@ public class Build(IBuildLogger Logger, ICommandRunner CommandRunner, IFileSyste
         Directory.CreateDirectory(Path.GetDirectoryName(outputBinary)!);
 
         string cflags = GetPkgConfigFlags("wayland-client");
-        string cmd = $"gcc \"{cSrc}\" \"{layerCode}\" \"{xdgCode}\" \"{relativePointerCode}\" -o \"{outputBinary}\" -I\"{sourceDir}\" {cflags} -lm";
+        string pangoCflags = GetPkgConfigFlags("pangocairo");
+        string cmd = $"gcc \"{cSrc}\" \"{layerCode}\" \"{xdgCode}\" \"{relativePointerCode}\" -o \"{outputBinary}\" -I\"{sourceDir}\" {cflags} {pangoCflags} -lm";
         Logger.Information($"Compiling snapx-outline: {cmd}");
         try
         {
@@ -149,6 +150,8 @@ public class Build(IBuildLogger Logger, ICommandRunner CommandRunner, IFileSyste
         catch
         {
             Logger.Information("snapx-outline compile failed; Wayland outline will fall back to Avalonia windows.");
+            throw new InvalidOperationException(
+                "snapx-outline (recording controller) failed to compile; install the pangocairo/wayland development packages.");
         }
     }
 

@@ -180,27 +180,22 @@ public static class ImageHelpers
     }
     public static Image AddCanvas(Image img, Padding canvasMargin, Rgba32 canvasColor)
     {
-        // Get the original image dimensions
         int originalWidth = img.Width;
         int originalHeight = img.Height;
 
-        // Calculate the new dimensions (original size + margins)
+        // Calculate the new dimensions (original size + margins).
         int newWidth = originalWidth + canvasMargin.Left + canvasMargin.Right;
         int newHeight = originalHeight + canvasMargin.Top + canvasMargin.Bottom;
 
-        // Mutate the existing image and resize it to the new size
-        img.Mutate(ctx =>
+        // The caller owns the returned image; do NOT dispose it here. The
+        // original capture is drawn onto this new canvas and handed back.
+        var canvas = new Image<Rgba32>(newWidth, newHeight, canvasColor);
+        canvas.Mutate(ctx =>
         {
-            // First, fill the new area (the canvas) with the background color
-            ctx.Fill(canvasColor);
-
-            // Draw the original image into the center of the new canvas area
-            var xOffset = canvasMargin.Left;
-            var yOffset = canvasMargin.Top;
-            ctx.DrawImage(img, new Point(xOffset, yOffset), 1f);  // Draw original image on the new canvas
+            ctx.DrawImage(img, new Point(canvasMargin.Left, canvasMargin.Top), 1f);
         });
 
-        return img;
+        return canvas;
     }
     public static Image AutoCropImage(
         Image img,
@@ -907,4 +902,3 @@ public static class ImageHelpers
     }
 
 }
-

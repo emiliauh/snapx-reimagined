@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Security.Authentication;
 
 namespace SnapX.Core.Utils.Miscellaneous;
@@ -83,13 +84,19 @@ public class ModernProgressHandler(HttpMessageHandler? InnerHandler = null)
 
 public static class HttpClientFactory
 {
-    private static readonly Lazy<SocketsHttpHandler> _lazyHandler = new(CreateHandler);
+    private static readonly Lazy<SocketsHttpHandler> _lazyHandler = new(() => CreateHandler());
+    private static readonly Lazy<HttpClient> _lazySafeExternalClient = new(() => CreateClient(allowAutoRedirect: false, publicAddressesOnly: true));
 
     public static SocketsHttpHandler Handler => _lazyHandler.Value;
-    private static SocketsHttpHandler CreateHandler()
+    private static SocketsHttpHandler CreateHandler(bool allowAutoRedirect = true, bool publicAddressesOnly = false)
     {
         var clientHandler = new SocketsHttpHandler
         {
+            // Uploaders that need cookies supply them explicitly. A shared cookie
+            // container would otherwise leak state between independent uploaders.
+            UseCookies = false,
+            AllowAutoRedirect = allowAutoRedirect,
+            MaxResponseHeadersLength = 64,
             EnableMultipleHttp3Connections = true,
             EnableMultipleHttp2Connections = true,
             PooledConnectionIdleTimeout = TimeSpan.FromSeconds(60),
@@ -102,15 +109,55 @@ public static class HttpClientFactory
                 AllowTlsResume = true,
                 EnabledSslProtocols = SslProtocols.Tls13 | SslProtocols.Tls12
             },
-            Proxy = HelpersOptions.CurrentProxy.GetWebProxy(),
+            // Do not tunnel untrusted download URLs through a configured proxy:
+            // the proxy could otherwise resolve or reach a private address after
+            // the URL has passed the caller's DNS validation.
+            UseProxy = !publicAddressesOnly,
+            Proxy = publicAddressesOnly ? null : HelpersOptions.CurrentProxy.GetWebProxy(),
         };
 
-        if (SnapXL.Settings?.AcceptInvalidSSLCertificates ?? false)
+        if (publicAddressesOnly)
         {
-            clientHandler.SslOptions.RemoteCertificateValidationCallback = (sender, certificate, chain, errors) => true;
+            clientHandler.ConnectCallback = ConnectToPublicEndpointAsync;
         }
 
         return clientHandler;
+    }
+
+    private static async ValueTask<Stream> ConnectToPublicEndpointAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        IPAddress[] addresses;
+        try
+        {
+            addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (SocketException exception)
+        {
+            throw new HttpRequestException("Unable to resolve the external host.", exception);
+        }
+
+        Exception? lastException = null;
+        foreach (IPAddress address in addresses.Where(URLHelpers.IsPublicIPAddress))
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellationToken)
+                    .ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+                socket.Dispose();
+            }
+        }
+
+        throw new HttpRequestException(
+            "The external host did not resolve to a reachable public Internet address.", lastException);
     }
 
     public static ModernProgressHandler? _ph = null;
@@ -124,14 +171,13 @@ public static class HttpClientFactory
             NoCache = true
         };
     };
-    // Using Lazy<T> to handle thread-safe initialization of the HttpClient
-    private static Lazy<HttpClient> _lazyClient = new(() =>
+    private static HttpClient CreateClient(bool allowAutoRedirect = true, bool publicAddressesOnly = false)
     {
-        HttpMessageHandler handler = Handler;
+        HttpMessageHandler handler = allowAutoRedirect ? Handler : CreateHandler(allowAutoRedirect: false, publicAddressesOnly);
 
 #if DEBUG
         // Only for DEBUG. Do not enable in production. Or you'll be fired.
-        var loggingHandler = new LoggingHttpMessageHandler(Handler, DebugHelper.Logger);
+        var loggingHandler = new LoggingHttpMessageHandler(handler, DebugHelper.Logger);
         handler = loggingHandler;
 #endif
         var ph = new ModernProgressHandler(handler);
@@ -140,15 +186,24 @@ public static class HttpClientFactory
         ConfigureClient(httpClient);
 
         return httpClient;
-    });
+    }
+
+    // Using Lazy<T> to handle thread-safe initialization of the shared HttpClient.
+    private static readonly Lazy<HttpClient> _lazyClient = new(() => CreateClient());
 
 
     public static HttpClient Get() => _lazyClient.Value;
 
-    public static HttpClient GetCopy()
+    /// <summary>
+    /// Returns a redirect-free client for externally supplied download URLs.
+    /// Callers must validate every redirect target before following it.
+    /// </summary>
+    public static HttpClient GetSafeExternalClient() => _lazySafeExternalClient.Value;
+
+    public static HttpClient GetCopy(bool allowAutoRedirect = true)
     {
         var source = Get();
-        var handler = CreateHandler();
+        var handler = CreateHandler(allowAutoRedirect);
 
         HttpMessageHandler finalHandler = handler;
 #if DEBUG
@@ -170,4 +225,3 @@ public static class HttpClientFactory
         return newClient;
     }
 }
-

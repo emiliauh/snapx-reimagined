@@ -6,6 +6,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Security;
 using System.Text;
 using System.Text.Json;
@@ -262,25 +263,90 @@ public static class URLHelpers
 
         if (uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6)
         {
-            if (IPAddress.IsLoopback(IPAddress.Parse(uri.Host))) return false;
-
-            var bytes = IPAddress.Parse(uri.Host).GetAddressBytes();
-            var isPrivate = bytes switch
-            {
-                [10, ..] => true,
-                [172, >= 16 and <= 31, ..] => true,
-                [192, 168, ..] => true,
-                [169, 254, ..] => true,
-                _ => false
-            };
-
-            if (isPrivate) return false;
+            return IsPublicIPAddress(IPAddress.Parse(uri.Host));
         }
 
         if (uri.HostNameType is not UriHostNameType.Dns) return uri.IsWellFormedOriginalString();
         var host = uri.IdnHost;
         if (host.Contains('_') || !host.Contains('.')) return false;
         return host.Split('.').Last().Length >= 2 && uri.IsWellFormedOriginalString();
+    }
+
+    /// <summary>
+    /// Validates a URL immediately before SnapX retrieves external content.
+    /// DNS names are resolved here so a public-looking hostname cannot direct a
+    /// native-messaging or CLI download to loopback, link-local, or private IPs.
+    /// Redirects must be passed through this check individually.
+    /// </summary>
+    public static async Task<bool> IsSafePublicHttpUrlAsync(string? url, CancellationToken cancellationToken = default)
+    {
+        if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6)
+            {
+                return IsPublicIPAddress(IPAddress.Parse(uri.Host));
+            }
+
+            if (uri.HostNameType != UriHostNameType.Dns)
+            {
+                return false;
+            }
+
+            var addresses = await Dns.GetHostAddressesAsync(uri.DnsSafeHost)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            return addresses.Length > 0 && addresses.All(IsPublicIPAddress);
+        }
+        catch (Exception exception) when (exception is SocketException or OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    public static bool IsPublicIPAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(address) || address.IsIPv6LinkLocal ||
+            address.IsIPv6SiteLocal || address.IsIPv6Multicast ||
+            address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any) ||
+            address.Equals(IPAddress.IPv6None))
+        {
+            return false;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes.Length switch
+        {
+            4 => bytes switch
+            {
+                [0, ..] or [10, ..] or [100, >= 64 and <= 127, ..] or [127, ..] or
+                [169, 254, ..] or [172, >= 16 and <= 31, ..] or [192, 0, 0, ..] or
+                [192, 0, 2, ..] or [192, 168, ..] or [198, 18 or 19, ..] or
+                [198, 51, 100, ..] or [203, 0, 113, ..] or [>= 224, ..] => false,
+                _ => true
+            },
+            // Unique local, documentation, and IPv4/IPv6 translation addresses
+            // are not public Internet destinations.
+            16 => bytes switch
+            {
+                [0, ..] or [>= 0xFC and <= 0xFD, ..] or [0xFE, >= 0x80 and <= 0xBF, ..] or
+                [0x20, 0x01, 0x0D, 0xB8, ..] => false,
+                _ => true
+            },
+            _ => false
+        };
     }
 
     public static string? AddSlash(string? url, SlashType slashType) => AddSlash(url, slashType, 1);

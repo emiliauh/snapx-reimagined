@@ -69,6 +69,16 @@
                             <fluent:FluentIconSource Icon="Camera" IconSize="Size24" IconVariant="Regular" />
                         </controls:FANavigationViewItem.IconSource>
                     </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="{x:Static utils:Lang.UI_Dropdown_ScrollingCapture}">
+                        <controls:FANavigationViewItem.IconSource>
+                            <fluent:FluentIconSource Icon="Camera" IconSize="Size24" IconVariant="Regular" />
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
+                    <controls:FANavigationViewItem Content="{x:Static utils:Lang.UI_Dropdown_Annotate}">
+                        <controls:FANavigationViewItem.IconSource>
+                            <fluent:FluentIconSource Icon="Edit" IconSize="Size24" IconVariant="Regular" />
+                        </controls:FANavigationViewItem.IconSource>
+                    </controls:FANavigationViewItem>
                     <!-- <controls:FANavigationViewItem Content="{x:Static utils:Lang.UI_Dropdown_RegionLight}" IconSource="Camera" />
                     <controls:FANavigationViewItem Content="{x:Static utils:Lang.UI_Dropdown_RegionTransparent}" IconSource="Camera" />-->
                     <!-- <controls:FANavigationViewItem Content="{x:Static utils:Lang.UI_Dropdown_ScreenRecording}" IconSource="Camera" />

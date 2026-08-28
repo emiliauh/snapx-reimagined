@@ -19,8 +19,13 @@ $BuildProjectFile = "$PSScriptRoot\build\build.csproj"
 $TempDirectory = "$PSScriptRoot\build\temp"
 
 $DotNetGlobalFile = "$PSScriptRoot\\global.json"
-$DotNetInstallUrl = "https://dot.net/v1/dotnet-install.ps1"
-$DotNetChannel = "LTS"
+$DotNetInstallUrl = "https://raw.githubusercontent.com/dotnet/install-scripts/47940ac9fc30a2f2dd19167165d0bb0774625f67/src/dotnet-install.ps1"
+$DotNetInstallSha256 = "3bb07bc8025211836c1e4f9d3f6a044e55b1fb6eec518a6c78851d04e210442b"
+$RequestedDotNetVersion = if (Test-Path variable:DotNetVersion) {
+    Get-Variable -Name DotNetVersion -ValueOnly
+} else {
+    (Get-Content -Raw $DotNetGlobalFile | ConvertFrom-Json).sdk.version
+}
 
 $env:AVALONIA_TELEMETRY_OPTOUT = 1
 $env:DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE = "true"
@@ -45,18 +50,21 @@ else {
     # Download install script
     $DotNetInstallFile = "$TempDirectory\dotnet-install.ps1"
     New-Item -ItemType Directory -Path $TempDirectory -Force | Out-Null
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls13
-    (New-Object System.Net.WebClient).DownloadFile($DotNetInstallUrl, $DotNetInstallFile)
-
-
-
-    # Install by channel or version
-    $DotNetDirectory = "$TempDirectory\dotnet-win"
-    if (!(Test-Path variable:DotNetVersion)) {
-        ExecSafe { & powershell $DotNetInstallFile -InstallDir $DotNetDirectory -Channel $DotNetChannel -NoPath }
-    } else {
-        ExecSafe { & powershell $DotNetInstallFile -InstallDir $DotNetDirectory -Version $DotNetVersion -NoPath }
+    Invoke-WebRequest -Uri $DotNetInstallUrl -OutFile $DotNetInstallFile
+    $ActualDotNetInstallSha256 = (Get-FileHash -Path $DotNetInstallFile -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($ActualDotNetInstallSha256 -ne $DotNetInstallSha256) {
+        Remove-Item -Force $DotNetInstallFile
+        throw "The downloaded .NET installer did not match its expected SHA-256."
     }
+
+
+
+    # Use the repository's exact SDK version rather than a moving channel.
+    $DotNetDirectory = "$TempDirectory\dotnet-win"
+    if ([string]::IsNullOrWhiteSpace($RequestedDotNetVersion)) {
+        throw "The SDK version is missing from global.json."
+    }
+    ExecSafe { & powershell $DotNetInstallFile -InstallDir $DotNetDirectory -Version $RequestedDotNetVersion -NoPath }
     $env:DOTNET_EXE = "$DotNetDirectory\dotnet.exe"
     $env:PATH = "$DotNetDirectory;$env:PATH"
 }

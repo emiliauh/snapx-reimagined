@@ -37,18 +37,6 @@ public partial class ApplicationUploadSettingsVM : ViewModelBase
         }
     }
 
-    public bool AcceptInvalidSslCertificates
-    {
-        get => _config.AcceptInvalidSSLCertificates;
-        set
-        {
-            if (_config.AcceptInvalidSSLCertificates == value) return;
-            _config.AcceptInvalidSSLCertificates = value;
-            OnPropertyChanged();
-            Save();
-        }
-    }
-
     public bool UrlEncodeIgnoreEmoji
     {
         get => _config.URLEncodeIgnoreEmoji;

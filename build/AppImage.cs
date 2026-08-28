@@ -93,7 +93,7 @@ public class AppImage(IBuildLogger Logger, ICommandRunner CommandRunner, FS File
                               var arch = (await CommandRunner.CaptureAsync("arch", "")).Trim();
                               await CommandRunner.RunAsync(
                                   "env",
-                                  $"VERSION={config.SnapXVersion} APPIMAGELAUNCHER_DISABLE=1 mkappimage -s --comp zstd --ll -u \"gh-releases-zsync|SnapXL|SnapX|latest|SnapX-*{arch}.AppImage.zsync\" {config.Appdir}"
+                                  $"VERSION={config.SnapXVersion} APPIMAGELAUNCHER_DISABLE=1 mkappimage -s --comp zstd --ll -u \"gh-releases-zsync|emiliauh|snapx-reimagined|latest|SnapX-*{arch}.AppImage.zsync\" {config.Appdir}"
                               );
                           }
 

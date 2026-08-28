@@ -31,8 +31,10 @@ public sealed class RecordingControlWindow
     private static RecordingControlWindow? _current;
 
     private readonly Border _card;
+    private readonly TextBlock _elapsed;
     private readonly TextBlock _status;
     private readonly Button _pauseResume;
+    private readonly DispatcherTimer _timer;
     private Window? _fallbackWindow;
     private Process? _nativeController;
     private bool _usesNativeLayer;
@@ -90,6 +92,9 @@ public sealed class RecordingControlWindow
 
     private RecordingControlWindow(ImageRectangle captureRectangle)
     {
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _timer.Tick += (_, _) => UpdateLabels();
+
         var panel = new StackPanel
         {
             Margin = new Thickness(12),
@@ -97,26 +102,43 @@ public sealed class RecordingControlWindow
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        var header = new StackPanel
+        var header = new Grid
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Auto)
+            }
         };
         header.Children.Add(new Ellipse
         {
-            Width = 14,
-            Height = 14,
+            Width = 10,
+            Height = 10,
             Fill = Brushes.Red,
             VerticalAlignment = VerticalAlignment.Center
         });
         _status = new TextBlock
         {
-            Text = "Recording…",
+            Text = "Recording",
             Foreground = Brushes.White,
             FontWeight = FontWeight.Bold,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0)
         };
+        Grid.SetColumn(_status, 1);
         header.Children.Add(_status);
+        _elapsed = new TextBlock
+        {
+            Text = "00:00",
+            Foreground = new SolidColorBrush(Color.FromArgb(255, 245, 247, 250)),
+            FontSize = 15,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0)
+        };
+        Grid.SetColumn(_elapsed, 2);
+        header.Children.Add(_elapsed);
         panel.Children.Add(header);
 
         var buttons = new StackPanel
@@ -135,16 +157,16 @@ public sealed class RecordingControlWindow
         {
             Width = 340,
             Height = 118,
-            Background = new SolidColorBrush(Color.FromArgb(242, 28, 28, 28)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(180, 90, 140, 255)),
+            Background = new SolidColorBrush(Color.FromArgb(238, 32, 32, 32)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(255, 58, 58, 58)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(6),
             BoxShadow = new BoxShadows(new BoxShadow
             {
                 OffsetX = 0,
                 OffsetY = 4,
                 Blur = 16,
-                Color = Color.FromArgb(128, 0, 0, 0)
+                Color = Color.FromArgb(96, 0, 0, 0)
             }),
             Child = panel
         };
@@ -162,8 +184,17 @@ public sealed class RecordingControlWindow
             Content = text,
             Width = 96,
             Height = 34,
-            HorizontalAlignment = HorizontalAlignment.Left
+            HorizontalAlignment = HorizontalAlignment.Left,
+            FontSize = 13,
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Color.FromArgb(255, 51, 51, 51)),
+            Foreground = new SolidColorBrush(Color.FromArgb(255, 245, 247, 250))
         };
+        if (text == "Abort")
+        {
+            button.Background = new SolidColorBrush(Color.FromArgb(255, 58, 38, 38));
+            button.Foreground = new SolidColorBrush(Color.FromArgb(255, 255, 211, 216));
+        }
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -173,15 +204,18 @@ public sealed class RecordingControlWindow
         _usesNativeLayer = TryStartNativeController(captureRectangle);
         if (_usesNativeLayer)
         {
+            _timer.Start();
             return true;
         }
 
         ShowFallbackWindow(captureRectangle);
+        _timer.Start();
         return true;
     }
 
     private void Close()
     {
+        _timer.Stop();
         if (_usesNativeLayer)
         {
             StopNativeController();
@@ -274,16 +308,11 @@ public sealed class RecordingControlWindow
 
     private void UpdateLabels()
     {
-        if (ScreenRecordManager.IsPaused)
-        {
-            _status.Text = "Paused…";
-            _pauseResume.Content = "Resume";
-        }
-        else
-        {
-            _status.Text = "Recording…";
-            _pauseResume.Content = "Pause";
-        }
+        bool paused = ScreenRecordManager.IsPaused;
+        string state = paused ? "Paused" : "Recording";
+        _status.Text = state;
+        _elapsed.Text = FormatElapsed(ScreenRecordManager.Elapsed);
+        _pauseResume.Content = paused ? "Resume" : "Pause";
 
         // Read the reference once so a watchdog that disposes the process
         // cannot race HasExited outside the guard. This is set only from the
@@ -301,7 +330,8 @@ public sealed class RecordingControlWindow
                 {
                     return;
                 }
-                process.StandardInput.WriteLine(ScreenRecordManager.IsPaused ? "paused" : "recording");
+                process.StandardInput.WriteLine(
+                    $"{(ScreenRecordManager.IsPaused ? "paused" : "recording")} {FormatElapsed(ScreenRecordManager.Elapsed)}");
                 process.StandardInput.Flush();
             }
             catch (Exception ex)
@@ -310,6 +340,11 @@ public sealed class RecordingControlWindow
             }
         }
     }
+
+    private static string FormatElapsed(TimeSpan elapsed) =>
+        elapsed.TotalHours >= 1
+            ? elapsed.ToString(@"hh\:mm\:ss")
+            : elapsed.ToString(@"mm\:ss");
 
     private bool TryStartNativeController(ImageRectangle captureRectangle)
     {
@@ -342,8 +377,9 @@ public sealed class RecordingControlWindow
             // with the red outline. Output-local coordinates are required
             // because layer-shell margins are relative to the selected output.
             // If the output cannot be resolved, the global rectangle is passed
-            // through; the helper detects an off-output/degenerate placement
-            // and uses its corner fallback rather than covering the recording.
+            // through; outside-only mode makes the helper decline an
+            // off-output or degenerate placement rather than covering the
+            // recording.
             int regionX = captureRectangle.X;
             int regionY = captureRectangle.Y;
             string? outputName = null;
@@ -373,7 +409,6 @@ public sealed class RecordingControlWindow
             startInfo.ArgumentList.Add(captureRectangle.Width.ToString());
             startInfo.ArgumentList.Add(captureRectangle.Height.ToString());
             startInfo.ArgumentList.Add("--controller");
-
             if (!string.IsNullOrWhiteSpace(outputName))
             {
                 startInfo.ArgumentList.Add("--output");

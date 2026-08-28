@@ -12,7 +12,7 @@ public class FFmpegOptions
     public string VideoSource { get; set; } = FFmpegCaptureDevice.GDIGrab.Value;
     public string AudioSource { get; set; } = FFmpegCaptureDevice.None.Value;
     public FFmpegVideoCodec VideoCodec { get; set; } = FFmpegVideoCodec.libx264;
-    public FFmpegAudioCodec AudioCodec { get; set; } = FFmpegAudioCodec.libvoaacenc;
+    public FFmpegAudioCodec AudioCodec { get; set; } = FFmpegAudioCodec.aac;
     public string UserArgs { get; set; } = "";
     public bool UseCustomCommands { get; set; } = false;
     public string CustomCommands { get; set; } = "";
@@ -118,7 +118,7 @@ public class FFmpegOptions
             {
                 switch (AudioCodec)
                 {
-                    case FFmpegAudioCodec.libvoaacenc:
+                    case FFmpegAudioCodec.aac:
                         return "m4a";
                     case FFmpegAudioCodec.libopus:
                         return "opus";
@@ -146,6 +146,9 @@ public class FFmpegOptions
     // TEMP: For backward compatibility
     public void FixSources()
     {
+        VideoSource ??= string.Empty;
+        AudioSource ??= string.Empty;
+
         if (VideoSource.Equals("None", StringComparison.OrdinalIgnoreCase))
         {
             VideoSource = FFmpegCaptureDevice.None.Value;
@@ -158,6 +161,31 @@ public class FFmpegOptions
         if (AudioSource.Equals("None", StringComparison.OrdinalIgnoreCase))
         {
             AudioSource = FFmpegCaptureDevice.None.Value;
+        }
+    }
+
+    /// <summary>
+    /// Normalizes values written by older SnapX/ShareX configurations after
+    /// YAML deserialization. The PulseAudio/PipeWire source used to be the
+    /// bare "default" device, which silently resolves to the microphone on
+    /// modern desktops, while "virtual-audio-capturer" was a Windows-only
+    /// DirectShow placeholder. On Linux both are upgraded to the default
+    /// output monitor so existing settings continue to record system audio.
+    /// </summary>
+    public void NormalizeLegacyLinuxValues()
+    {
+        FixSources();
+        if (OperatingSystem.IsLinux())
+        {
+            // The old Windows placeholder must keep meaning system audio, but a
+            // bare "default" is the user's deliberate microphone choice on
+            // Linux. Normalizing both made the new Microphone option impossible
+            // to round-trip, because every config reload silently replaced it
+            // with the output monitor.
+            if (AudioSource.Equals(FFmpegCaptureDevice.VirtualAudioCapturer.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                AudioSource = FFmpegCaptureDevice.SystemAudioMonitor.Value;
+            }
         }
     }
 }

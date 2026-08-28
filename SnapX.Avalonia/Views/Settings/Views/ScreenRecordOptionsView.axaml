@@ -51,11 +51,29 @@
                         <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Audio source" />
                         <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding AudioSources}" SelectedItem="{Binding SelectedAudioSource}" />
                         <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Video codec" />
-                        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding VideoCodecs}" SelectedItem="{Binding VideoCodec}" />
+                        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding VideoCodecs}" SelectedItem="{Binding VideoCodec}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource EnumDescConverter}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Audio codec" />
-                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding AudioCodecs}" SelectedItem="{Binding AudioCodec}" />
+                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding AudioCodecs}" SelectedItem="{Binding AudioCodec}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource EnumDescConverter}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="x264 preset" />
-                        <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Presets}" SelectedItem="{Binding VideoPreset}" />
+                        <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Presets}" SelectedItem="{Binding VideoPreset}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource EnumDescConverter}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </Grid>
                 </StackPanel>
             </Border>

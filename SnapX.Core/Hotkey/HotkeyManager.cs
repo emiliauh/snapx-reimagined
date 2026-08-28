@@ -370,6 +370,7 @@ public sealed class HotkeyManager : IDisposable
         new(HotkeyType.PrintScreen, Keys.PrintScreen),
         new(HotkeyType.ActiveWindow, Keys.Alt | Keys.PrintScreen),
         new(HotkeyType.ScreenRecorder, Keys.Shift | Keys.PrintScreen),
-        new(HotkeyType.ScreenRecorderGIF, Keys.Control | Keys.Shift | Keys.PrintScreen)
+        new(HotkeyType.ScreenRecorderGIF, Keys.Control | Keys.Shift | Keys.PrintScreen),
+        new(HotkeyType.ScrollingCapture, Keys.Control | Keys.Shift | Keys.S)
     ];
 }

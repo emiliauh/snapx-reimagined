@@ -87,6 +87,13 @@ public static class SettingManager
 
     private const string HotkeysConfigFileName = "HotkeysConfig.yaml";
 
+    private static readonly HashSet<string> ImportableSettingsFileNames = new(StringComparer.Ordinal)
+    {
+        ApplicationConfigFileName,
+        UploadersConfigFileName,
+        HotkeysConfigFileName
+    };
+
     private static string HotkeysConfigFilePath
     {
         get
@@ -175,6 +182,7 @@ public static class SettingManager
         Settings.SettingsSaveFailed += Settings_SettingsSaveFailed;
         SnapXL.Configuration.Bind(Settings, Options => Options.BindNonPublicProperties = true);
         DefaultTaskSettings = Settings.DefaultTaskSettings;
+        DefaultTaskSettings?.CaptureSettings?.FFmpegOptions?.NormalizeLegacyLinuxValues();
         ApplicationConfigBackwardCompatibilityTasks();
 
         if (string.IsNullOrWhiteSpace(Settings.SQLitePath))
@@ -241,6 +249,10 @@ public static class SettingManager
         if (HotkeysConfig.Hotkeys.Count <= 0) HotkeysConfig.Hotkeys = HotkeyManager.GetDefaultHotkeyList();
 
         BuiltConfig.Bind(HotkeysConfig, Options => Options.BindNonPublicProperties = true);
+        foreach (HotkeySettings hotkey in HotkeysConfig.Hotkeys)
+        {
+            hotkey.TaskSettings?.CaptureSettings?.FFmpegOptions?.NormalizeLegacyLinuxValues();
+        }
         HotkeysConfigBackwardCompatibilityTasks();
     }
 
@@ -488,6 +500,17 @@ public static class SettingManager
 
     private static void HotkeysConfigBackwardCompatibilityTasks()
     {
+        // Ensure the Scrolling capture hotkey is present in an existing config
+        // that predates the feature. This mirrors upstream ShareX, which ships
+        // Scrolling capture as a default bindable action. We append it rather
+        // than replacing the whole list so the user's existing bindings are not
+        // lost. A duplicate guard keeps this idempotent across restarts.
+        if (!HotkeysConfig.Hotkeys.Any(h => h.TaskSettings?.Job == HotkeyType.ScrollingCapture))
+        {
+            HotkeysConfig.Hotkeys.Add(new HotkeySettings(
+                HotkeyType.ScrollingCapture,
+                Keys.Control | Keys.Shift | Keys.S));
+        }
 
         // if (Settings.IsUpgradeFrom("15.0.1"))
         // {
@@ -639,13 +662,13 @@ public static class SettingManager
                 true,
                 entry =>
                 {
-                    return FileHelpers.CheckExtension(entry.Name, new[] { "db" });
+                    return string.Equals(entry.FullName, Path.GetFileName(SnapXL.DBPath), StringComparison.Ordinal);
                 },
                 1_000_000_000
             );
             ZipManager.Extract(archivePath, SnapXL.ConfigFolder, true, entry =>
             {
-                return FileHelpers.CheckExtension(entry.Name, new[] { "json", "xml" });
+                return ImportableSettingsFileNames.Contains(entry.FullName);
             }, 1_000_000_000);
 
             return true;

@@ -24,7 +24,7 @@
  *   toplevels that always appear in "hyprctl clients" as normal decorated,
  *   focusable windows. A wlr-layer-shell OVERLAY surface is not a normal
  *   toplevel: it is absent from hyprctl clients, has no decorations/taskbar/
- *   focus, is click-through, and is excluded from grim/wf-recorder capture.
+ *   focus, and is click-through. It remains part of normal screencopy output.
  *
  * Usage:  snapx-outline <x> <y> <w> <h> --edge top|bottom|left|right [--output <name>]
  *         snapx-outline <x> <y> <w> <h> --controller [--output <name>]
@@ -70,6 +70,8 @@
 #include <sys/mman.h>
 #include <poll.h>
 #include <wayland-client.h>
+#include <cairo/cairo.h>
+#include <pango/pangocairo.h>
 #include "layer-shell-client.h"
 #include "relative-pointer-client.h"
 
@@ -109,6 +111,7 @@ typedef enum { MODE_OUTLINE, MODE_CONTROLLER } Mode;
 static Mode mode = MODE_OUTLINE;
 static volatile sig_atomic_t running = 1;
 static int controller_paused = 0;
+static char controller_timer[16] = "00:00";
 static double pointer_x = -1, pointer_y = -1;
 static int debug_log = 0;
 static char wanted_output[64];  /* optional output name */
@@ -133,6 +136,7 @@ static int work_top = 0, work_bottom = 0;
 #define CONTROLLER_HEADER_H 50
 #define CONTROLLER_EDGE_GAP 8          /* space between outline and card    */
 #define CONTROLLER_CORNER_MARGIN 16
+#define CONTROLLER_FACE "Noto Sans, Roboto, Adwaita Sans, Open Sans, Sans"
 
 static int controller_width = CONTROLLER_WIDTH, controller_height = CONTROLLER_HEIGHT;
 
@@ -247,7 +251,7 @@ static int rounded_coverage(int px, int py, int x, int y, int rw, int rh, int ra
         float cx = sx < x + radius ? x + radius : (sx > x + rw - radius ? x + rw - radius : sx);
         float cy = sy < y + radius ? y + radius : (sy > y + rh - radius ? y + rh - radius : sy);
         float dx = sx - cx, dy = sy - cy;
-        if (dx * dx + dy * dy <= (float)radius * radius) covered++;
+        if (dx * dx + dy * dy <= radius * radius) covered++;
     }
     return covered * 255 / 4;
 }
@@ -257,166 +261,92 @@ static void draw_rounded_rect(uint32_t *pixels, int w, int h, int x, int y, int 
     for (int py = y < 0 ? 0 : y; py < y + rh && py < h; py++)
         for (int px = x < 0 ? 0 : x; px < x + rw && px < w; px++) {
             int coverage = rounded_coverage(px, py, x, y, rw, rh, radius);
-            if (coverage) blend_pixel(&pixels[(size_t)py * w + px], colour_with_alpha(colour, coverage));
+            if (coverage)
+                blend_pixel(&pixels[(size_t)py * w + px], colour_with_alpha(colour, coverage));
         }
-}
-
-static const unsigned char *glyph_for_char(char c) {
-    /* One consistent 5x7 uppercase-cap-height face. Every glyph uses the full
-       7-row body and the same 5px advance box, so labels line up on a shared
-       baseline instead of the previous ad-hoc mixture of heights. Lowercase
-       input is folded to the same caps to keep the tile visually uniform. */
-    static const unsigned char glyphs[26][7] = {
-        {14,17,17,31,17,17,17},  /* A */ {30,17,17,30,17,17,30},  /* B */
-        {14,17,16,16,16,17,14},  /* C */ {28,18,17,17,17,18,28},  /* D */
-        {31,16,16,30,16,16,31},  /* E */ {31,16,16,30,16,16,16},  /* F */
-        {14,17,16,23,17,17,15},  /* G */ {17,17,17,31,17,17,17},  /* H */
-        {14,4,4,4,4,4,14},       /* I */ {7,2,2,2,2,18,12},       /* J */
-        {17,18,20,24,20,18,17},  /* K */ {16,16,16,16,16,16,31},  /* L */
-        {17,27,21,21,17,17,17},  /* M */ {17,25,25,21,19,19,17},  /* N */
-        {14,17,17,17,17,17,14},  /* O */ {30,17,17,30,16,16,16},  /* P */
-        {14,17,17,17,21,18,13},  /* Q */ {30,17,17,30,20,18,17},  /* R */
-        {15,16,16,14,1,1,30},    /* S */ {31,4,4,4,4,4,4},        /* T */
-        {17,17,17,17,17,17,14},  /* U */ {17,17,17,17,17,10,4},   /* V */
-        {17,17,17,21,21,27,17},  /* W */ {17,17,10,4,10,17,17},   /* X */
-        {17,17,10,4,4,4,4},      /* Y */ {31,1,2,4,8,16,31}       /* Z */
-    };
-    static const unsigned char digits[10][7] = {
-        {14,17,19,21,25,17,14},{4,12,4,4,4,4,14},{14,17,1,2,4,8,31},
-        {31,2,4,2,1,17,14},{2,6,10,18,31,2,2},{31,16,30,1,1,17,14},
-        {6,8,16,30,17,17,14},{31,1,2,4,8,8,8},{14,17,17,14,17,17,14},
-        {14,17,17,15,1,2,12}
-    };
-    static const unsigned char dash[7] = {0,0,0,31,0,0,0};
-    static const unsigned char dot[7] = {0,0,0,0,0,12,12};
-    static const unsigned char colon[7] = {0,12,12,0,12,12,0};
-    if (c >= '0' && c <= '9') return digits[c - '0'];
-    if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
-    if (c >= 'A' && c <= 'Z') return glyphs[c - 'A'];
-    if (c == '-') return dash;
-    if (c == '.') return dot;
-    if (c == ':') return colon;
-    return NULL;
-}
-
-/* Uniform metrics: a 5px glyph box, one scaled pixel of side bearing and an
-   extra tracking column so 2x labels are readable rather than cramped. */
-#define GLYPH_W 5
-#define GLYPH_H 7
-
-static int glyph_advance(char c, int scale, int tracking) {
-    return (c == ' ' ? 3 : GLYPH_W + 1) * scale + (c == ' ' ? 0 : tracking);
-}
-
-static int text_width(const char *text, int scale, int tracking) {
-    int width = 0, last = 0;
-    for (; *text; text++) { last = glyph_advance(*text, scale, tracking); width += last; }
-    return width > 0 ? width - (scale + tracking) : 0;
-}
-
-static int text_height(int scale) { return GLYPH_H * scale; }
-
-static void draw_text(uint32_t *pixels, int w, int h, int x, int y, const char *text,
-                      int scale, int tracking, uint32_t colour) {
-    for (; *text; text++) {
-        const unsigned char *bits = glyph_for_char(*text);
-        if (bits) {
-            for (int py = 0; py < GLYPH_H; py++)
-                for (int px = 0; px < GLYPH_W; px++)
-                    if (bits[py] & (1 << (GLYPH_W - 1 - px)))
-                        fill_rect(pixels, w, h, x + px * scale, y + py * scale, scale, scale, colour);
-        }
-        x += glyph_advance(*text, scale, tracking);
-    }
-}
-
-/* Centres a label inside a rect on both axes using the shared glyph metrics,
-   so button captions never sit high, low or clipped. */
-static void draw_text_centred(uint32_t *pixels, int w, int h, int rx, int ry, int rw, int rh,
-                              const char *text, int scale, int tracking, uint32_t colour) {
-    int tw = text_width(text, scale, tracking);
-    int th = text_height(scale);
-    draw_text(pixels, w, h, rx + (rw - tw) / 2, ry + (rh - th) / 2, text, scale, tracking, colour);
-}
-
-/* Anti-aliased disc: the status dot is small, so hard edges there read as a
-   jagged artefact next to the rounded card. */
-static void draw_circle(uint32_t *pixels, int w, int h, int cx, int cy, int radius, uint32_t colour) {
-    static const float samples[4][2] = {{0.25f,0.25f},{0.75f,0.25f},{0.25f,0.75f},{0.75f,0.75f}};
-    for (int py = cy - radius - 1; py <= cy + radius + 1; py++) {
-        if (py < 0 || py >= h) continue;
-        for (int px = cx - radius - 1; px <= cx + radius + 1; px++) {
-            if (px < 0 || px >= w) continue;
-            int covered = 0;
-            for (int i = 0; i < 4; i++) {
-                float dx = (px + samples[i][0]) - cx, dy = (py + samples[i][1]) - cy;
-                if (dx * dx + dy * dy <= (float)radius * radius) covered++;
-            }
-            if (covered)
-                blend_pixel(&pixels[(size_t)py * w + px], colour_with_alpha(colour, covered * 255 / 4));
-        }
-    }
 }
 
 /*
- * Controller card layout (340x118), all values shared with pointer_button:
- *
- *   +--------------------------------------------------+  card, r=14
- *   |  (o) RECORDING            SNAPX            |  header band, 0..50
- *   |--------------------------------------------------|  hairline divider
- *   |  [ PAUSE ]   [ STOP ]   [ ABORT ]                |  buttons, y=68..102
- *   +--------------------------------------------------+
+ * Controller card layout (340x118), all values shared with pointer_button.
+ * Text is rendered with Pango/Cairo so it matches the system UI font instead
+ * of the old hard-coded 5x7 bitmap glyph face.
  */
 static void draw_controller(uint32_t *pixels, int w, int h) {
-    const uint32_t card = 0xFF1B1F27u, header = 0xFF232935u;
-    const uint32_t white = 0xFFF5F7FAu, muted = 0xFF97A3B6u;
-    const uint32_t hairline = 0xFF333B49u;
-    const uint32_t live = 0xFFFF4D5Eu, amber = 0xFFF5B942u;
-    const uint32_t pill_live = 0xFF3A1D24u, pill_paused = 0xFF3A2F19u;
-    const uint32_t accent = controller_paused ? amber : live;
-    const char *status = controller_paused ? "PAUSED" : "RECORDING";
-    const char *labels[3] = { controller_paused ? "RESUME" : "PAUSE", "STOP", "ABORT" };
-    /* Neutral surfaces for the two safe actions, a warm surface for the
-       destructive one; intent is legible without relying on the label alone. */
-    const uint32_t button_bg[3] = { 0xFF2E3846u, 0xFF2E3846u, 0xFF43242Cu };
-    const uint32_t button_fg[3] = { white, white, 0xFFFFD3D8u };
-
-    /* Fully transparent margin, then a soft drop shadow under a rounded card:
-       the tile reads as a floating control, not a pasted rectangle. */
+    /* Keep the existing rounded card drop shadow as the backdrop. */
     fill_rect(pixels, w, h, 0, 0, w, h, 0x00000000u);
     draw_rounded_rect(pixels, w, h, 3, 5, w - 6, h - 6, 15, 0x33000000u);
     draw_rounded_rect(pixels, w, h, 2, 3, w - 4, h - 5, 15, 0x4D000000u);
-    draw_rounded_rect(pixels, w, h, 2, 2, w - 4, h - 6, 14, card);
-    /* Two-tone treatment: the header band is a slightly lighter surface than
-       the action area, separated by a single hairline. */
-    draw_rounded_rect(pixels, w, h, 2, 2, w - 4, CONTROLLER_HEADER_H, 14, header);
-    fill_rect(pixels, w, h, 2, CONTROLLER_HEADER_H - 12, w - 4, 12, header);
-    fill_rect(pixels, w, h, 1, CONTROLLER_HEADER_H, w - 2, 1, hairline);
+    draw_rounded_rect(pixels, w, h, 2, 2, w - 4, h - 6, 8, 0xFF202020u);
+    draw_rounded_rect(pixels, w, h, 2, 2, w - 4, CONTROLLER_HEADER_H, 8, 0xFF2A2A2Au);
+    fill_rect(pixels, w, h, 2, CONTROLLER_HEADER_H - 12, w - 4, 12, 0xFF2A2A2Au);
+    fill_rect(pixels, w, h, 1, CONTROLLER_HEADER_H, w - 2, 1, 0xFF3A3A3Au);
 
-    /* Status pill: accent-tinted surface, accent dot, plain caps label. */
-    int pill_h = 26, pill_y = (CONTROLLER_HEADER_H - pill_h) / 2 + 1;
-    int label_w = text_width(status, 2, 1);
-    int pill_w = 20 + 12 + label_w + 14;
-    draw_rounded_rect(pixels, w, h, CONTROLLER_PAD, pill_y, pill_w, pill_h, pill_h / 2,
-                      controller_paused ? pill_paused : pill_live);
-    draw_circle(pixels, w, h, CONTROLLER_PAD + 15, pill_y + pill_h / 2, 5, accent);
-    draw_text(pixels, w, h, CONTROLLER_PAD + 26, pill_y + (pill_h - text_height(2)) / 2,
-              status, 2, 1, white);
+    cairo_surface_t *surface = cairo_image_surface_create_for_data(
+        (unsigned char *)pixels, CAIRO_FORMAT_ARGB32, w, h, w * 4);
+    cairo_t *cr = cairo_create(surface);
 
-    /* Right-aligned product mark keeps the header balanced at both densities. */
-    int mark_w = text_width("SNAPX", 1, 2);
-    draw_text(pixels, w, h, w - CONTROLLER_PAD - mark_w,
-              pill_y + (pill_h - text_height(1)) / 2, "SNAPX", 1, 2, muted);
+    /* Small status dot. */
+    const double live = 1.0, amber = 0.71;
+    double accent_g = controller_paused ? amber : 0.30;
+    cairo_set_source_rgba(cr, 1.0, accent_g, 0.30, 1.0);
+    cairo_arc(cr, CONTROLLER_PAD + 8, CONTROLLER_HEADER_H / 2, 5, 0, 2 * G_PI);
+    cairo_fill(cr);
 
-    /* Three evenly spaced buttons on one baseline; captions centred on both
-       axes from the same metrics the hit boxes use. */
+    /* Header: status word plus live timer. */
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *font = pango_font_description_from_string(CONTROLLER_FACE " 11");
+    pango_font_description_set_weight(font, PANGO_WEIGHT_SEMIBOLD);
+    pango_layout_set_font_description(layout, font);
+    pango_font_description_free(font);
+    pango_layout_set_text(layout, controller_paused ? "Paused" : "Recording", -1);
+    cairo_set_source_rgba(cr, 0.61, 0.65, 0.69, 1.0);
+    cairo_move_to(cr, CONTROLLER_PAD + 22, (CONTROLLER_HEADER_H - 16) / 2);
+    pango_cairo_show_layout(cr, layout);
+
+    PangoLayout *timer_layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *timer_font = pango_font_description_from_string(CONTROLLER_FACE " 15");
+    pango_font_description_set_weight(timer_font, PANGO_WEIGHT_SEMIBOLD);
+    pango_layout_set_font_description(timer_layout, timer_font);
+    pango_font_description_free(timer_font);
+    PangoAttrList *attrs = pango_attr_list_new();
+    pango_attr_list_insert(attrs, pango_attr_font_features_new("tnum=1"));
+    pango_layout_set_attributes(timer_layout, attrs);
+    pango_attr_list_unref(attrs);
+    pango_layout_set_text(timer_layout, controller_timer, -1);
+    pango_layout_set_alignment(timer_layout, PANGO_ALIGN_RIGHT);
+    int t_w = 0, t_h = 0;
+    pango_layout_get_pixel_size(timer_layout, &t_w, &t_h);
+    cairo_set_source_rgba(cr, 0.96, 0.97, 0.98, 1.0);
+    cairo_move_to(cr, w - CONTROLLER_PAD - t_w, (CONTROLLER_HEADER_H - t_h) / 2);
+    pango_cairo_show_layout(cr, timer_layout);
+    g_object_unref(timer_layout);
+    g_object_unref(layout);
+
+    /* Buttons: simple, flat system-style controls with Pango labels. */
+    const char *labels[3] = { controller_paused ? "Resume" : "Pause", "Stop", "Abort" };
+    const uint32_t button_bg[3] = { 0xFF333333u, 0xFF333333u, 0xFF3A2626u };
+    const uint32_t button_fg[3] = { 0xFFF5F7FAu, 0xFFF5F7FAu, 0xFFFFD3D8u };
     for (int i = 0; i < 3; i++) {
         int x = controller_button_x(i);
         draw_rounded_rect(pixels, w, h, x, CONTROLLER_BUTTON_Y, CONTROLLER_BUTTON_W,
-                          CONTROLLER_BUTTON_H, 8, button_bg[i]);
-        draw_text_centred(pixels, w, h, x, CONTROLLER_BUTTON_Y, CONTROLLER_BUTTON_W,
-                          CONTROLLER_BUTTON_H, labels[i], 2, 1, button_fg[i]);
+                          CONTROLLER_BUTTON_H, 6, button_bg[i]);
+        PangoLayout *bl = pango_cairo_create_layout(cr);
+        PangoFontDescription *bf = pango_font_description_from_string(CONTROLLER_FACE " 10");
+        pango_layout_set_font_description(bl, bf);
+        pango_font_description_free(bf);
+        pango_layout_set_text(bl, labels[i], -1);
+        pango_layout_get_pixel_size(bl, &t_w, &t_h);
+        cairo_set_source_rgba(cr, ((button_fg[i] >> 16) & 0xff) / 255.0,
+                              ((button_fg[i] >> 8) & 0xff) / 255.0,
+                              (button_fg[i] & 0xff) / 255.0, 1.0);
+        cairo_move_to(cr, x + (CONTROLLER_BUTTON_W - t_w) / 2.0,
+                      CONTROLLER_BUTTON_Y + (CONTROLLER_BUTTON_H - t_h) / 2.0);
+        pango_cairo_show_layout(cr, bl);
+        g_object_unref(bl);
     }
+
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
 }
 
 static Frame make_frame(int w, int h) {
@@ -1220,15 +1150,38 @@ event_loop:
             if (n <= 0) { running = 0; }
             else {
                 stdin_buf[n] = 0;
-                if (strstr(stdin_buf, "quit")) running = 0;
-                else if (mode == MODE_CONTROLLER && (strstr(stdin_buf, "paused") || strstr(stdin_buf, "recording"))) {
-                    controller_paused = strstr(stdin_buf, "paused") != NULL;
-                    /* State changed, so re-render the existing fixed-size
-                       controller card. Position is unrelated to a state
-                       update; reuse the frame machinery and do not touch
-                       anchors/margins here. */
-                    layer_frame_ready = 0;
-                    ensure_layer_frame(controller_width, controller_height);
+                if (strstr(stdin_buf, "quit")) { running = 0; }
+                else if (mode == MODE_CONTROLLER) {
+                    /* One read can contain several one-second updates.
+                       Apply the last complete line so the rendered timer never
+                       falls behind by one tick. */
+                    const char *line = stdin_buf;
+                    const char *last = NULL;
+                    while (line && *line) {
+                        const char *nl = strchr(line, '\n');
+                        size_t len = nl ? (size_t)(nl - line) : strlen(line);
+                        if (len > 0 &&
+                            (strncmp(line, "paused", strlen("paused")) == 0 ||
+                             strncmp(line, "recording", strlen("recording")) == 0)) {
+                            last = line;
+                        }
+                        line = nl ? nl + 1 : NULL;
+                    }
+                    if (last) {
+                        controller_paused = strncmp(last, "paused", strlen("paused")) == 0;
+                        const char *space = strchr(last, ' ');
+                        const char *value = space ? space + 1 : NULL;
+                        size_t vlen = value ? strcspn(value, "\r\n") : 0;
+                        if (value && vlen > 0) {
+                            size_t copy = vlen < sizeof(controller_timer) - 1 ? vlen : sizeof(controller_timer) - 1;
+                            memcpy(controller_timer, value, copy);
+                            controller_timer[copy] = 0;
+                        } else {
+                            snprintf(controller_timer, sizeof(controller_timer), "00:00");
+                        }
+                        layer_frame_ready = 0;
+                        ensure_layer_frame(controller_width, controller_height);
+                    }
                 }
             }
         }
