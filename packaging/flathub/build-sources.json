@@ -8,9 +8,9 @@
   },
   {
     "dest": "vendor",
-    "dest-filename": "gitversion.msbuild.6.8.2.nupkg",
-    "sha512": "0659f044a5fc4fd4baa0b1a0376fc391bba3a2e29887fe9e59c670695073ccdde6f1508de63c7b003d023610a897f050f0bdee4a8e21a618a56bf0ab4d9dbeac",
-    "url": "https://api.nuget.org/v3-flatcontainer/gitversion.msbuild/6.8.2/gitversion.msbuild.6.8.2.nupkg",
+    "dest-filename": "gitversion.msbuild.6.7.0.nupkg",
+    "sha512": "c77b3e70fe56e086dace3a30b6668c18f5a453c00593fdb3277755f6d475173b476cc4f111cc565fcd46996f24e6e883ee998724f2e043a17aa4e0519f1214a4",
+    "url": "https://api.nuget.org/v3-flatcontainer/gitversion.msbuild/6.7.0/gitversion.msbuild.6.7.0.nupkg",
     "type": "file"
   },
   {
@@ -22,9 +22,9 @@
   },
   {
     "dest": "vendor",
-    "dest-filename": "system.commandline.2.0.11.nupkg",
-    "sha512": "fdba0fa9896d3e7c5bfc53cb0b6a801e9b56edb0ed4a3e685814d89000312de4ea79ce3a64f1628ca5baeeaacaaad7f56931bb81da5084390a03595589d3dc70",
-    "url": "https://api.nuget.org/v3-flatcontainer/system.commandline/2.0.11/system.commandline.2.0.11.nupkg",
+    "dest-filename": "system.commandline.2.0.5.nupkg",
+    "sha512": "7f95a7e8e88b999dc28f68d1e14fe38925f657d66071374d0afccbac535745ba03fb0dc173994284706c085bdc9a8016de3b148c768923fa8172d206bfd39be4",
+    "url": "https://api.nuget.org/v3-flatcontainer/system.commandline/2.0.5/system.commandline.2.0.5.nupkg",
     "type": "file"
   }
 ]
