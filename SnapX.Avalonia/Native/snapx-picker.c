@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +36,7 @@ static int origin_x,origin_y,logical_w,logical_h,configured_w,configured_h;
 static int pointer_x=-1,pointer_y=-1,press_x,press_y,pressed,dragging,hovered=-1;
 static uint32_t *pixels; static size_t buffer_size;
 static Rect rendered; static int rendered_valid;
+static int rendered_pointer_x=-1, rendered_pointer_y=-1; /* last cursor-marker position */
 static int buffer_busy; static int redraw_pending;
 static volatile sig_atomic_t running=1;
 static void stop_signal(int sig){(void)sig;running=0;}
@@ -50,9 +52,32 @@ static Rect drag_rect(void){Rect r;int fw,fh;fw=pointer_x-press_x;fh=pointer_y-p
 static int window_at(int x,int y){int match=-1;for(int i=0;i<window_count;i++){Rect r=windows[i];if(x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h)match=i;}return match;}
 static void draw_highlight(uint32_t *p,int w,int h,Rect r){fill(p,w,h,r,premultiply(0x224c8dffu));border(p,w,h,r,2,0xff4c8dffu);}
 static Rect current_rect(void){Rect hi={0,0,0,0};if(dragging)hi=drag_rect();else if(hovered>=0){Rect g=windows[hovered];hi=(Rect){g.x-origin_x,g.y-origin_y,g.w,g.h};}return hi;}
+
+/* Draggable plus marker centred on the pointer, so the cursor reads as a plus
+ * while the user drags out a region or hovers a window. Drawn after (on top
+ * of) the dim overlay and any highlight so it is always visible. A 21x21 glyph
+ * matches the plus rendered by the Avalonia RegionSelectorWindow on X11. */
+static void draw_plus(uint32_t *p,int w,int h,int px,int py){
+	if(px<0||py<0||px>=w||py>=h)return;
+	const int arm=9,thick=3; /* half-arm length and stroke thickness */
+	uint32_t fill_c=0xff3f8cffu, outline=0xffffffffu;
+	int x=px,y=py;
+	/* Draw a 3px-thick plus via two overlapping rects, with a 1px white outline
+	 * around the whole glyph as a second border pass so it reads on both light
+	 * and dark regions. */
+	Rect hs={(x-arm),(y-thick/2),(2*arm),(thick)};
+	Rect vs={(x-thick/2),(y-arm),(thick),(2*arm)};
+	Rect hb={(x-arm-1),(y-thick/2-1),(2*arm+2),(thick+2)};
+	Rect vb={(x-thick/2-1),(y-arm-1),(thick+2),(2*arm+2)};
+	/* Outline first (white), then fills. */
+	fill(p,w,h,hb,outline); fill(p,w,h,vb,outline);
+	fill(p,w,h,hs,premultiply(fill_c)); fill(p,w,h,vs,premultiply(fill_c));
+}
+/* Bounding box (including the 1px outline) of the plus glyph at a position. */
+static Rect plus_rect(int px,int py){int arm=9,thick=3;Rect b={(px-arm-1),(py-arm-1),(2*arm+2),(2*arm+2)};return b;}
 static Rect old_new; /* union scratch for damage computation */
-static void repaint_region(Rect region){uint32_t dim=premultiply(0x66000000u);int x0=region.x<0?0:region.x,y0=region.y<0?0:region.y,x1=region.x+region.w>configured_w?configured_w:region.x+region.w,y1=region.y+region.h>configured_h?configured_h:region.y+region.h;for(int y=y0;y<y1;y++){uint32_t*row=pixels+(size_t)y*configured_w;for(int x=x0;x<x1;x++)row[x]=dim;}if(current_rect().w>0&&current_rect().h>0)draw_highlight(pixels,configured_w,configured_h,current_rect());}
-static void repaint(uint32_t *p,int w,int h){uint32_t dim=premultiply(0x66000000u);for(size_t i=0;i<(size_t)w*h;i++)p[i]=dim;draw_highlight(p,w,h,current_rect());}
+static void repaint_region(Rect region){uint32_t dim=premultiply(0x66000000u);int x0=region.x<0?0:region.x,y0=region.y<0?0:region.y,x1=region.x+region.w>configured_w?configured_w:region.x+region.w,y1=region.y+region.h>configured_h?configured_h:region.y+region.h;for(int y=y0;y<y1;y++){uint32_t*row=pixels+(size_t)y*configured_w;for(int x=x0;x<x1;x++)row[x]=dim;}Rect cur=current_rect();if(cur.w>0&&cur.h>0)draw_highlight(pixels,configured_w,configured_h,cur);draw_plus(pixels,configured_w,configured_h,pointer_x,pointer_y);}
+static void repaint(uint32_t *p,int w,int h){uint32_t dim=premultiply(0x66000000u);for(size_t i=0;i<(size_t)w*h;i++)p[i]=dim;Rect cur=current_rect();if(cur.w>0&&cur.h>0)draw_highlight(p,w,h,cur);draw_plus(p,w,h,pointer_x,pointer_y);}
 static void rect_union(Rect a,Rect b,Rect*u){int x0=a.x<b.x?a.x:b.x,y0=a.y<b.y?a.y:b.y,x1=(a.x+a.w)>(b.x+b.w)?(a.x+a.w):(b.x+b.w),y1=(a.y+a.h)>(b.y+b.h)?(a.y+a.h):(b.y+b.h);u->x=x0;u->y=y0;u->w=x1-x0;u->h=y1-y0;}
 static void request_redraw(void);
 static void buffer_release(void*d,struct wl_buffer*b){(void)d;(void)b;buffer_busy=0;if(redraw_pending){redraw_pending=0;request_redraw();}}
@@ -80,12 +105,12 @@ static int ensure_buffer(void){
 	wl_buffer_add_listener(nb,&buffer_listener,NULL);
 	if(buffer)wl_buffer_destroy(buffer);
 	if(pool)wl_shm_pool_destroy(pool);
-	pixels=p;buffer_size=size;buffer_w=configured_w;buffer_h=configured_h;buffer=nb;pool=np;rendered_valid=0;buffer_busy=0;redraw_pending=0;return 1;}
+	pixels=p;buffer_size=size;buffer_w=configured_w;buffer_h=configured_h;buffer=nb;pool=np;rendered_valid=0;rendered_pointer_x=-1;rendered_pointer_y=-1;buffer_busy=0;redraw_pending=0;return 1;}
 
 /* Repaints the committed highlight area plus the new one in place, then
  * damages exactly their union. All other pixels are untouched and undamaged,
  * so pointer motion no longer rewrites or uploads the whole output buffer. */
-static void request_redraw(void){if(configured_w<=0||configured_h<=0)return;if(!ensure_buffer())return;Rect now=current_rect();if(rendered_valid&&now.x==rendered.x&&now.y==rendered.y&&now.w==rendered.w&&now.h==rendered.h)return;if(buffer_busy){redraw_pending=1;return;}if(!rendered_valid){repaint(pixels,configured_w,configured_h);rendered=now;rendered_valid=1;wl_surface_attach(surface,buffer,0,0);wl_surface_damage_buffer(surface,0,0,configured_w,configured_h);buffer_busy=1;wl_surface_commit(surface);return;}rect_union(rendered,now,&old_new);repaint_region(old_new);rendered=now;wl_surface_attach(surface,buffer,0,0);wl_surface_damage_buffer(surface,old_new.x,old_new.y,old_new.w,old_new.h);buffer_busy=1;wl_surface_commit(surface);}
+static void request_redraw(void){if(configured_w<=0||configured_h<=0)return;if(!ensure_buffer())return;Rect now=current_rect();bool rect_changed=!(rendered_valid&&now.x==rendered.x&&now.y==rendered.y&&now.w==rendered.w&&now.h==rendered.h);bool marker_changed=!(rendered_valid&&((pointer_x==rendered_pointer_x&&pointer_y==rendered_pointer_y)||(pointer_x<0&&rendered_pointer_x<0)));if(!rect_changed&&!marker_changed)return;if(buffer_busy){redraw_pending=1;return;}if(!rendered_valid){repaint(pixels,configured_w,configured_h);rendered=now;rendered_pointer_x=pointer_x;rendered_pointer_y=pointer_y;rendered_valid=1;wl_surface_attach(surface,buffer,0,0);wl_surface_damage_buffer(surface,0,0,configured_w,configured_h);buffer_busy=1;wl_surface_commit(surface);return;}Rect old_marker=plus_rect(rendered_pointer_x,rendered_pointer_y);Rect new_marker=plus_rect(pointer_x,pointer_y);rect_union(rendered,now,&old_new);rect_union(old_new,old_marker,&old_new);rect_union(old_new,new_marker,&old_new);repaint_region(old_new);rendered=now;rendered_pointer_x=pointer_x;rendered_pointer_y=pointer_y;wl_surface_attach(surface,buffer,0,0);wl_surface_damage_buffer(surface,old_new.x,old_new.y,old_new.w,old_new.h);buffer_busy=1;wl_surface_commit(surface);}
 static void configured(void*d,struct zwlr_layer_surface_v1*l,uint32_t serial,uint32_t w,uint32_t h){(void)d;zwlr_layer_surface_v1_ack_configure(l,serial);configured_w=w?(int)w:logical_w;configured_h=h?(int)h:logical_h;rendered_valid=0;request_redraw();}
 static void layer_closed(void*d,struct zwlr_layer_surface_v1*l){(void)d;(void)l;running=0;}
 static const struct zwlr_layer_surface_v1_listener layer_listener={.configure=configured,.closed=layer_closed};

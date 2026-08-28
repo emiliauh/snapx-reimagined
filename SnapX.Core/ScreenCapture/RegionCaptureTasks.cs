@@ -34,16 +34,57 @@ public sealed class RegionCaptureRequest
 public static class RegionCaptureTasks
 {
     private static Func<RegionCaptureRequest, CancellationToken, Task<RegionCaptureSelection?>>? regionSelector;
+    private static readonly object ActiveSelectionLock = new();
+    private static CancellationTokenSource? activeSelectionCancellation;
     private static readonly Lock LastRegionLock = new();
     private static Rectangle lastRegion = Rectangle.Empty;
     private static RegionCaptureType lastRegionCaptureType = RegionCaptureType.Default;
 
     public static bool IsRegionSelectorAvailable => Volatile.Read(ref regionSelector) is not null;
 
+    /// <summary>
+    /// True while an interactive region selector (slurp, snapx-picker, or
+    /// Avalonia overlay) is waiting for user input in this process.
+    /// </summary>
+    public static bool IsSelectionActive
+    {
+        get
+        {
+            lock (ActiveSelectionLock)
+            {
+                return activeSelectionCancellation is not null;
+            }
+        }
+    }
+
     public static void SetRegionSelector(
         Func<RegionCaptureRequest, CancellationToken, Task<RegionCaptureSelection?>>? selector)
     {
         Volatile.Write(ref regionSelector, selector);
+    }
+
+    /// <summary>
+    /// Cancels the selector currently open in this process. The native picker
+    /// processes are linked to this token and are killed by cancellation, so
+    /// a one-shot timeout cannot leave a layer-shell helper running after the
+    /// application exits.
+    /// </summary>
+    public static void CancelActiveSelection()
+    {
+        CancellationTokenSource? cancellation;
+        lock (ActiveSelectionLock)
+        {
+            cancellation = activeSelectionCancellation;
+        }
+
+        try
+        {
+            cancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The selection completed and released its source before timeout.
+        }
     }
 
     public static async Task<RegionCaptureSelection?> SelectRegionAsync(
@@ -59,14 +100,40 @@ public static class RegionCaptureTasks
                 "Interactive region capture is unavailable because the desktop host did not register a region selector.");
         }
 
+        bool annotateCaptureDisabled = options?.AnnotateCapture == false;
         var request = new RegionCaptureRequest
         {
             Options = GetRegionCaptureOptions(options),
             CaptureType = captureType,
             CaptureImage = captureImage
         };
+        if (annotateCaptureDisabled)
+        {
+            request.Options.AnnotateCapture = false;
+        }
 
-        RegionCaptureSelection? selection = await selector(request, cancellationToken).ConfigureAwait(false);
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lock (ActiveSelectionLock)
+        {
+            activeSelectionCancellation = linkedCancellation;
+        }
+
+        RegionCaptureSelection? selection;
+        try
+        {
+            selection = await selector(request, linkedCancellation.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (ActiveSelectionLock)
+            {
+                if (ReferenceEquals(activeSelectionCancellation, linkedCancellation))
+                {
+                    activeSelectionCancellation = null;
+                }
+            }
+        }
+
         if (selection is null)
         {
             return null;
@@ -315,7 +382,10 @@ public static class RegionCaptureTasks
             WindowPickerMode = options.WindowPickerMode,
             WindowOrRegionPickerMode = options.WindowOrRegionPickerMode,
             MonitorPickerMode = options.MonitorPickerMode,
-            UpdateRegionHistory = options.UpdateRegionHistory
+            UpdateRegionHistory = options.UpdateRegionHistory,
+            // AnnotateCapture is runtime-only; persisted SurfaceOptions omit it
+            // from YAML, so bool fields would otherwise deserialize as false.
+            AnnotateCapture = true
         };
     }
 }

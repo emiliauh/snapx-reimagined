@@ -1,10 +1,14 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.Controls.Primitives;
+using Avalonia.Layout;
+using Avalonia.VisualTree;
 using FluentAvalonia.UI.Controls;
 using System.Diagnostics;
 using System.Globalization;
@@ -22,10 +26,16 @@ using SnapX.Core.ScreenCapture;
 using SnapX.Core.Upload;
 using SnapX.Core.Utils;
 using SnapX.Core.Utils.Native;
+using SnapX.Core.ImageEffects.Annotations;
+using FluentIcons.Avalonia.Fluent;
+using FluentIcons.Common;
 using Image = SixLabors.ImageSharp.Image;
 using Point = Avalonia.Point;
+using PointF = SixLabors.ImageSharp.PointF;
 using Rectangle = Avalonia.Controls.Shapes.Rectangle;
 using WindowState = Avalonia.Controls.WindowState;
+using SharpColor = SixLabors.ImageSharp.Color;
+using AvaloniaColor = Avalonia.Media.Color;
 
 namespace SnapX.Avalonia.Views;
 
@@ -46,6 +56,7 @@ public partial class RegionSelectorWindow : Window
     private readonly Rectangle _selectionRect;
     private readonly TextBox _infoBox;
     private readonly Canvas _canvas;
+    private readonly Panel? _cursorMarker;
     private Image? _image;
     private List<WindowInfo> _pickableWindows = [];
     private WindowInfo? _hoveredWindow;
@@ -57,17 +68,57 @@ public partial class RegionSelectorWindow : Window
     private TaskCompletionSource<SixLabors.ImageSharp.Rectangle?> _resultRect = new();
     private RegionCaptureOptions _captureOptions = new();
     private bool _preparedForDisplay;
+    private bool _layoutApplied;
     private readonly Lock _preparationLock = new();
     private Task<bool>? _preparationTask;
     private bool IsSilentMode { get; set; } = false;
 
     private bool TakeScreenshot { get; set; } = true;
+    // Inline (non-modal) annotation state: set after the region is selected and
+    // its image cropped, before the capture is committed. Lets the user annotate
+    // the capture in place (ShareX screenshot-editor style), then Save composites
+    // the marks or Cancel commits the plain image.
+    private readonly List<ImageAnnotation> _annotations = [];
+    private readonly Stack<ImageAnnotation> _undoStack = new();
+    private AnnotationSurface? _annotationSurface;
+    private Control? _annotationToolbar;
+    private ImageAnnotation.Tool _annotationTool = ImageAnnotation.Tool.Rectangle;
+    private string _annotationText = "";
+    private bool _annotationMode;
+    private WriteableBitmap? _annotationBitmap;
+    // ShareX-style live annotate session: toolbar + marks on the frozen
+    // desktop before the region is committed (QuickCrop on mouse-up).
+    private bool _liveAnnotateSession;
+    private bool _regionToolActive = true;
+    private LiveAnnotationOverlay? _liveAnnotateOverlay;
+    private Border? _liveToolbarHost;
+    private Panel? _liveAnnotateHost;
+    private global::Avalonia.Controls.Image? _backgroundImage;
+    private TextBox? _annotationTextBox;
+    private readonly Dictionary<ImageAnnotation.Tool, Button> _liveToolButtons = new();
+    private double _captureScaleX = 1;
+    private double _captureScaleY = 1;
+    private long _lastPointerMoveTicks;
+    private int _toolbarTopMargin = 30;
+    private const int PointerMoveThrottleMs = 24;
+    private const int DefaultTopBarLogicalHeight = 26;
 
     [ModuleInitializer]
     internal static void RegisterCoreRegionSelector()
     {
         RegionCaptureTasks.SetRegionSelector(SelectRegionForCoreAsync);
     }
+
+    /// <summary>
+    /// Free-form region capture that uses the ShareX-style frozen-desktop
+    /// selector with a live floating toolbar (annotate before commit).
+    /// </summary>
+    private static bool NeedsLiveAnnotateSession(RegionCaptureOptions options) =>
+        options.AnnotateCapture
+        && !options.WindowPickerMode
+        && !options.MonitorPickerMode
+        && !options.WindowOrRegionPickerMode;
+
 
     private static async Task<RegionCaptureSelection?> SelectRegionForCoreAsync(
         RegionCaptureRequest request,
@@ -100,6 +151,69 @@ public partial class RegionSelectorWindow : Window
                     "Native window-or-region picker is unavailable; retaining the existing Wayland region selector behavior.");
             }
 
+            if (NeedsLiveAnnotateSession(request.Options))
+            {
+                if (IsNativeWayland)
+                {
+                    (bool Handled, RegionCaptureSelection? Selection) nativeResult =
+                        await TrySelectRegionWithNativeLayerPickerAsync(request, cancellationToken);
+                    if (!nativeResult.Handled)
+                    {
+                        DebugHelper.WriteLine(
+                            "Native live region picker is unavailable on Wayland; skipping the grim overlay fallback.");
+                        return null;
+                    }
+
+                    RegionCaptureSelection? selection = nativeResult.Selection;
+                    if (selection is null)
+                    {
+                        return null;
+                    }
+
+                    if (request.CaptureImage &&
+                        request.Options.AnnotateCapture &&
+                        selection.Image is { } capturedImage)
+                    {
+                        AnnotateOverlayLayout? overlayLayout = await FindAnnotateOverlayLayoutAsync(
+                            selection.Rectangle,
+                            cancellationToken);
+                        Image? annotated = await InlineCaptureAnnotateWindow.ShowAsync(
+                            capturedImage,
+                            overlayLayout,
+                            cancellationToken);
+                        if (annotated is null)
+                        {
+                            capturedImage.Dispose();
+                            return null;
+                        }
+
+                        if (!ReferenceEquals(annotated, capturedImage))
+                        {
+                            capturedImage.Dispose();
+                        }
+
+                        selection = new RegionCaptureSelection
+                        {
+                            Rectangle = selection.Rectangle,
+                            CaptureBounds = selection.CaptureBounds,
+                            Image = annotated,
+                            WindowInfo = selection.WindowInfo
+                        };
+                    }
+
+                    return selection;
+                }
+
+                // X11 sessions still use the frozen-desktop Avalonia selector.
+                if (Dispatcher.UIThread.CheckAccess())
+                {
+                    return await SelectRegionForCoreOnUIThreadAsync(request, cancellationToken);
+                }
+
+                return await Dispatcher.UIThread.InvokeAsync(
+                    () => SelectRegionForCoreOnUIThreadAsync(request, cancellationToken));
+            }
+
             // slurp is a compositor-native Wayland selector. It displays only
             // its selection outline, then exits before grim captures the
             // chosen geometry. This avoids both an XWayland overlay and
@@ -122,12 +236,11 @@ public partial class RegionSelectorWindow : Window
             DebugHelper.WriteLine($"Wayland region selection failed; falling back to the Avalonia selector: {ex.Message}");
         }
 
-        // The Avalonia selector is a full-screen Window.  On native Wayland it
-        // maps an EGL WSI surface, hides the main window, and later maps that
-        // window again.  That is precisely the surface lifecycle we must not
-        // enter on the affected NVIDIA/Hyprland renderer.  slurp is the native
-        // Wayland selector for this application; if it cannot complete, report
-        // a cancelled selection rather than substituting an Avalonia window.
+        // The Avalonia selector is a full-screen Window. On native Wayland it
+        // maps a separate xdg-toplevel over a grim desktop mirror, which is
+        // both visually wrong and crash-prone on the affected NVIDIA/Hyprland
+        // renderer. slurp (plus InlineCaptureAnnotateWindow when needed) is the
+        // native Wayland path; if slurp cannot complete, report cancellation.
         if (IsNativeWayland)
         {
             DebugHelper.WriteLine(
@@ -190,10 +303,22 @@ public partial class RegionSelectorWindow : Window
             return (false, null);
         }
 
+        WindowInfo? cursorMonitor = ResolveHyprlandMonitorForCursor(monitors);
+        var activeMonitors = monitors
+            .Where(monitor =>
+                ReferenceEquals(monitor, cursorMonitor) ||
+                windows.Any(window => window.Rectangle.IntersectsWith(monitor.Rectangle)))
+            .Distinct()
+            .ToList();
+        if (activeMonitors.Count == 0 && cursorMonitor is not null)
+        {
+            activeMonitors.Add(cursorMonitor);
+        }
+
         DebugHelper.WriteLine(
-            $"Native window-or-region selector phase=launch outputs={monitors.Count} windows={windows.Count}.");
+            $"Native window-or-region selector phase=launch outputs={activeMonitors.Count} windows={windows.Count}.");
         using var pickerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var pending = monitors
+        var pending = activeMonitors
             .Select(monitor => RunNativePickerProcessAsync(
                 helper, monitor, windows, pickerCancellation.Token))
             .ToList();
@@ -267,6 +392,162 @@ public partial class RegionSelectorWindow : Window
             Image = image,
             WindowInfo = windowInfo
         });
+    }
+
+    private static async Task<(bool Handled, RegionCaptureSelection? Selection)>
+        TrySelectRegionWithNativeLayerPickerAsync(
+            RegionCaptureRequest request,
+            CancellationToken cancellationToken)
+    {
+        if (!IsNativeWayland)
+        {
+            return (false, null);
+        }
+
+        string? helper = ResolveNativePickerPath();
+        if (helper is null)
+        {
+            DebugHelper.WriteLine("Native region picker helper was not found.");
+            return (false, null);
+        }
+
+        List<WindowInfo> monitors;
+        try
+        {
+            monitors = await GetHyprlandMonitorsAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            DebugHelper.WriteLine($"Native region selector layout query failed: {ex.Message}");
+            return (false, null);
+        }
+
+        WindowInfo? monitor = ResolveHyprlandMonitorForCursor(monitors);
+        if (monitor is null)
+        {
+            DebugHelper.WriteLine("Native region selector found no Hyprland output for the cursor.");
+            return (false, null);
+        }
+
+        DebugHelper.WriteLine(
+            $"Native live region selector phase=launch output={monitor.ProcessName}.");
+        NativePickerResult result = await RunNativePickerProcessAsync(
+            helper,
+            monitor,
+            [],
+            cancellationToken);
+
+        if (!result.Available)
+        {
+            return (false, null);
+        }
+
+        if (cancellationToken.IsCancellationRequested || result.Cancelled)
+        {
+            DebugHelper.WriteLine("Native live region selector phase=cancelled.");
+            return (true, null);
+        }
+
+        if (result.Rectangle.IsEmpty)
+        {
+            return (false, null);
+        }
+
+        SixLabors.ImageSharp.Rectangle rectangle = result.Rectangle;
+        DebugHelper.WriteLine(
+            $"Native live region selector phase=selected geometry={rectangle.X},{rectangle.Y} {rectangle.Width}x{rectangle.Height}.");
+
+        Image? image = null;
+        if (request.CaptureImage)
+        {
+            image = await Methods.CaptureRectangle(rectangle).WaitAsync(cancellationToken);
+            if (image is null)
+            {
+                DebugHelper.WriteLine("grim returned no image for the native annotated region selection.");
+                return (true, null);
+            }
+        }
+
+        WindowInfo? windowInfo = null;
+        if (request.Options.DetectWindows)
+        {
+            try
+            {
+                windowInfo = Methods.GetWindowList()
+                    .Where(window => window.IsVisible && !window.Rectangle.IsEmpty)
+                    .OrderByDescending(window => window.IsActive)
+                    .FirstOrDefault(window => window.Rectangle.Contains(rectangle));
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteLine($"Window detection is unavailable for this region capture: {ex.Message}");
+            }
+        }
+
+        return (true, new RegionCaptureSelection
+        {
+            Rectangle = rectangle,
+            CaptureBounds = rectangle,
+            Image = image,
+            WindowInfo = windowInfo
+        });
+    }
+
+    private static WindowInfo? ResolveHyprlandMonitorForCursor(IReadOnlyList<WindowInfo> monitors)
+    {
+        if (monitors.Count == 0)
+        {
+            return null;
+        }
+
+        var cursor = Methods.GetCursorPosition();
+        var center = new SixLabors.ImageSharp.Point(cursor.X, cursor.Y);
+        return monitors.FirstOrDefault(monitor => monitor.Rectangle.Contains(center))
+            ?? monitors.FirstOrDefault(monitor => monitor.IsActive)
+            ?? monitors[0];
+    }
+
+    private static async Task<AnnotateOverlayLayout?> FindAnnotateOverlayLayoutAsync(
+        SixLabors.ImageSharp.Rectangle rectangle,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var center = new SixLabors.ImageSharp.Point(
+                rectangle.X + rectangle.Width / 2,
+                rectangle.Y + rectangle.Height / 2);
+            List<WindowInfo> monitors = await GetHyprlandMonitorsAsync(cancellationToken);
+            WindowInfo? monitor = monitors.FirstOrDefault(m => m.Rectangle.Contains(center))
+                ?? monitors.FirstOrDefault();
+            if (monitor is not null)
+            {
+                int reservedTop = CaptureAnnotationToolbar.DefaultTopMargin - 4;
+                if (IsNativeWayland)
+                {
+                    var layout = await GetHyprlandMonitorLayoutAsync(
+                        new SixLabors.ImageSharp.Point(center.X, center.Y),
+                        cancellationToken);
+                    if (layout is not null)
+                    {
+                        reservedTop = layout.Value.ReservedTop;
+                    }
+                }
+
+                return new AnnotateOverlayLayout(
+                    new PixelRect(
+                        monitor.Rectangle.X,
+                        monitor.Rectangle.Y,
+                        monitor.Rectangle.Width,
+                        monitor.Rectangle.Height),
+                    reservedTop + 4);
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine($"Could not resolve annotate overlay bounds: {ex.Message}");
+        }
+
+        return null;
     }
 
     private static async Task<NativePickerResult> RunNativePickerProcessAsync(
@@ -861,6 +1142,9 @@ public partial class RegionSelectorWindow : Window
         _selectionRect = this.FindControl<Rectangle>("SelectionRect");
         _infoBox = this.FindControl<TextBox>("InfoBox");
         _canvas = this.FindControl<Canvas>("Canvas");
+        _cursorMarker = this.FindControl<Panel>("CursorMarker");
+        _liveToolbarHost = this.FindControl<Border>("LiveToolbarHost");
+        _liveAnnotateHost = this.FindControl<Panel>("LiveAnnotateHost");
 
         // Set initial state to invisible/minimized to prevent flicker
         // until the async position logic finishes.
@@ -885,16 +1169,34 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        try { await SetupWindowBoundsAsync(); }
-        catch (Exception ex)
+        if (!_layoutApplied)
         {
-            DebugHelper.WriteException(ex, "Region selector could not determine its display bounds");
-            await CancelSelection();
-            return;
+            try
+            {
+                await SetupSelectorLayoutAsync();
+                _layoutApplied = true;
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Region selector could not determine its display bounds");
+                await CancelSelection();
+                return;
+            }
         }
+
         IsVisible = true;
         Activate();
         Focus();
+
+        if (NeedsLiveAnnotateSession(_captureOptions))
+        {
+            InitializeLiveAnnotateSession();
+        }
+
+        if (IsNativeWayland && _layoutApplied)
+        {
+            _ = EnsureHyprlandSelectorOverlayAsync(_screenBounds);
+        }
     }
     public static async Task<Image?> SelectRegionAsync()
     {
@@ -902,7 +1204,8 @@ public partial class RegionSelectorWindow : Window
         {
             return (await SelectRegionForCoreAsync(new RegionCaptureRequest
             {
-                CaptureImage = true
+                CaptureImage = true,
+                Options = new RegionCaptureOptions { AnnotateCapture = false }
             }, CancellationToken.None))?.Image;
         }
 
@@ -933,7 +1236,8 @@ public partial class RegionSelectorWindow : Window
         {
             return (await SelectRegionForCoreAsync(new RegionCaptureRequest
             {
-                CaptureImage = false
+                CaptureImage = false,
+                Options = new RegionCaptureOptions { AnnotateCapture = false }
             }, CancellationToken.None))?.Rectangle;
         }
 
@@ -959,56 +1263,336 @@ public partial class RegionSelectorWindow : Window
         return null;
     }
 
-    private async Task SetupWindowBoundsAsync()
+    private async Task<PixelRect> ResolveSelectorBoundsAsync()
     {
+        var cursorPos = Methods.GetCursorPosition();
 
-        await Dispatcher.UIThread.InvokeAsync(async () =>
+        if (IsNativeWayland)
         {
-            PixelRect bounds;
-
-
-            var cursorPos = Methods.GetCursorPosition();
-            var screen = Screens.ScreenFromPoint(new PixelPoint(cursorPos.X, cursorPos.Y));
-            if (screen != null)
+            (PixelRect Bounds, int ReservedTop)? layout =
+                await GetHyprlandMonitorLayoutAsync(cursorPos, CancellationToken.None);
+            if (layout is not null)
             {
-                bounds = screen.Bounds;
+                _toolbarTopMargin = layout.Value.ReservedTop + 4;
+                DebugHelper.WriteLine(
+                    $"Selector toolbar offset: reserved top {layout.Value.ReservedTop}px, margin {_toolbarTopMargin}px");
+                return layout.Value.Bounds;
             }
-            else
+        }
+
+        return ResolveBoundsFromScreens(cursorPos);
+    }
+
+    internal static async Task<int> ResolveToolbarTopMarginAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsNativeWayland)
+        {
+            return CaptureAnnotationToolbar.DefaultTopMargin;
+        }
+
+        var cursorPos = Methods.GetCursorPosition();
+        (PixelRect Bounds, int ReservedTop)? layout =
+            await GetHyprlandMonitorLayoutAsync(cursorPos, cancellationToken);
+        if (layout is null)
+        {
+            return CaptureAnnotationToolbar.DefaultTopMargin;
+        }
+
+        int margin = layout.Value.ReservedTop + 4;
+        DebugHelper.WriteLine(
+            $"Annotate toolbar offset: reserved top {layout.Value.ReservedTop}px, margin {margin}px");
+        return margin;
+    }
+
+    private static async Task<(PixelRect Bounds, int ReservedTop)?> GetHyprlandMonitorLayoutAsync(
+        SixLabors.ImageSharp.Point cursorPos,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "hyprctl",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("monitors");
+        startInfo.ArgumentList.Add("-j");
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            return null;
+        }
+
+        string json = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+        if (process.ExitCode != 0)
+        {
+            return null;
+        }
+
+        static bool IsQuarterTurn(int transform) => transform is 1 or 3 or 5 or 7;
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement? selectedMonitor = null;
+        JsonElement? focusedMonitor = null;
+        foreach (JsonElement monitor in document.RootElement.EnumerateArray())
+        {
+            if (!monitor.TryGetProperty("x", out JsonElement xElement) ||
+                !monitor.TryGetProperty("y", out JsonElement yElement) ||
+                !monitor.TryGetProperty("width", out JsonElement widthElement) ||
+                !monitor.TryGetProperty("height", out JsonElement heightElement) ||
+                !monitor.TryGetProperty("scale", out JsonElement scaleElement))
             {
-                bounds = await Task.Run(() =>
-                        {
-                            try
-                            {
-                                var SnapXScreen = Methods.GetScreen(cursorPos);
-                                if (SnapXScreen is null) return Task.FromResult(new PixelRect());
-                                var (x, y, width, height) = SnapXScreen.Bounds;
-                                return Task.FromResult(new PixelRect(x, y, width, height));
-                            }
-                            catch (Exception Exception)
-                            {
-                                return Task.FromException<PixelRect>(Exception);
-                            }
-                        });
+                continue;
             }
 
-            Position = new PixelPoint(bounds.X, bounds.Y);
-            _screenBounds = bounds;
-            Width = bounds.Width;
-            Height = bounds.Height;
-
-            _canvas.Width = bounds.Width;
-            _canvas.Height = bounds.Height;
-            _imageBounds = new Rect(0, 0, bounds.Width, bounds.Height);
-            WindowState = OperatingSystem.IsMacOS() ? WindowState.Maximized : WindowState.Normal;
-
-            if (_canvas.Parent is Viewbox viewBox)
+            double scale = scaleElement.GetDouble();
+            if (scale <= 0)
             {
-                viewBox.Width = bounds.Width;
-                viewBox.Height = bounds.Height;
+                scale = 1;
             }
 
-            DebugHelper.WriteLine($"Selector Ready: {bounds.Width}x{bounds.Height} at {bounds.X},{bounds.Y}");
-        });
+            int transform = monitor.TryGetProperty("transform", out JsonElement transformElement)
+                ? transformElement.GetInt32()
+                : 0;
+            bool rotated = IsQuarterTurn(transform);
+            double physicalWidth = widthElement.GetDouble();
+            double physicalHeight = heightElement.GetDouble();
+            int logicalWidth = (int)Math.Round((rotated ? physicalHeight : physicalWidth) / scale);
+            int logicalHeight = (int)Math.Round((rotated ? physicalWidth : physicalHeight) / scale);
+            if (logicalWidth <= 0 || logicalHeight <= 0)
+            {
+                continue;
+            }
+
+            int x = xElement.GetInt32();
+            int y = yElement.GetInt32();
+            if (cursorPos.X >= x && cursorPos.X < x + logicalWidth &&
+                cursorPos.Y >= y && cursorPos.Y < y + logicalHeight)
+            {
+                selectedMonitor = monitor;
+                break;
+            }
+
+            if (monitor.TryGetProperty("focused", out JsonElement focusedElement) &&
+                focusedElement.GetBoolean())
+            {
+                focusedMonitor = monitor;
+            }
+        }
+
+        JsonElement target = selectedMonitor
+            ?? focusedMonitor
+            ?? (document.RootElement.GetArrayLength() > 0
+                ? document.RootElement[0]
+                : default);
+        if (target.ValueKind == JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        double targetScale = target.GetProperty("scale").GetDouble();
+        if (targetScale <= 0)
+        {
+            targetScale = 1;
+        }
+
+        int targetTransform = target.TryGetProperty("transform", out JsonElement targetTransformElement)
+            ? targetTransformElement.GetInt32()
+            : 0;
+        bool targetRotated = IsQuarterTurn(targetTransform);
+        double targetPhysicalWidth = target.GetProperty("width").GetDouble();
+        double targetPhysicalHeight = target.GetProperty("height").GetDouble();
+        int width = (int)Math.Round((targetRotated ? targetPhysicalHeight : targetPhysicalWidth) / targetScale);
+        int height = (int)Math.Round((targetRotated ? targetPhysicalWidth : targetPhysicalHeight) / targetScale);
+        int monitorX = target.GetProperty("x").GetInt32();
+        int monitorY = target.GetProperty("y").GetInt32();
+        int reservedTop = 0;
+        if (target.TryGetProperty("reserved", out JsonElement reservedElement) &&
+            reservedElement.ValueKind == JsonValueKind.Array &&
+            reservedElement.GetArrayLength() > 0)
+        {
+            // Hyprland reports reserved as [top, bottom, left, right] in physical px.
+            reservedTop = (int)Math.Round(reservedElement[0].GetDouble() / targetScale);
+        }
+
+        if (reservedTop <= 0)
+        {
+            string monitorName = target.TryGetProperty("name", out JsonElement nameElement)
+                ? nameElement.GetString() ?? string.Empty
+                : string.Empty;
+            reservedTop = await GetHyprlandTopBarHeightFromLayersAsync(
+                monitorName,
+                monitorX,
+                monitorY,
+                width,
+                cancellationToken);
+        }
+
+        if (reservedTop <= 0)
+        {
+            reservedTop = DefaultTopBarLogicalHeight;
+        }
+
+        return (new PixelRect(monitorX, monitorY, width, height), reservedTop);
+    }
+
+    private static async Task<int> GetHyprlandTopBarHeightFromLayersAsync(
+        string monitorName,
+        int monitorX,
+        int monitorY,
+        int logicalWidth,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "hyprctl",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("layers");
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            return 0;
+        }
+
+        string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+        if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
+        {
+            return 0;
+        }
+
+        bool inTargetMonitor = string.IsNullOrWhiteSpace(monitorName);
+        int maxBarHeight = 0;
+        foreach (string rawLine in output.Split('\n'))
+        {
+            string line = rawLine.TrimEnd('\r');
+            if (line.StartsWith("Monitor ", StringComparison.Ordinal))
+            {
+                inTargetMonitor = string.IsNullOrWhiteSpace(monitorName) ||
+                                  line.Contains(monitorName, StringComparison.Ordinal);
+                continue;
+            }
+
+            if (!inTargetMonitor || !line.Contains("xywh:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            int xywhIndex = line.IndexOf("xywh:", StringComparison.Ordinal);
+            string xywhPart = line[(xywhIndex + 5)..];
+            int commaIndex = xywhPart.IndexOf(',');
+            if (commaIndex >= 0)
+            {
+                xywhPart = xywhPart[..commaIndex];
+            }
+
+            string[] parts = xywhPart.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length < 4 ||
+                !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int layerX) ||
+                !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int layerY) ||
+                !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int layerWidth) ||
+                !int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int layerHeight))
+            {
+                continue;
+            }
+
+            if (layerX != monitorX ||
+                layerY != monitorY ||
+                layerWidth < logicalWidth - 2 ||
+                layerHeight <= 0 ||
+                layerHeight > 120)
+            {
+                continue;
+            }
+
+            maxBarHeight = Math.Max(maxBarHeight, layerHeight);
+        }
+
+        return maxBarHeight;
+    }
+
+    private void ApplySelectorLayout(PixelRect bounds)
+    {
+        Position = new PixelPoint(bounds.X, bounds.Y);
+        _screenBounds = bounds;
+        Width = bounds.Width;
+        Height = bounds.Height;
+
+        double canvasWidth = bounds.Width;
+        double canvasHeight = bounds.Height;
+        _canvas.Width = canvasWidth;
+        _canvas.Height = canvasHeight;
+        _imageBounds = new Rect(0, 0, canvasWidth, canvasHeight);
+
+        if (_image is not null && canvasWidth > 0 && canvasHeight > 0)
+        {
+            _captureScaleX = _image.Width / canvasWidth;
+            _captureScaleY = _image.Height / canvasHeight;
+        }
+        else
+        {
+            _captureScaleX = 1;
+            _captureScaleY = 1;
+        }
+
+        if (_liveAnnotateOverlay is not null)
+        {
+            _liveAnnotateOverlay.Width = canvasWidth;
+            _liveAnnotateOverlay.Height = canvasHeight;
+        }
+
+        if (_backgroundImage is not null)
+        {
+            _backgroundImage.Width = canvasWidth;
+            _backgroundImage.Height = canvasHeight;
+        }
+
+        if (_liveToolbarHost is not null)
+        {
+            _liveToolbarHost.Margin = new Thickness(0, _toolbarTopMargin, 0, 0);
+        }
+
+        WindowState = OperatingSystem.IsMacOS() ? WindowState.Maximized : WindowState.Normal;
+
+        DebugHelper.WriteLine(
+            $"Selector Ready: window {bounds.Width}x{bounds.Height} at {bounds.X},{bounds.Y}; capture scale {_captureScaleX:0.###}x{_captureScaleY:0.###}");
+    }
+
+    private async Task SetupSelectorLayoutAsync()
+    {
+        PixelRect bounds = await ResolveSelectorBoundsAsync();
+        await Dispatcher.UIThread.InvokeAsync(() => ApplySelectorLayout(bounds));
+    }
+
+    private PixelRect ResolveBoundsFromScreens(SixLabors.ImageSharp.Point cursorPos)
+    {
+        var screen = Screens.ScreenFromPoint(new PixelPoint(cursorPos.X, cursorPos.Y));
+        if (screen != null)
+        {
+            return screen.Bounds;
+        }
+
+        try
+        {
+            var snapXScreen = Methods.GetScreen(cursorPos);
+            if (snapXScreen is not null)
+            {
+                var (x, y, width, height) = snapXScreen.Bounds;
+                return new PixelRect(x, y, width, height);
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine($"Region selector could not resolve screen bounds: {ex.Message}");
+        }
+
+        return new PixelRect(0, 0, 1920, 1080);
     }
     public RegionSelectorWindow() : this(new RegionSelectorViewModel()) { }
     public RegionSelectorWindow(bool IsSilent, bool takeScreenShot = true) : this(new RegionSelectorViewModel(), IsSilent, takeScreenShot) { }
@@ -1023,6 +1607,16 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
+        if (IsPointerOverLiveToolbar(E.Source))
+        {
+            return;
+        }
+
+        if (_liveAnnotateSession && !_regionToolActive)
+        {
+            return;
+        }
+
         if (_captureOptions.WindowPickerMode)
         {
             // Nothing under the cursor is pickable at this point; ignore the
@@ -1033,7 +1627,7 @@ public partial class RegionSelectorWindow : Window
                 double y = window.Rectangle.Y - _screenBounds.Y;
                 _selectionRect.Width = window.Rectangle.Width;
                 _selectionRect.Height = window.Rectangle.Height;
-                _selectionRect.Margin = new Thickness(x, y, 0, 0);
+                SetSelectionRect(x, y, window.Rectangle.Width, window.Rectangle.Height);
                 _isSelecting = true;
                 E.Pointer.Capture(_canvas);
                 OnPointerReleased(this, null);
@@ -1045,10 +1639,11 @@ public partial class RegionSelectorWindow : Window
         _isSelecting = true;
         RecordPressPoint(_startPoint);
         E.Pointer.Capture(_canvas);
+        MoveCursorMarker(_startPoint);
 
         _selectionRect.Width = 0;
         _selectionRect.Height = 0;
-        _selectionRect.Margin = new Thickness(_startPoint.X, _startPoint.Y, 0, 0);
+        SetSelectionRect(0, 0, 0, 0);
 
         _infoBox.IsVisible = _captureOptions.ShowInfo;
     }
@@ -1130,7 +1725,7 @@ public partial class RegionSelectorWindow : Window
 
         if (App.MyMainWindow != null)
         {
-            App.MyMainWindow.Show(); // in case it was hidden
+            SafeRestoreMainWindow();
             dialog.ShowAsync(App.MyMainWindow);
         }
         else
@@ -1173,8 +1768,8 @@ public partial class RegionSelectorWindow : Window
         // layout pass, so freshly drawn selections would look empty. Derive
         // the current rectangle from the explicit shape properties.
         var drawnRect = new Rect(
-            _selectionRect.Margin.Left,
-            _selectionRect.Margin.Top,
+            Canvas.GetLeft(_selectionRect),
+            Canvas.GetTop(_selectionRect),
             _selectionRect.Width,
             _selectionRect.Height);
         _selectionRect.IsVisible = false;
@@ -1219,6 +1814,8 @@ public partial class RegionSelectorWindow : Window
             Close();
             return;
         }
+
+        Image? cropped = null;
         try
         {
             await Task.Run(() =>
@@ -1228,8 +1825,17 @@ public partial class RegionSelectorWindow : Window
                     throw new InvalidOperationException("The selector screenshot is unavailable.");
                 }
 
-                double scaleX = _image.Width / _imageBounds.Width;
-                double scaleY = _image.Height / _imageBounds.Height;
+                double scaleX = _captureScaleX;
+                double scaleY = _captureScaleY;
+
+                if (_liveAnnotateSession)
+                {
+                    foreach (ImageAnnotation annotation in _annotations.Where(x => x is not CropAnnotation))
+                    {
+                        ScaleAnnotation(annotation, scaleX, scaleY).Apply(_image);
+                    }
+                }
+
                 var imageRect = new SixLabors.ImageSharp.Rectangle(
                     (int)Math.Floor(localRect.X * scaleX),
                     (int)Math.Floor(localRect.Y * scaleY),
@@ -1242,20 +1848,909 @@ public partial class RegionSelectorWindow : Window
                 }
 
                 _image.Mutate(Context => Context.Crop(imageRect));
-                _resultImg.TrySetResult(_image);
-                if (IsSilentMode) return;
-                DebugHelper.WriteLine("Running image task");
-                UploadManager.RunImageTask(_image, TaskSettings.GetDefaultTaskSettings());
+                cropped = _image;
             });
         }
         catch (Exception ex)
         {
             _resultImg.TrySetException(ex);
             ShowErrorDialog(ex);
+            SafeRestoreMainWindow();
+            Close();
+            return;
         }
-        App.MyMainWindow?.Show();
+
+        if (cropped is null)
+        {
+            _resultImg.TrySetResult(null);
+            SafeRestoreMainWindow();
+            Close();
+            return;
+        }
+
+        if (_liveAnnotateSession)
+        {
+            FinishCapture(_image!);
+            return;
+        }
+
+        // Present the inline (non-modal) annotation toolbar over the cropped
+        // capture before committing it: Save composites the marks onto the
+        // image, Cancel commits the plain capture. This is the ShareX-style
+        // "edit on the capture itself", NOT the modal CapturedImageEditorWindow.
+        // Skip it whenever the selection is a pre-defined box (window/monitor
+        // picker) or the caller disabled annotation (scrolling capture), where
+        // the toolbar would force a wasted step. IsSilentMode must NOT gate
+        // this: the core region selector runs silent, so returning early would
+        // skip the window close and hang the caller's closedTask.
+        if (_captureOptions.AnnotateCapture &&
+            !_captureOptions.WindowPickerMode &&
+            !_captureOptions.WindowOrRegionPickerMode &&
+            !_captureOptions.MonitorPickerMode)
+        {
+            ShowAnnotationToolbar(cropped);
+            return;
+        }
+
+        _resultImg.TrySetResult(_image);
+        if (!IsSilentMode)
+        {
+            DebugHelper.WriteLine("Running image task");
+            UploadManager.RunImageTask(_image, TaskSettings.GetDefaultTaskSettings());
+        }
+        SafeRestoreMainWindow();
         Close();
     }
+    /// <summary>
+    /// Builds and shows the inline annotation surface + toolbar over the
+    /// cropped capture. Non-modal: the capture is not committed until the user
+    /// presses Save (compositing the marks) or Cancel (keeping the plain
+    /// image). This is the ShareX-style "edit on the capture itself" and is
+    /// deliberately NOT the modal <see cref="CapturedImageEditorWindow"/>.
+    /// </summary>
+    private void ShowAnnotationToolbar(Image cropped)
+    {
+        _annotationMode = true;
+        var bitmap = App.SnapX.ConvertImageSharpImgToAvalonia(cropped);
+        _annotationBitmap = bitmap;
+        _annotationSurface = new AnnotationSurface(bitmap, AddAnnotation, () => _annotationText);
+        _annotationSurface.Width = bitmap.PixelSize.Width;
+        _annotationSurface.Height = bitmap.PixelSize.Height;
+
+        var scroll = new ScrollViewer
+        {
+            Content = _annotationSurface,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+
+        var toolbar = BuildAnnotationToolbar();
+        _annotationToolbar = toolbar;
+
+        var layout = new Grid
+        {
+            RowDefinitions =
+            {
+                new RowDefinition(GridLength.Auto),
+                new RowDefinition(GridLength.Star)
+            }
+        };
+        layout.Children.Add(toolbar);
+        Grid.SetRow(toolbar, 0);
+        layout.Children.Add(scroll);
+        Grid.SetRow(scroll, 1);
+
+        Content = new Border
+        {
+            Background = new SolidColorBrush(AvaloniaColor.FromRgb(30, 30, 30)),
+            Child = layout
+        };
+    }
+
+    private Control BuildAnnotationToolbar()
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(8),
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+
+        foreach ((string label, ImageAnnotation.Tool tool) in new[]
+                 {
+                     ("Rect", ImageAnnotation.Tool.Rectangle),
+                     ("Redact", ImageAnnotation.Tool.Redaction),
+                     ("Freehand", ImageAnnotation.Tool.Freehand),
+                     ("Arrow", ImageAnnotation.Tool.Arrow),
+                     ("Text", ImageAnnotation.Tool.Text),
+                     ("Crop", ImageAnnotation.Tool.Crop)
+                 })
+        {
+            var button = new Button { Content = label, Margin = new Thickness(2) };
+            button.Click += (_, _) => SetAnnotationTool(tool);
+            panel.Children.Add(button);
+        }
+
+        var undo = new Button { Content = "Undo", Margin = new Thickness(2) };
+        undo.Click += (_, _) => UndoAnnotation();
+        panel.Children.Add(undo);
+
+        var textBox = new TextBox
+        {
+            Watermark = "Text",
+            Width = 160,
+            Margin = new Thickness(2),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        textBox.TextChanged += (_, _) => _annotationText = textBox.Text ?? "";
+        panel.Children.Add(textBox);
+
+        var cancel = new Button { Content = "Cancel", Margin = new Thickness(2), MinWidth = 80 };
+        cancel.Click += (_, _) => CancelAnnotation();
+        panel.Children.Add(cancel);
+
+        var save = new Button { Content = "Save", Margin = new Thickness(2), MinWidth = 80 };
+        save.Click += (_, _) => SaveAnnotation();
+        panel.Children.Add(save);
+
+        return panel;
+    }
+
+    private void SetAnnotationTool(ImageAnnotation.Tool tool)
+    {
+        _annotationTool = tool;
+        _annotationSurface?.SetTool(tool);
+    }
+
+    private void AddAnnotation(ImageAnnotation annotation, ImageAnnotation.Tool tool)
+    {
+        if (annotation is not { } a)
+        {
+            return;
+        }
+        _annotations.Add(a);
+        if (tool != ImageAnnotation.Tool.Crop)
+        {
+            _undoStack.Push(a);
+        }
+        _annotationSurface?.InvalidateVisual();
+        _liveAnnotateOverlay?.InvalidateVisual();
+    }
+
+    private void UndoAnnotation()
+    {
+        if (_undoStack.TryPop(out ImageAnnotation? last))
+        {
+            _annotations.Remove(last);
+            _annotationSurface?.InvalidateVisual();
+            _liveAnnotateOverlay?.InvalidateVisual();
+        }
+    }
+
+    private void SaveAnnotation()
+    {
+        // Composite the annotations onto the captured image in place so the
+        // caller owns a single result image. A crop changes the image geometry,
+        // so it must be applied LAST; otherwise the pixel coordinates of marks
+        // drawn before the crop (expressed in the original canvas space) would
+        // land at wrong offsets after the crop shrank the image.
+        foreach (ImageAnnotation a in _annotations.Where(x => x is not CropAnnotation))
+        {
+            Image? applied = a.Apply(_image!);
+            if (applied == null)
+            {
+                break;
+            }
+            if (!ReferenceEquals(applied, _image))
+            {
+                _image.Dispose();
+            }
+            _image = applied;
+        }
+        foreach (ImageAnnotation a in _annotations.Where(x => x is CropAnnotation))
+        {
+            Image? applied = a.Apply(_image!);
+            if (applied == null)
+            {
+                break;
+            }
+            if (!ReferenceEquals(applied, _image))
+            {
+                _image.Dispose();
+            }
+            _image = applied;
+        }
+        FinishCapture(_image!);
+    }
+
+    private bool IsPointerOverLiveToolbar(object? source)
+    {
+        if (_liveToolbarHost is null || source is not Visual visual)
+        {
+            return false;
+        }
+
+        for (Visual? current = visual; current is not null; current = current.GetVisualParent())
+        {
+            if (ReferenceEquals(current, _liveToolbarHost))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void InitializeLiveAnnotateSession()
+    {
+        if (_liveToolbarHost is null)
+        {
+            DebugHelper.WriteLine("Live annotate toolbar host is unavailable.");
+            return;
+        }
+
+        if (_liveAnnotateSession)
+        {
+            return;
+        }
+
+        _liveAnnotateSession = true;
+        _regionToolActive = true;
+
+        _liveAnnotateOverlay = new LiveAnnotationOverlay(
+            () => _annotations,
+            AddAnnotation,
+            () => _annotationText)
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            IsHitTestVisible = false
+        };
+        if (_liveAnnotateHost is not null)
+        {
+            _liveAnnotateHost.Children.Clear();
+            _liveAnnotateHost.Children.Add(_liveAnnotateOverlay);
+            _liveAnnotateHost.IsHitTestVisible = false;
+        }
+
+        _liveToolbarHost.Margin = new Thickness(0, _toolbarTopMargin, 0, 0);
+        _liveToolbarHost.Child = BuildLiveAnnotationToolbar();
+        _liveToolbarHost.IsVisible = true;
+        _canvas.IsHitTestVisible = true;
+
+        DebugHelper.WriteLine("Live annotate toolbar initialized.");
+    }
+
+    private Control BuildLiveAnnotationToolbar()
+    {
+        var root = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 4,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var tools = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 0,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        _liveToolButtons.Clear();
+        _regionToolButton = CreateIconToolButton(Symbol.ScreenCut, "Region", SetRegionToolActive);
+        tools.Children.Add(_regionToolButton);
+        AddIconToolButton(tools, Symbol.Square, "Rectangle", ImageAnnotation.Tool.Rectangle);
+        tools.Children.Add(CreateIconToolButton(Symbol.Highlight, "Highlight", () => SetLiveAnnotationTool(ImageAnnotation.Tool.Rectangle)));
+        AddIconToolButton(tools, Symbol.Blur, "Blur", ImageAnnotation.Tool.Redaction);
+        AddIconToolButton(tools, Symbol.Pen, "Freehand", ImageAnnotation.Tool.Freehand);
+        AddIconToolButton(tools, Symbol.ArrowRight, "Arrow", ImageAnnotation.Tool.Arrow);
+        AddIconToolButton(tools, Symbol.TextT, "Text", ImageAnnotation.Tool.Text);
+        tools.Children.Add(CreateIconToolButton(Symbol.ArrowUndo, "Undo", UndoAnnotation));
+        root.Children.Add(tools);
+
+        _annotationTextBox = new TextBox
+        {
+            Width = 120,
+            MinHeight = 24,
+            MaxHeight = 24,
+            Padding = new Thickness(4, 2),
+            VerticalAlignment = VerticalAlignment.Center,
+            Watermark = "Text"
+        };
+        _annotationTextBox.TextChanged += (_, _) => _annotationText = _annotationTextBox.Text ?? string.Empty;
+        root.Children.Add(_annotationTextBox);
+
+        return root;
+    }
+
+    private void AddIconToolButton(
+        StackPanel panel,
+        Symbol symbol,
+        string tip,
+        ImageAnnotation.Tool tool)
+    {
+        Button button = CreateIconToolButton(symbol, tip, () => SetLiveAnnotationTool(tool));
+        panel.Children.Add(button);
+        _liveToolButtons[tool] = button;
+    }
+
+    private Button CreateIconToolButton(Symbol symbol, string tip, Action onClick)
+    {
+        var button = new Button
+        {
+            Width = 24,
+            Height = 24,
+            MinWidth = 24,
+            MinHeight = 24,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0),
+            CornerRadius = new CornerRadius(2),
+            Background = Brushes.Transparent,
+            Foreground = Brushes.White,
+            Content = new SymbolIcon
+            {
+                Symbol = symbol,
+                FontSize = 12,
+                IconVariant = IconVariant.Regular
+            }
+        };
+        ToolTip.SetTip(button, tip);
+        button.Click += (_, _) => onClick();
+        return button;
+    }
+
+    private Button? _regionToolButton;
+
+    private void SetRegionToolActive()
+    {
+        _regionToolActive = true;
+        _annotationTool = ImageAnnotation.Tool.Rectangle;
+        _canvas.IsHitTestVisible = true;
+        if (_liveAnnotateHost is not null)
+        {
+            _liveAnnotateHost.IsHitTestVisible = false;
+        }
+
+        if (_liveAnnotateOverlay is not null)
+        {
+            _liveAnnotateOverlay.IsHitTestVisible = false;
+        }
+
+        UpdateLiveToolbarHighlight();
+    }
+
+    private void SetLiveAnnotationTool(ImageAnnotation.Tool tool)
+    {
+        _annotationTool = tool;
+        _regionToolActive = false;
+        _canvas.IsHitTestVisible = false;
+        _liveAnnotateOverlay?.SetTool(tool);
+        if (_liveAnnotateHost is not null)
+        {
+            _liveAnnotateHost.IsHitTestVisible = true;
+        }
+
+        if (_liveAnnotateOverlay is not null)
+        {
+            _liveAnnotateOverlay.IsHitTestVisible = true;
+        }
+
+        _cursorMarker.IsVisible = false;
+        UpdateLiveToolbarHighlight();
+    }
+
+    private void UpdateLiveToolbarHighlight()
+    {
+        foreach (KeyValuePair<ImageAnnotation.Tool, Button> entry in _liveToolButtons)
+        {
+            bool active = !_regionToolActive && _annotationTool == entry.Key;
+            entry.Value.Background = active
+                ? new SolidColorBrush(AvaloniaColor.FromRgb(62, 62, 66))
+                : Brushes.Transparent;
+            entry.Value.Opacity = active ? 1 : 0.75;
+        }
+
+        if (_regionToolButton is null)
+        {
+            return;
+        }
+
+        _regionToolButton.Background = _regionToolActive
+            ? new SolidColorBrush(AvaloniaColor.FromRgb(62, 62, 66))
+            : Brushes.Transparent;
+        _regionToolButton.Opacity = _regionToolActive ? 1 : 0.75;
+    }
+
+    private static SixLabors.ImageSharp.Rectangle ScaleRect(
+        SixLabors.ImageSharp.Rectangle rectangle,
+        double scaleX,
+        double scaleY) =>
+        new(
+            (int)Math.Round(rectangle.X * scaleX),
+            (int)Math.Round(rectangle.Y * scaleY),
+            Math.Max(1, (int)Math.Round(rectangle.Width * scaleX)),
+            Math.Max(1, (int)Math.Round(rectangle.Height * scaleY)));
+
+    private static ImageAnnotation ScaleAnnotation(ImageAnnotation annotation, double scaleX, double scaleY)
+    {
+        return annotation switch
+        {
+            RectangleAnnotation rectangle => new RectangleAnnotation
+            {
+                Rectangle = ScaleRect(rectangle.Rectangle, scaleX, scaleY),
+                Color = rectangle.Color,
+                Thickness = rectangle.Thickness,
+                Filled = rectangle.Filled
+            },
+            RedactionAnnotation redaction => new RedactionAnnotation
+            {
+                Rectangle = ScaleRect(redaction.Rectangle, scaleX, scaleY)
+            },
+            FreehandAnnotation freehand => new FreehandAnnotation
+            {
+                Points = freehand.Points
+                    .Select(point => new PointF((float)(point.X * scaleX), (float)(point.Y * scaleY)))
+                    .ToList(),
+                Color = freehand.Color,
+                Thickness = freehand.Thickness
+            },
+            ArrowAnnotation arrow => new ArrowAnnotation
+            {
+                Start = new PointF((float)(arrow.Start.X * scaleX), (float)(arrow.Start.Y * scaleY)),
+                End = new PointF((float)(arrow.End.X * scaleX), (float)(arrow.End.Y * scaleY)),
+                Color = arrow.Color,
+                Thickness = arrow.Thickness
+            },
+            TextAnnotation text => new TextAnnotation
+            {
+                Position = new PointF((float)(text.Position.X * scaleX), (float)(text.Position.Y * scaleY)),
+                Text = text.Text,
+                FontSize = text.FontSize,
+                Color = text.Color
+            },
+            CropAnnotation crop => new CropAnnotation
+            {
+                Rectangle = ScaleRect(crop.Rectangle, scaleX, scaleY)
+            },
+            _ => annotation
+        };
+    }
+
+    /// <summary>
+    /// Transparent overlay for live annotations on the frozen desktop canvas.
+    /// </summary>
+    private sealed class LiveAnnotationOverlay : Control
+    {
+        private readonly Func<IReadOnlyList<ImageAnnotation>> _getAnnotations;
+        private readonly Action<ImageAnnotation, ImageAnnotation.Tool> _onComplete;
+        private readonly Func<string> _textProvider;
+        private Point _start;
+        private Point _current;
+        private bool _dragging;
+        private ImageAnnotation.Tool _tool;
+        private readonly List<Point> _freehandPoints = [];
+        private long _lastInvalidateTicks;
+
+        public LiveAnnotationOverlay(
+            Func<IReadOnlyList<ImageAnnotation>> getAnnotations,
+            Action<ImageAnnotation, ImageAnnotation.Tool> onComplete,
+            Func<string> textProvider)
+        {
+            _getAnnotations = getAnnotations;
+            _onComplete = onComplete;
+            _textProvider = textProvider;
+            ClipToBounds = true;
+        }
+
+        public void SetTool(ImageAnnotation.Tool tool) => _tool = tool;
+
+        public override void Render(DrawingContext context)
+        {
+            base.Render(context);
+            foreach (ImageAnnotation annotation in _getAnnotations())
+            {
+                DrawCommittedAnnotation(context, annotation);
+            }
+
+            if (_dragging && _tool != ImageAnnotation.Tool.Freehand)
+            {
+                var rect = MakeRect(_start, _current);
+                switch (_tool)
+                {
+                    case ImageAnnotation.Tool.Rectangle:
+                        DrawOutline(context, rect, Brushes.Red);
+                        break;
+                    case ImageAnnotation.Tool.Redaction:
+                        context.FillRectangle(Brushes.Black, rect);
+                        break;
+                    case ImageAnnotation.Tool.Arrow:
+                        context.DrawLine(new Pen(Brushes.Green, 3), _start, _current);
+                        break;
+                }
+            }
+
+            if (_dragging && _tool == ImageAnnotation.Tool.Freehand && _freehandPoints.Count >= 2)
+            {
+                var pen = new Pen(Brushes.Yellow, 3);
+                for (int i = 1; i < _freehandPoints.Count; i++)
+                {
+                    context.DrawLine(pen, _freehandPoints[i - 1], _freehandPoints[i]);
+                }
+            }
+        }
+
+        private static void DrawCommittedAnnotation(DrawingContext context, ImageAnnotation annotation)
+        {
+            switch (annotation)
+            {
+                case RectangleAnnotation rectangle:
+                    DrawOutline(context, ToRect(rectangle.Rectangle), Brushes.Red);
+                    break;
+                case RedactionAnnotation redaction:
+                    context.FillRectangle(Brushes.Black, ToRect(redaction.Rectangle));
+                    break;
+                case FreehandAnnotation freehand when freehand.Points.Count >= 2:
+                {
+                    var pen = new Pen(Brushes.Yellow, freehand.Thickness);
+                    for (int i = 1; i < freehand.Points.Count; i++)
+                    {
+                        var a = freehand.Points[i - 1];
+                        var b = freehand.Points[i];
+                        context.DrawLine(pen, new Point(a.X, a.Y), new Point(b.X, b.Y));
+                    }
+
+                    break;
+                }
+                case ArrowAnnotation arrow:
+                    context.DrawLine(new Pen(Brushes.Green, arrow.Thickness), new Point(arrow.Start.X, arrow.Start.Y), new Point(arrow.End.X, arrow.End.Y));
+                    break;
+                case TextAnnotation text when !string.IsNullOrWhiteSpace(text.Text):
+                    context.DrawText(
+                        new FormattedText(
+                            text.Text,
+                            System.Globalization.CultureInfo.CurrentCulture,
+                            FlowDirection.LeftToRight,
+                            Typeface.Default,
+                            text.FontSize,
+                            Brushes.White),
+                        new Point(text.Position.X, text.Position.Y));
+                    break;
+            }
+        }
+
+        private static Rect ToRect(SixLabors.ImageSharp.Rectangle rectangle) =>
+            new(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
+
+        private static void DrawOutline(DrawingContext context, Rect rect, IBrush brush)
+        {
+            var pen = new Pen(brush, 2);
+            context.DrawLine(pen, new Point(rect.X, rect.Y), new Point(rect.Right, rect.Y));
+            context.DrawLine(pen, new Point(rect.Right, rect.Y), new Point(rect.Right, rect.Bottom));
+            context.DrawLine(pen, new Point(rect.Right, rect.Bottom), new Point(rect.X, rect.Bottom));
+            context.DrawLine(pen, new Point(rect.X, rect.Bottom), new Point(rect.X, rect.Y));
+        }
+
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
+        {
+            base.OnPointerPressed(e);
+            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                return;
+            }
+
+            _start = e.GetPosition(this);
+            _current = _start;
+            _dragging = true;
+            _freehandPoints.Clear();
+            _freehandPoints.Add(_start);
+            e.Pointer.Capture(this);
+            e.Handled = true;
+        }
+
+        protected override void OnPointerMoved(PointerEventArgs e)
+        {
+            base.OnPointerMoved(e);
+            if (!_dragging)
+            {
+                return;
+            }
+
+            _current = e.GetPosition(this);
+            if (_tool == ImageAnnotation.Tool.Freehand)
+            {
+                _freehandPoints.Add(_current);
+            }
+
+            long now = Environment.TickCount64;
+            if (now - _lastInvalidateTicks >= 16)
+            {
+                _lastInvalidateTicks = now;
+                InvalidateVisual();
+            }
+
+            e.Handled = true;
+        }
+
+        protected override void OnPointerReleased(PointerReleasedEventArgs e)
+        {
+            base.OnPointerReleased(e);
+            if (!_dragging)
+            {
+                return;
+            }
+
+            _current = e.GetPosition(this);
+            _dragging = false;
+            e.Pointer.Capture(null);
+            Commit();
+            e.Handled = true;
+        }
+
+        private void Commit()
+        {
+            var rect = MakeRect(_start, _current);
+            switch (_tool)
+            {
+                case ImageAnnotation.Tool.Rectangle:
+                    _onComplete(new RectangleAnnotation
+                    {
+                        Rectangle = ToSharp(rect),
+                        Color = SharpColor.Red,
+                        Thickness = 2
+                    }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Redaction:
+                    _onComplete(new RedactionAnnotation { Rectangle = ToSharp(rect) }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Freehand:
+                    _onComplete(new FreehandAnnotation
+                    {
+                        Points = _freehandPoints.Select(p => new PointF((float)p.X, (float)p.Y)).ToList(),
+                        Color = SharpColor.Yellow,
+                        Thickness = 3
+                    }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Arrow:
+                    _onComplete(new ArrowAnnotation
+                    {
+                        Start = new PointF((float)_start.X, (float)_start.Y),
+                        End = new PointF((float)_current.X, (float)_current.Y),
+                        Color = SharpColor.Green,
+                        Thickness = 3
+                    }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Text:
+                    string value = _textProvider();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        _onComplete(new TextAnnotation
+                        {
+                            Position = new PointF((float)_start.X, (float)_start.Y),
+                            Text = value,
+                            Color = SharpColor.White
+                        }, _tool);
+                    }
+
+                    break;
+            }
+
+            InvalidateVisual();
+        }
+
+        private static Rect MakeRect(Point a, Point b)
+        {
+            double x = Math.Min(a.X, b.X);
+            double y = Math.Min(a.Y, b.Y);
+            double w = Math.Abs(a.X - b.X);
+            double h = Math.Abs(a.Y - b.Y);
+            return new Rect(x, y, w, h);
+        }
+
+        private static SixLabors.ImageSharp.Rectangle ToSharp(Rect rect) =>
+            new((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
+    }
+
+    private void CancelAnnotation()
+    {
+        FinishCapture(_image!);
+    }
+
+    private void FinishCapture(Image result)
+    {
+        _resultImg.TrySetResult(result);
+        if (!IsSilentMode)
+        {
+            DebugHelper.WriteLine("Running image task");
+            UploadManager.RunImageTask(result, TaskSettings.GetDefaultTaskSettings());
+        }
+        _annotationBitmap?.Dispose();
+        _annotationBitmap = null;
+        SafeRestoreMainWindow();
+        Close();
+    }
+
+    /// <summary>
+    /// Renders the captured region image and lets the user draw inline
+    /// annotations over it. Mirrors the annotation canvas in
+    /// <see cref="CapturedImageEditorWindow"/> so the inline (non-modal)
+    /// annotate surface behaves identically to the modal editor's canvas.
+    /// </summary>
+    private sealed class AnnotationSurface : Control
+    {
+        private readonly WriteableBitmap _bitmap;
+        private readonly Action<ImageAnnotation, ImageAnnotation.Tool> _onComplete;
+        private readonly Func<string> _textProvider;
+        private Point _start;
+        private Point _current;
+        private bool _dragging;
+        private ImageAnnotation.Tool _tool;
+        private readonly List<Point> _freehandPoints = [];
+
+        public AnnotationSurface(WriteableBitmap bitmap, Action<ImageAnnotation, ImageAnnotation.Tool> onComplete, Func<string> textProvider)
+        {
+            _bitmap = bitmap;
+            _onComplete = onComplete;
+            _textProvider = textProvider;
+            ClipToBounds = true;
+        }
+
+        public void SetTool(ImageAnnotation.Tool tool) => _tool = tool;
+
+        public override void Render(DrawingContext context)
+        {
+            base.Render(context);
+            context.DrawImage(_bitmap, new Rect(0, 0, _bitmap.PixelSize.Width, _bitmap.PixelSize.Height));
+
+            if (_dragging && _tool != ImageAnnotation.Tool.Freehand)
+            {
+                var rect = MakeRect(_start, _current);
+                switch (_tool)
+                {
+                    case ImageAnnotation.Tool.Rectangle:
+                        DrawOutline(context, rect, Brushes.Red);
+                        break;
+                    case ImageAnnotation.Tool.Redaction:
+                        context.FillRectangle(Brushes.Black, rect);
+                        break;
+                    case ImageAnnotation.Tool.Arrow:
+                        context.DrawLine(new Pen(Brushes.Green, 3), _start, _current);
+                        break;
+                    case ImageAnnotation.Tool.Crop:
+                        DrawOutline(context, rect, Brushes.Yellow);
+                        break;
+                }
+            }
+
+            if (_dragging && _tool == ImageAnnotation.Tool.Freehand && _freehandPoints.Count >= 2)
+            {
+                var pen = new Pen(Brushes.Yellow, 3);
+                for (int i = 1; i < _freehandPoints.Count; i++)
+                {
+                    context.DrawLine(pen, _freehandPoints[i - 1], _freehandPoints[i]);
+                }
+            }
+        }
+
+        private static void DrawOutline(DrawingContext context, Rect rect, IBrush brush)
+        {
+            var pen = new Pen(brush, 2);
+            context.DrawLine(pen, new Point(rect.X, rect.Y), new Point(rect.Right, rect.Y));
+            context.DrawLine(pen, new Point(rect.Right, rect.Y), new Point(rect.Right, rect.Bottom));
+            context.DrawLine(pen, new Point(rect.Right, rect.Bottom), new Point(rect.X, rect.Bottom));
+            context.DrawLine(pen, new Point(rect.X, rect.Bottom), new Point(rect.X, rect.Y));
+        }
+
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
+        {
+            base.OnPointerPressed(e);
+            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                return;
+            }
+            _start = e.GetPosition(this);
+            _current = _start;
+            _dragging = true;
+            _freehandPoints.Clear();
+            _freehandPoints.Add(_start);
+            e.Handled = true;
+        }
+
+        protected override void OnPointerMoved(PointerEventArgs e)
+        {
+            base.OnPointerMoved(e);
+            if (!_dragging)
+            {
+                return;
+            }
+            _current = e.GetPosition(this);
+            if (_tool == ImageAnnotation.Tool.Freehand)
+            {
+                _freehandPoints.Add(_current);
+            }
+            InvalidateVisual();
+            e.Handled = true;
+        }
+
+        protected override void OnPointerReleased(PointerReleasedEventArgs e)
+        {
+            base.OnPointerReleased(e);
+            if (!_dragging)
+            {
+                return;
+            }
+            _current = e.GetPosition(this);
+            _dragging = false;
+            Commit();
+            e.Handled = true;
+        }
+
+        private void Commit()
+        {
+            var rect = MakeRect(_start, _current);
+            switch (_tool)
+            {
+                case ImageAnnotation.Tool.Rectangle:
+                    _onComplete(new RectangleAnnotation
+                    {
+                        Rectangle = ToSharp(rect),
+                        Color = SharpColor.Red,
+                        Thickness = 2
+                    }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Redaction:
+                    _onComplete(new RedactionAnnotation { Rectangle = ToSharp(rect) }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Freehand:
+                    _onComplete(new FreehandAnnotation
+                    {
+                        Points = _freehandPoints.Select(p => new PointF((float)p.X, (float)p.Y)).ToList(),
+                        Color = SharpColor.Yellow,
+                        Thickness = 3
+                    }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Arrow:
+                    _onComplete(new ArrowAnnotation
+                    {
+                        Start = new PointF((float)_start.X, (float)_start.Y),
+                        End = new PointF((float)_current.X, (float)_current.Y),
+                        Color = SharpColor.Green,
+                        Thickness = 3
+                    }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Crop:
+                    _onComplete(new CropAnnotation { Rectangle = ToSharp(rect) }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Text:
+                    string value = _textProvider();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        _onComplete(new TextAnnotation
+                        {
+                            Position = new PointF((float)_start.X, (float)_start.Y),
+                            Text = value,
+                            Color = SharpColor.White
+                        }, _tool);
+                    }
+                    break;
+            }
+            InvalidateVisual();
+        }
+
+        private static Rect MakeRect(Point a, Point b)
+        {
+            double x = Math.Min(a.X, b.X);
+            double y = Math.Min(a.Y, b.Y);
+            double w = Math.Abs(a.X - b.X);
+            double h = Math.Abs(a.Y - b.Y);
+            return new Rect(x, y, w, h);
+        }
+
+        private static SixLabors.ImageSharp.Rectangle ToSharp(Rect rect) =>
+            new((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
+    }
+
     private Task CancelSelection()
     {
         if (_selectionCompleted)
@@ -1267,7 +2762,7 @@ public partial class RegionSelectorWindow : Window
         _isSelecting = false;
         _resultRect.TrySetResult(null);
         _resultImg.TrySetResult(null);
-        App.MyMainWindow?.Show();
+        SafeRestoreMainWindow();
         Close();
         return Task.CompletedTask;
     }
@@ -1294,12 +2789,13 @@ public partial class RegionSelectorWindow : Window
         double y = hovered.Rectangle.Y - _screenBounds.Y;
         _selectionRect.Width = hovered.Rectangle.Width;
         _selectionRect.Height = hovered.Rectangle.Height;
-        _selectionRect.Margin = new Thickness(x, y, 0, 0);
+        SetSelectionRect(x, y, hovered.Rectangle.Width, hovered.Rectangle.Height);
         _selectionRect.IsVisible = true;
 
         string title = string.IsNullOrWhiteSpace(hovered.Title) ? hovered.ProcessName : hovered.Title;
         _infoBox.Text = $"{title} ({hovered.Rectangle.Width:0}x{hovered.Rectangle.Height:0})";
-        _infoBox.Margin = new Thickness(x, Math.Max(0, y - 30), 0, 0);
+        Canvas.SetLeft(_infoBox, x);
+        Canvas.SetTop(_infoBox, Math.Max(0, y - 30));
         _infoBox.IsVisible = true;
     }
 
@@ -1309,7 +2805,7 @@ public partial class RegionSelectorWindow : Window
         double y = window.Rectangle.Y - _screenBounds.Y;
         _selectionRect.Width = window.Rectangle.Width;
         _selectionRect.Height = window.Rectangle.Height;
-        _selectionRect.Margin = new Thickness(x, y, 0, 0);
+        SetSelectionRect(x, y, window.Rectangle.Width, window.Rectangle.Height);
         _isSelecting = true;
         OnPointerReleased(this, null);
     }
@@ -1342,17 +2838,59 @@ public partial class RegionSelectorWindow : Window
         return dx * dx + dy * dy > DragDistanceSquaredLimit;
     }
 
+    /// <summary>
+    /// Centres the plus marker on the pointer so the effective cursor reads as
+    /// a draggable plus. Purely cosmetic: it never participates in hit testing
+    /// and never feeds back into the selection rectangle maths.
+    /// </summary>
+    private void MoveCursorMarker(Point position)
+    {
+        if (_cursorMarker is null) return;
+
+        Canvas.SetLeft(_cursorMarker, position.X - (_cursorMarker.Width / 2));
+        Canvas.SetTop(_cursorMarker, position.Y - (_cursorMarker.Height / 2));
+
+        if (!_cursorMarker.IsVisible) _cursorMarker.IsVisible = true;
+    }
+
     private async void OnPointerMoved(object? Sender, PointerEventArgs E)
     {
+        long now = Environment.TickCount64;
+        bool throttle = now - _lastPointerMoveTicks < PointerMoveThrottleMs;
+        if (!throttle)
+        {
+            _lastPointerMoveTicks = now;
+        }
+
+        if (_liveAnnotateSession && !_regionToolActive)
+        {
+            return;
+        }
+
+        if (!throttle || _isSelecting)
+        {
+            MoveCursorMarker(E.GetPosition(_canvas));
+        }
+
         if (!_isSelecting)
         {
             if (_captureOptions.WindowPickerMode ||
                 _captureOptions.WindowOrRegionPickerMode)
             {
-                UpdateWindowHover(E.GetPosition(_canvas));
+                if (!throttle)
+                {
+                    UpdateWindowHover(E.GetPosition(_canvas));
+                }
             }
+
             return;
         }
+
+        if (throttle)
+        {
+            return;
+        }
+
         var endPoint = E.GetPosition(_canvas);
         var x = Math.Min(_startPoint.X, endPoint.X);
         var y = Math.Min(_startPoint.Y, endPoint.Y);
@@ -1372,11 +2910,49 @@ public partial class RegionSelectorWindow : Window
         height = Math.Min(height, _imageBounds.Height);
         _selectionRect.Width = width;
         _selectionRect.Height = height;
-        _selectionRect.Margin = new Thickness(x, y, 0, 0);
-        var infoText = $"X: {_screenBounds.X + x:0}, Y: {_screenBounds.Y + y:0}, Width: {width:0}, Height: {height:0}";
+        SetSelectionRect(x, y, width, height);
+        var infoText =
+            $"X: {_screenBounds.X + (int)x}, Y: {_screenBounds.Y + (int)y}, Width: {(int)width}, Height: {(int)height}";
         if (_infoBox.Text != infoText)
+        {
             _infoBox.Text = infoText;
-        _infoBox.Margin = new Thickness(x, y - 30, 0, 0);
+        }
+
+        Canvas.SetLeft(_infoBox, x);
+        Canvas.SetTop(_infoBox, Math.Max(0, y - 30));
+    }
+
+    private void SetSelectionRect(double x, double y, double width, double height)
+    {
+        Canvas.SetLeft(_selectionRect, x);
+        Canvas.SetTop(_selectionRect, y);
+        _selectionRect.Width = width;
+        _selectionRect.Height = height;
+    }
+
+    private static void SafeRestoreMainWindow()
+    {
+        try
+        {
+            App.RestoreAndFocusMainWindow();
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine($"Could not restore main window: {ex.Message}");
+        }
+    }
+
+    private static SixLabors.ImageSharp.Image CreateDisplayBackground(
+        SixLabors.ImageSharp.Image source,
+        PixelRect bounds)
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0 ||
+            (source.Width == bounds.Width && source.Height == bounds.Height))
+        {
+            return source.Clone(_ => { });
+        }
+
+        return source.Clone(context => context.Resize(bounds.Width, bounds.Height));
     }
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
@@ -1389,6 +2965,22 @@ public partial class RegionSelectorWindow : Window
                     OnPointerReleased(this, null);
                 }
                 break;
+            case Key.Tab:
+                if (_liveAnnotateSession)
+                {
+                    if (_regionToolActive)
+                    {
+                        SetLiveAnnotationTool(_annotationTool);
+                    }
+                    else
+                    {
+                        SetRegionToolActive();
+                    }
+
+                    e.Handled = true;
+                }
+
+                break;
             case Key.Escape:
                 _ = CancelSelection();
                 break;
@@ -1398,15 +2990,6 @@ public partial class RegionSelectorWindow : Window
 
     private async Task<bool> PrepareAndShowAsync(CancellationToken cancellationToken = default)
     {
-        // Every supported native-Wayland caller is routed through slurp above.
-        // Keep this guard here as well so a future direct construction cannot
-        // silently reintroduce this full-screen Avalonia WSI surface.
-        if (IsNativeWayland)
-        {
-            DebugHelper.WriteLine("RegionSelectorWindow is disabled on native Wayland; use slurp instead.");
-            return false;
-        }
-
         // Reject duplicate requests before they hide windows or ask grim for a
         // frame.  Preparing a rejected selector captures the active selector
         // overlay, which produces a recursively dark/outlined screenshot.
@@ -1442,7 +3025,25 @@ public partial class RegionSelectorWindow : Window
 
         try
         {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                IsVisible = true;
+                Opacity = 1;
+            });
+
+            if (!_layoutApplied && _image is not null)
+            {
+                await SetupSelectorLayoutAsync();
+                _layoutApplied = true;
+            }
+
             Show();
+
+            if (IsNativeWayland)
+            {
+                await EnsureHyprlandSelectorOverlayAsync(_screenBounds, cancellationToken);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -1477,7 +3078,8 @@ public partial class RegionSelectorWindow : Window
             return _captureReady;
         }
 
-        HideSnapXWindows();
+        await Dispatcher.UIThread.InvokeAsync(HideSnapXWindows, DispatcherPriority.Send);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
 
         try
         {
@@ -1490,7 +3092,7 @@ public partial class RegionSelectorWindow : Window
             // Hiding a window is asynchronous from the compositor's point of
             // view. Give Hyprland a frame to remove SnapX before grim captures
             // the desktop that will become the selector's background.
-            await Task.Delay(100);
+            await Task.Delay(IsNativeWayland ? 100 : 50);
             if (IsCancellationRequested)
             {
                 RestoreHiddenWindows();
@@ -1558,14 +3160,30 @@ public partial class RegionSelectorWindow : Window
             // file, so the PNG encode/decode round trip this used to do
             // (SaveAsPngAsync + new Bitmap(stream)) was pure overhead on top
             // of every region/window selector open.
-            var backgroundBitmap = App.SnapX.ConvertImageSharpImgToAvalonia(_image);
+            // Downscale once for display. Painting a 2560x1440 brush on every
+            // frame while dragging a region was the main source of input lag.
+            PixelRect displayBounds = await ResolveSelectorBoundsAsync();
+            using SixLabors.ImageSharp.Image displayImage = CreateDisplayBackground(_image, displayBounds);
+            var backgroundBitmap = App.SnapX.ConvertImageSharpImgToAvalonia(displayImage);
             DebugHelper.WriteLine(
                 $"Selector background: {backgroundBitmap.PixelSize} from raw image bounds {_image.Bounds}");
-            Background = new ImageBrush
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Source = backgroundBitmap,
-                Stretch = Stretch.UniformToFill,
-            };
+                _backgroundImage = new global::Avalonia.Controls.Image
+                {
+                    Source = backgroundBitmap,
+                    Stretch = Stretch.Fill,
+                    IsHitTestVisible = false,
+                    Width = displayBounds.Width,
+                    Height = displayBounds.Height,
+                };
+                Canvas.SetLeft(_backgroundImage, 0);
+                Canvas.SetTop(_backgroundImage, 0);
+                _canvas.Children.Insert(0, _backgroundImage);
+                Background = Brushes.Transparent;
+                ApplySelectorLayout(displayBounds);
+                _layoutApplied = true;
+            });
             if (_captureOptions.WindowPickerMode)
             {
                 var screenRect = new SixLabors.ImageSharp.Rectangle(
@@ -1739,30 +3357,91 @@ public partial class RegionSelectorWindow : Window
 
     private void HideSnapXWindows()
     {
-        foreach (var win in App.MyMainWindow?.OwnedWindows.Where(w => w != this && w.IsVisible) ?? [])
+        if (!Dispatcher.UIThread.CheckAccess())
         {
-            _ownershipMap[win] = win.Owner;
-            win.Hide();
-            windowsHiddenByUs.Add(win);
+            Dispatcher.UIThread.Post(HideSnapXWindows, DispatcherPriority.Send);
+            return;
         }
 
-        if (App.MyMainWindow is { IsVisible: true } mainWindow)
+        if (App.MyMainWindow is { IsVisible: true } mainWindow && !windowsHiddenByUs.Contains(mainWindow))
         {
             _ownershipMap[mainWindow] = mainWindow.Owner;
             mainWindow.Hide();
             windowsHiddenByUs.Add(mainWindow);
         }
+
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            foreach (Window window in desktop.Windows.ToArray())
+            {
+                if (window == this || !window.IsVisible)
+                {
+                    continue;
+                }
+
+                if (windowsHiddenByUs.Contains(window))
+                {
+                    continue;
+                }
+
+                _ownershipMap[window] = window.Owner;
+                window.Hide();
+                windowsHiddenByUs.Add(window);
+            }
+        }
+
+        foreach (var win in App.MyMainWindow?.OwnedWindows.Where(w => w != this && w.IsVisible) ?? [])
+        {
+            if (windowsHiddenByUs.Contains(win))
+            {
+                continue;
+            }
+
+            _ownershipMap[win] = win.Owner;
+            win.Hide();
+            windowsHiddenByUs.Add(win);
+        }
     }
+
+    private static bool CanRestoreWindow(Window win) => win.IsLoaded && win.PlatformImpl is not null;
 
     private void RestoreHiddenWindows()
     {
         var sortedWindows = TopoSortWindows(windowsHiddenByUs);
         foreach (var win in sortedWindows)
         {
-            if (_ownershipMap.TryGetValue(win, out var owner) && owner?.IsVisible == true)
-                win.Show(owner as Window);
-            else
-                win.Show();
+            try
+            {
+                if (!CanRestoreWindow(win))
+                {
+                    if (ReferenceEquals(win, App.MyMainWindow))
+                    {
+                        SafeRestoreMainWindow();
+                    }
+
+                    continue;
+                }
+
+                if (_ownershipMap.TryGetValue(win, out var owner) &&
+                    owner is Window ownerWindow &&
+                    CanRestoreWindow(ownerWindow) &&
+                    ownerWindow.IsVisible)
+                {
+                    win.Show(ownerWindow);
+                }
+                else
+                {
+                    win.Show();
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteLine($"Could not restore hidden window: {ex.Message}");
+                if (ReferenceEquals(win, App.MyMainWindow))
+                {
+                    SafeRestoreMainWindow();
+                }
+            }
         }
 
         _ownershipMap.Clear();
@@ -1809,6 +3488,77 @@ public partial class RegionSelectorWindow : Window
     private bool IsCancellationRequested => Volatile.Read(ref _cancellationRequested) != 0;
 
     private static bool IsNativeWayland => OperatingSystem.IsLinux() && LinuxAPI.IsWayland();
+
+    internal static Task EnsureHyprlandAnnotateOverlayAsync(PixelRect bounds) =>
+        EnsureHyprlandOverlayAsync(bounds, "title:SnapX annotate");
+
+    private static async Task EnsureHyprlandSelectorOverlayAsync(
+        PixelRect bounds,
+        CancellationToken cancellationToken = default) =>
+        await EnsureHyprlandOverlayAsync(bounds, "title:RegionSelectorWindow", cancellationToken);
+
+    private static async Task EnsureHyprlandOverlayAsync(
+        PixelRect bounds,
+        string windowSelector,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsNativeWayland)
+        {
+            return;
+        }
+
+        await Task.Delay(80, cancellationToken).ConfigureAwait(false);
+
+        await RunHyprctlDispatchAsync(
+            $"hl.dsp.focus({{ window = '{windowSelector}' }})",
+            cancellationToken).ConfigureAwait(false);
+        await RunHyprctlDispatchAsync(
+            $"hl.dsp.window.float({{ window = '{windowSelector}', action = 'enable' }})",
+            cancellationToken).ConfigureAwait(false);
+        await RunHyprctlDispatchAsync(
+            $"hl.dsp.window.move({{ window = '{windowSelector}', x = {bounds.X}, y = {bounds.Y} }})",
+            cancellationToken).ConfigureAwait(false);
+        await RunHyprctlDispatchAsync(
+            $"hl.dsp.window.resize({{ window = '{windowSelector}', x = {bounds.Width}, y = {bounds.Height} }})",
+            cancellationToken).ConfigureAwait(false);
+
+        DebugHelper.WriteLine(
+            $"Hyprland overlay {windowSelector} positioned at {bounds.X},{bounds.Y} {bounds.Width}x{bounds.Height}");
+    }
+
+    private static async Task RunHyprctlDispatchAsync(string dispatch, CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "hyprctl",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("dispatch");
+        startInfo.ArgumentList.Add(dispatch);
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            DebugHelper.WriteLine($"Region selector hyprctl dispatch failed to start: {dispatch}");
+            return;
+        }
+
+        string output = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        string error = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        if (process.ExitCode != 0)
+        {
+            DebugHelper.WriteLine(
+                $"Region selector hyprctl dispatch failed ({process.ExitCode}): {dispatch} {error}".Trim());
+        }
+        else if (!string.IsNullOrWhiteSpace(output))
+        {
+            DebugHelper.WriteLine($"Region selector hyprctl: {output.Trim()}");
+        }
+    }
 
     private void RequestCancellation()
     {

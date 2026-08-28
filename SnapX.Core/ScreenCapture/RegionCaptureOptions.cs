@@ -3,6 +3,7 @@
 
 
 using System.Text.Json.Serialization;
+using YamlDotNet.Serialization;
 using SixLabors.ImageSharp;
 using SnapX.Core.ScreenCapture.Helpers;
 using SnapX.Core.Utils.Converters;
@@ -53,6 +54,14 @@ public class RegionCaptureOptions
     /// </summary>
     [JsonIgnore]
     public bool UpdateRegionHistory { get; set; } = true;
+    /// <summary>
+    /// When true (default), the region selector presents an inline (non-modal)
+    /// annotation toolbar over the cropped capture before committing it, so the
+    /// user can mark up the screenshot in place. Scrolling capture disables this
+    /// because it only needs the selected rectangle, not an annotated image.
+    /// </summary>
+    [JsonIgnore, YamlIgnore]
+    public bool AnnotateCapture { get; set; } = true;
     // The Wayland selector is intentionally transparent; retain these fields
     // only to preserve compatibility with saved settings from older releases.
     public bool UseDimming { get; set; }

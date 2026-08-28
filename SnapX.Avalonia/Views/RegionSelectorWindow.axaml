@@ -7,14 +7,11 @@
     IsVisible="False"
     KeyDown="OnKeyDown"
     Opacity="0"
-    PointerMoved="OnPointerMoved"
-    PointerPressed="OnPointerPressed"
-    PointerReleased="OnPointerReleased"
     ShowInTaskbar="False"
     SystemDecorations="None"
     Title="RegionSelectorWindow"
     Topmost="True"
-    WindowState="Minimized"
+    WindowState="Normal"
     d:DesignHeight="450"
     d:DesignWidth="800"
     mc:Ignorable="d"
@@ -28,14 +25,40 @@
     <Design.DataContext>
         <viewModels:RegionSelectorViewModel />
     </Design.DataContext>
-    <Viewbox Stretch="UniformToFill">
-
-        <Canvas Background="Transparent" x:Name="Canvas">
+    <Grid x:Name="RootGrid">
+        <Canvas
+            Background="Transparent"
+            Cursor="Cross"
+            PointerMoved="OnPointerMoved"
+            PointerPressed="OnPointerPressed"
+            PointerReleased="OnPointerReleased"
+            x:Name="Canvas">
             <Rectangle
                 IsHitTestVisible="False"
                 Stroke="{DynamicResource SystemAccentColorDark1}"
                 StrokeThickness="2"
                 x:Name="SelectionRect" />
+            <Panel
+                Height="21"
+                IsHitTestVisible="False"
+                IsVisible="False"
+                Width="21"
+                x:Name="CursorMarker">
+                <Rectangle
+                    Fill="{DynamicResource SystemAccentColorDark1}"
+                    Height="3"
+                    HorizontalAlignment="Stretch"
+                    Stroke="{DynamicResource SystemChromeWhiteColor}"
+                    StrokeThickness="1"
+                    VerticalAlignment="Center" />
+                <Rectangle
+                    Fill="{DynamicResource SystemAccentColorDark1}"
+                    HorizontalAlignment="Center"
+                    Stroke="{DynamicResource SystemChromeWhiteColor}"
+                    StrokeThickness="1"
+                    VerticalAlignment="Stretch"
+                    Width="3" />
+            </Panel>
             <TextBox
                 Background="{DynamicResource SystemAccentColorDark3}"
                 BorderThickness="0"
@@ -43,10 +66,25 @@
                 HorizontalAlignment="Left"
                 IsHitTestVisible="False"
                 IsReadOnly="True"
-                Margin="9"
                 Padding="5"
                 VerticalAlignment="Top"
                 x:Name="InfoBox" />
         </Canvas>
-    </Viewbox>
+        <Panel
+            IsHitTestVisible="False"
+            ZIndex="50"
+            x:Name="LiveAnnotateHost" />
+        <Border
+            Background="#CC252526"
+            BorderBrush="#66FFFFFF"
+            BorderThickness="1"
+            CornerRadius="3"
+            HorizontalAlignment="Center"
+            IsHitTestVisible="True"
+            IsVisible="False"
+            Padding="2,1"
+            VerticalAlignment="Top"
+            ZIndex="100"
+            x:Name="LiveToolbarHost" />
+    </Grid>
 </Window>
