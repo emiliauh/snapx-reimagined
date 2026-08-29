@@ -1096,6 +1096,9 @@ public partial class RegionSelectorWindow : Window
         _liveToolbarHost = this.FindControl<Border>("LiveToolbarHost");
         _liveAnnotateHost = this.FindControl<Panel>("LiveAnnotateHost");
 
+        // Tunnel first so Escape cancels even when toolbar controls have focus.
+        AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+
         // Set initial state to invisible/minimized to prevent flicker
         // until the async position logic finishes.
         Opacity = 0;
@@ -1135,8 +1138,7 @@ public partial class RegionSelectorWindow : Window
         }
 
         IsVisible = true;
-        Activate();
-        Focus();
+        EnsureKeyboardFocus();
 
         if (NeedsLiveAnnotateSession(_captureOptions) && !_liveAnnotateSession)
         {
@@ -2196,6 +2198,13 @@ public partial class RegionSelectorWindow : Window
             Watermark = "Text"
         };
         _annotationTextBox.TextChanged += (_, _) => _annotationText = _annotationTextBox.Text ?? string.Empty;
+        _annotationTextBox.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                HandleEscapeKey(e);
+            }
+        };
         root.Children.Add(_annotationTextBox);
 
         return root;
@@ -3218,6 +3227,24 @@ public partial class RegionSelectorWindow : Window
 
         return source.Clone(context => context.Resize(bounds.Width, bounds.Height));
     }
+    private void EnsureKeyboardFocus()
+    {
+        Activate();
+        Focus();
+        RootGrid?.Focus();
+    }
+
+    private void HandleEscapeKey(KeyEventArgs e)
+    {
+        if (e.Handled || _selectionCompleted)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _ = CancelSelection();
+    }
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         DebugHelper.WriteLine($"{sender}.OnKeyDown: Key: {e.Key}");
@@ -3246,7 +3273,7 @@ public partial class RegionSelectorWindow : Window
 
                 break;
             case Key.Escape:
-                _ = CancelSelection();
+                HandleEscapeKey(e);
                 break;
         }
     }
@@ -3307,7 +3334,11 @@ public partial class RegionSelectorWindow : Window
             if (IsNativeWayland)
             {
                 await EnsureHyprlandSelectorOverlayAsync(_screenBounds, cancellationToken);
-                await Dispatcher.UIThread.InvokeAsync(UpdateLiveToolbarPlacement);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    UpdateLiveToolbarPlacement();
+                    EnsureKeyboardFocus();
+                });
             }
 
             return true;
