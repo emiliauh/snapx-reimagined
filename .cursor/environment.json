@@ -1,0 +1,4 @@
+{
+  "name": "SnapX",
+  "install": "bash .cursor/install.sh"
+}
