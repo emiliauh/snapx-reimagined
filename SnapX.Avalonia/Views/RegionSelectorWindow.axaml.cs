@@ -90,6 +90,7 @@ public partial class RegionSelectorWindow : Window
     // desktop before the region is committed (QuickCrop on mouse-up).
     private bool _liveAnnotateSession;
     private bool _regionToolActive = true;
+    private bool _highlightMode;
     private LiveAnnotationOverlay? _liveAnnotateOverlay;
     private Border? _liveToolbarHost;
     private Panel? _liveAnnotateHost;
@@ -153,58 +154,6 @@ public partial class RegionSelectorWindow : Window
 
             if (NeedsLiveAnnotateSession(request.Options))
             {
-                if (IsNativeWayland)
-                {
-                    (bool Handled, RegionCaptureSelection? Selection) nativeResult =
-                        await TrySelectRegionWithNativeLayerPickerAsync(request, cancellationToken);
-                    if (!nativeResult.Handled)
-                    {
-                        DebugHelper.WriteLine(
-                            "Native live region picker is unavailable on Wayland; skipping the grim overlay fallback.");
-                        return null;
-                    }
-
-                    RegionCaptureSelection? selection = nativeResult.Selection;
-                    if (selection is null)
-                    {
-                        return null;
-                    }
-
-                    if (request.CaptureImage &&
-                        request.Options.AnnotateCapture &&
-                        selection.Image is { } capturedImage)
-                    {
-                        AnnotateOverlayLayout? overlayLayout = await FindAnnotateOverlayLayoutAsync(
-                            selection.Rectangle,
-                            cancellationToken);
-                        Image? annotated = await InlineCaptureAnnotateWindow.ShowAsync(
-                            capturedImage,
-                            overlayLayout,
-                            cancellationToken);
-                        if (annotated is null)
-                        {
-                            capturedImage.Dispose();
-                            return null;
-                        }
-
-                        if (!ReferenceEquals(annotated, capturedImage))
-                        {
-                            capturedImage.Dispose();
-                        }
-
-                        selection = new RegionCaptureSelection
-                        {
-                            Rectangle = selection.Rectangle,
-                            CaptureBounds = selection.CaptureBounds,
-                            Image = annotated,
-                            WindowInfo = selection.WindowInfo
-                        };
-                    }
-
-                    return selection;
-                }
-
-                // X11 sessions still use the frozen-desktop Avalonia selector.
                 if (Dispatcher.UIThread.CheckAccess())
                 {
                     return await SelectRegionForCoreOnUIThreadAsync(request, cancellationToken);
@@ -1191,11 +1140,14 @@ public partial class RegionSelectorWindow : Window
         if (NeedsLiveAnnotateSession(_captureOptions))
         {
             InitializeLiveAnnotateSession();
+            UpdateLiveToolbarPlacement();
         }
 
         if (IsNativeWayland && _layoutApplied)
         {
-            _ = EnsureHyprlandSelectorOverlayAsync(_screenBounds);
+            _ = EnsureHyprlandSelectorOverlayAsync(_screenBounds).ContinueWith(
+                _ => Dispatcher.UIThread.Post(UpdateLiveToolbarPlacement),
+                TaskScheduler.Default);
         }
     }
     public static async Task<Image?> SelectRegionAsync()
@@ -1643,7 +1595,8 @@ public partial class RegionSelectorWindow : Window
 
         _selectionRect.Width = 0;
         _selectionRect.Height = 0;
-        SetSelectionRect(0, 0, 0, 0);
+        SetSelectionRect(_startPoint.X, _startPoint.Y, 0, 0);
+        _selectionRect.IsVisible = true;
 
         _infoBox.IsVisible = _captureOptions.ShowInfo;
     }
@@ -1723,10 +1676,9 @@ public partial class RegionSelectorWindow : Window
             }
         }, autoCloseCts.Token);
 
-        if (App.MyMainWindow != null)
+        if (App.MyMainWindow is { IsVisible: true, IsLoaded: true } mainWindow)
         {
-            SafeRestoreMainWindow();
-            dialog.ShowAsync(App.MyMainWindow);
+            dialog.ShowAsync(mainWindow);
         }
         else
         {
@@ -1855,7 +1807,7 @@ public partial class RegionSelectorWindow : Window
         {
             _resultImg.TrySetException(ex);
             ShowErrorDialog(ex);
-            SafeRestoreMainWindow();
+            RestoreMainWindowIfNeeded();
             Close();
             return;
         }
@@ -1863,7 +1815,7 @@ public partial class RegionSelectorWindow : Window
         if (cropped is null)
         {
             _resultImg.TrySetResult(null);
-            SafeRestoreMainWindow();
+            RestoreMainWindowIfNeeded();
             Close();
             return;
         }
@@ -1898,7 +1850,7 @@ public partial class RegionSelectorWindow : Window
             DebugHelper.WriteLine("Running image task");
             UploadManager.RunImageTask(_image, TaskSettings.GetDefaultTaskSettings());
         }
-        SafeRestoreMainWindow();
+        RestoreMainWindowIfNeeded();
         Close();
     }
     /// <summary>
@@ -2101,7 +2053,8 @@ public partial class RegionSelectorWindow : Window
         _liveAnnotateOverlay = new LiveAnnotationOverlay(
             () => _annotations,
             AddAnnotation,
-            () => _annotationText)
+            () => _annotationText,
+            () => _highlightMode)
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
@@ -2141,8 +2094,14 @@ public partial class RegionSelectorWindow : Window
         _liveToolButtons.Clear();
         _regionToolButton = CreateIconToolButton(Symbol.ScreenCut, "Region", SetRegionToolActive);
         tools.Children.Add(_regionToolButton);
-        AddIconToolButton(tools, Symbol.Square, "Rectangle", ImageAnnotation.Tool.Rectangle);
-        tools.Children.Add(CreateIconToolButton(Symbol.Highlight, "Highlight", () => SetLiveAnnotationTool(ImageAnnotation.Tool.Rectangle)));
+        var rectangleButton = CreateIconToolButton(Symbol.Square, "Rectangle", () =>
+        {
+            _highlightMode = false;
+            SetLiveAnnotationTool(ImageAnnotation.Tool.Rectangle);
+        });
+        tools.Children.Add(rectangleButton);
+        _liveToolButtons[ImageAnnotation.Tool.Rectangle] = rectangleButton;
+        tools.Children.Add(CreateIconToolButton(Symbol.Highlight, "Highlight", SetLiveHighlightTool));
         AddIconToolButton(tools, Symbol.Blur, "Blur", ImageAnnotation.Tool.Redaction);
         AddIconToolButton(tools, Symbol.Pen, "Freehand", ImageAnnotation.Tool.Freehand);
         AddIconToolButton(tools, Symbol.ArrowRight, "Arrow", ImageAnnotation.Tool.Arrow);
@@ -2203,9 +2162,16 @@ public partial class RegionSelectorWindow : Window
 
     private Button? _regionToolButton;
 
+    private void SetLiveHighlightTool()
+    {
+        _highlightMode = true;
+        SetLiveAnnotationTool(ImageAnnotation.Tool.Rectangle);
+    }
+
     private void SetRegionToolActive()
     {
         _regionToolActive = true;
+        _highlightMode = false;
         _annotationTool = ImageAnnotation.Tool.Rectangle;
         _canvas.IsHitTestVisible = true;
         if (_liveAnnotateHost is not null)
@@ -2223,6 +2189,11 @@ public partial class RegionSelectorWindow : Window
 
     private void SetLiveAnnotationTool(ImageAnnotation.Tool tool)
     {
+        if (tool != ImageAnnotation.Tool.Rectangle)
+        {
+            _highlightMode = false;
+        }
+
         _annotationTool = tool;
         _regionToolActive = false;
         _canvas.IsHitTestVisible = false;
@@ -2238,6 +2209,11 @@ public partial class RegionSelectorWindow : Window
         }
 
         _cursorMarker.IsVisible = false;
+        if (tool == ImageAnnotation.Tool.Text)
+        {
+            _annotationTextBox?.Focus();
+        }
+
         UpdateLiveToolbarHighlight();
     }
 
@@ -2245,7 +2221,8 @@ public partial class RegionSelectorWindow : Window
     {
         foreach (KeyValuePair<ImageAnnotation.Tool, Button> entry in _liveToolButtons)
         {
-            bool active = !_regionToolActive && _annotationTool == entry.Key;
+            bool active = !_regionToolActive && _annotationTool == entry.Key &&
+                          !(entry.Key == ImageAnnotation.Tool.Rectangle && _highlightMode);
             entry.Value.Background = active
                 ? new SolidColorBrush(AvaloniaColor.FromRgb(62, 62, 66))
                 : Brushes.Transparent;
@@ -2326,6 +2303,7 @@ public partial class RegionSelectorWindow : Window
         private readonly Func<IReadOnlyList<ImageAnnotation>> _getAnnotations;
         private readonly Action<ImageAnnotation, ImageAnnotation.Tool> _onComplete;
         private readonly Func<string> _textProvider;
+        private readonly Func<bool> _isHighlightMode;
         private Point _start;
         private Point _current;
         private bool _dragging;
@@ -2336,11 +2314,13 @@ public partial class RegionSelectorWindow : Window
         public LiveAnnotationOverlay(
             Func<IReadOnlyList<ImageAnnotation>> getAnnotations,
             Action<ImageAnnotation, ImageAnnotation.Tool> onComplete,
-            Func<string> textProvider)
+            Func<string> textProvider,
+            Func<bool> isHighlightMode)
         {
             _getAnnotations = getAnnotations;
             _onComplete = onComplete;
             _textProvider = textProvider;
+            _isHighlightMode = isHighlightMode;
             ClipToBounds = true;
         }
 
@@ -2360,7 +2340,17 @@ public partial class RegionSelectorWindow : Window
                 switch (_tool)
                 {
                     case ImageAnnotation.Tool.Rectangle:
-                        DrawOutline(context, rect, Brushes.Red);
+                        if (_isHighlightMode())
+                        {
+                            context.FillRectangle(
+                                new SolidColorBrush(AvaloniaColor.FromArgb(128, 255, 255, 0)),
+                                rect);
+                        }
+                        else
+                        {
+                            DrawOutline(context, rect, Brushes.Red);
+                        }
+
                         break;
                     case ImageAnnotation.Tool.Redaction:
                         context.FillRectangle(Brushes.Black, rect);
@@ -2386,7 +2376,17 @@ public partial class RegionSelectorWindow : Window
             switch (annotation)
             {
                 case RectangleAnnotation rectangle:
-                    DrawOutline(context, ToRect(rectangle.Rectangle), Brushes.Red);
+                    if (rectangle.Filled)
+                    {
+                        context.FillRectangle(
+                            new SolidColorBrush(AvaloniaColor.FromArgb(128, 255, 255, 0)),
+                            ToRect(rectangle.Rectangle));
+                    }
+                    else
+                    {
+                        DrawOutline(context, ToRect(rectangle.Rectangle), Brushes.Red);
+                    }
+
                     break;
                 case RedactionAnnotation redaction:
                     context.FillRectangle(Brushes.Black, ToRect(redaction.Rectangle));
@@ -2413,7 +2413,7 @@ public partial class RegionSelectorWindow : Window
                             System.Globalization.CultureInfo.CurrentCulture,
                             FlowDirection.LeftToRight,
                             Typeface.Default,
-                            text.FontSize,
+                            text.FontSize > 0 ? text.FontSize : 18,
                             Brushes.White),
                         new Point(text.Position.X, text.Position.Y));
                     break;
@@ -2442,6 +2442,25 @@ public partial class RegionSelectorWindow : Window
 
             _start = e.GetPosition(this);
             _current = _start;
+            if (_tool == ImageAnnotation.Tool.Text)
+            {
+                string value = _textProvider();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    _onComplete(new TextAnnotation
+                    {
+                        Position = new PointF((float)_start.X, (float)_start.Y),
+                        Text = value,
+                        FontSize = 18,
+                        Color = SharpColor.White
+                    }, _tool);
+                    InvalidateVisual();
+                }
+
+                e.Handled = true;
+                return;
+            }
+
             _dragging = true;
             _freehandPoints.Clear();
             _freehandPoints.Add(_start);
@@ -2497,8 +2516,9 @@ public partial class RegionSelectorWindow : Window
                     _onComplete(new RectangleAnnotation
                     {
                         Rectangle = ToSharp(rect),
-                        Color = SharpColor.Red,
-                        Thickness = 2
+                        Color = _isHighlightMode() ? SharpColor.Yellow : SharpColor.Red,
+                        Thickness = 2,
+                        Filled = _isHighlightMode()
                     }, _tool);
                     break;
                 case ImageAnnotation.Tool.Redaction:
@@ -2529,6 +2549,7 @@ public partial class RegionSelectorWindow : Window
                         {
                             Position = new PointF((float)_start.X, (float)_start.Y),
                             Text = value,
+                            FontSize = 18,
                             Color = SharpColor.White
                         }, _tool);
                     }
@@ -2567,7 +2588,7 @@ public partial class RegionSelectorWindow : Window
         }
         _annotationBitmap?.Dispose();
         _annotationBitmap = null;
-        SafeRestoreMainWindow();
+        RestoreMainWindowIfNeeded();
         Close();
     }
 
@@ -2762,7 +2783,6 @@ public partial class RegionSelectorWindow : Window
         _isSelecting = false;
         _resultRect.TrySetResult(null);
         _resultImg.TrySetResult(null);
-        SafeRestoreMainWindow();
         Close();
         return Task.CompletedTask;
     }
@@ -2886,11 +2906,8 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        if (throttle)
-        {
-            return;
-        }
-
+        // Never throttle an active region drag; the first pixels of movement
+        // must paint the selection outline immediately.
         var endPoint = E.GetPosition(_canvas);
         var x = Math.Min(_startPoint.X, endPoint.X);
         var y = Math.Min(_startPoint.Y, endPoint.Y);
@@ -2930,8 +2947,13 @@ public partial class RegionSelectorWindow : Window
         _selectionRect.Height = height;
     }
 
-    private static void SafeRestoreMainWindow()
+    private void RestoreMainWindowIfNeeded()
     {
+        if (!_mainWindowWasVisibleBeforeCapture)
+        {
+            return;
+        }
+
         try
         {
             App.RestoreAndFocusMainWindow();
@@ -2939,6 +2961,20 @@ public partial class RegionSelectorWindow : Window
         catch (Exception ex)
         {
             DebugHelper.WriteLine($"Could not restore main window: {ex.Message}");
+        }
+    }
+
+    private void UpdateLiveToolbarPlacement()
+    {
+        if (_liveToolbarHost is null)
+        {
+            return;
+        }
+
+        _liveToolbarHost.Margin = new Thickness(0, _toolbarTopMargin, 0, 0);
+        if (_liveAnnotateSession)
+        {
+            _liveToolbarHost.IsVisible = true;
         }
     }
 
@@ -2986,6 +3022,7 @@ public partial class RegionSelectorWindow : Window
                 break;
         }
     }
+    private bool _mainWindowWasVisibleBeforeCapture;
     private readonly Dictionary<Window, WindowBase?> _ownershipMap = new();
 
     private async Task<bool> PrepareAndShowAsync(CancellationToken cancellationToken = default)
@@ -3042,6 +3079,7 @@ public partial class RegionSelectorWindow : Window
             if (IsNativeWayland)
             {
                 await EnsureHyprlandSelectorOverlayAsync(_screenBounds, cancellationToken);
+                await Dispatcher.UIThread.InvokeAsync(UpdateLiveToolbarPlacement);
             }
 
             return true;
@@ -3183,6 +3221,11 @@ public partial class RegionSelectorWindow : Window
                 Background = Brushes.Transparent;
                 ApplySelectorLayout(displayBounds);
                 _layoutApplied = true;
+                if (NeedsLiveAnnotateSession(_captureOptions))
+                {
+                    InitializeLiveAnnotateSession();
+                    UpdateLiveToolbarPlacement();
+                }
             });
             if (_captureOptions.WindowPickerMode)
             {
@@ -3363,6 +3406,8 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
+        _mainWindowWasVisibleBeforeCapture = App.MyMainWindow is { IsVisible: true };
+
         if (App.MyMainWindow is { IsVisible: true } mainWindow && !windowsHiddenByUs.Contains(mainWindow))
         {
             _ownershipMap[mainWindow] = mainWindow.Owner;
@@ -3414,11 +3459,11 @@ public partial class RegionSelectorWindow : Window
             {
                 if (!CanRestoreWindow(win))
                 {
-                    if (ReferenceEquals(win, App.MyMainWindow))
-                    {
-                        SafeRestoreMainWindow();
-                    }
+                    continue;
+                }
 
+                if (ReferenceEquals(win, App.MyMainWindow) && !_mainWindowWasVisibleBeforeCapture)
+                {
                     continue;
                 }
 
@@ -3437,10 +3482,6 @@ public partial class RegionSelectorWindow : Window
             catch (Exception ex)
             {
                 DebugHelper.WriteLine($"Could not restore hidden window: {ex.Message}");
-                if (ReferenceEquals(win, App.MyMainWindow))
-                {
-                    SafeRestoreMainWindow();
-                }
             }
         }
 

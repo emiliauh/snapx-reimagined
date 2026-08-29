@@ -71,7 +71,9 @@
                 x:Name="InfoBox" />
         </Canvas>
         <Panel
+            HorizontalAlignment="Stretch"
             IsHitTestVisible="False"
+            VerticalAlignment="Stretch"
             ZIndex="50"
             x:Name="LiveAnnotateHost" />
         <Border

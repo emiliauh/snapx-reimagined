@@ -1732,7 +1732,7 @@ public partial class App : Application
                         _recordingTrayController = new RecordingTrayController();
                     }
 
-                    if (SnapX.isSilent())
+                    if (SnapX.isSilent() || Program.OneShotRequested)
                         return;
                     if (SnapX.GetCLIManager().IsCommandExist("video"))
                     {
