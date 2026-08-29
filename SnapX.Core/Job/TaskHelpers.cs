@@ -78,8 +78,8 @@ public static class TaskHelpers
         {
             RegionCaptureOptions options = RegionCaptureTasks.GetRegionCaptureOptions(
                 safeTaskSettings.CaptureSettings.SurfaceOptions);
-            // Annotated region capture uses slurp for selection, then the
-            // compact InlineCaptureAnnotateWindow for the pre-commit toolbar.
+            // Annotated region capture uses the live frozen-desktop selector with
+            // a ShareX-style toolbar before the region is committed.
             if (job is HotkeyType.ScreenRecorder || !options.AnnotateCapture)
             {
                 options.WindowOrRegionPickerMode = true;

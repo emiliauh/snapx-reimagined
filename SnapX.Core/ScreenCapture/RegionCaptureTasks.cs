@@ -354,7 +354,7 @@ public static class RegionCaptureTasks
             return new RegionCaptureOptions();
         }
 
-        return new RegionCaptureOptions
+        var sanitized = new RegionCaptureOptions
         {
             QuickCrop = options.QuickCrop,
             MinimumSize = Math.Max(1, options.MinimumSize),
@@ -387,5 +387,16 @@ public static class RegionCaptureTasks
             // from YAML, so bool fields would otherwise deserialize as false.
             AnnotateCapture = true
         };
+
+        if (sanitized.AnnotateCapture &&
+            !sanitized.WindowPickerMode &&
+            !sanitized.MonitorPickerMode)
+        {
+            // ShareX-style live annotate must not inherit a stale window-or-region
+            // picker flag from an earlier selector session on the same options bag.
+            sanitized.WindowOrRegionPickerMode = false;
+        }
+
+        return sanitized;
     }
 }

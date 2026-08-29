@@ -489,6 +489,34 @@
           "ZXing.Net.Bindings.ImageSharp.V3": "[0.16.20, )"
         }
       }
+    },
+    "net10.0/linux-x64": {
+      "BrycensRanch.NeoSolve.ImageSharp.AVIF": {
+        "type": "Transitive",
+        "resolved": "1.4.0",
+        "contentHash": "4Wcj4xHv4kbmTr5gha/KA1FwvzKNmigLn5DgAsNm8gRUViZvvgKYkYqF6kYr5sayKbGbftau0GtTh8ir3A1V0Q==",
+        "dependencies": {
+          "SixLabors.ImageSharp": "3.1.11"
+        }
+      },
+      "BrycensRanch.SnapXL.SnapXRust": {
+        "type": "Transitive",
+        "resolved": "1.0.1",
+        "contentHash": "NRopmvbUmhQ2I7NpBEfov71aO2L0PXSFAqC4OSIwRsqKFW0t7f0r10Ot3L4Z+TC6QLD84HOMV28YpiAN11bwkg=="
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Transitive",
+        "resolved": "1.23.2",
+        "contentHash": "849xImRO0vxDH7DNlg/FAVGExKfjN1r2CIZevZGI5JQCoOj+0T23ShqPEgu5mLTwElot5X7V0qkO0jUz/yJZbA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.23.2"
+        }
+      },
+      "SQLite": {
+        "type": "Transitive",
+        "resolved": "3.53.4",
+        "contentHash": "KN7jeWqgUPeBRe1FlcpZURzxomuKKEKHmBBQfg+Nx7NkY1LjKhzHvH+3ASkNvhayESE34nMBinL9CV21JfPRJw=="
+      }
     }
   }
 }

@@ -71,6 +71,7 @@
                 x:Name="InfoBox" />
         </Canvas>
         <Panel
+            Background="Transparent"
             HorizontalAlignment="Stretch"
             IsHitTestVisible="False"
             VerticalAlignment="Stretch"

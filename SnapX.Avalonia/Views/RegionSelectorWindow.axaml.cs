@@ -95,6 +95,9 @@ public partial class RegionSelectorWindow : Window
     private Border? _liveToolbarHost;
     private Panel? _liveAnnotateHost;
     private global::Avalonia.Controls.Image? _backgroundImage;
+    private Rectangle? _loadingDimOverlay;
+    private int _backgroundLoadStarted;
+    private long _lastInfoUpdateTicks;
     private TextBox? _annotationTextBox;
     private readonly Dictionary<ImageAnnotation.Tool, Button> _liveToolButtons = new();
     private double _captureScaleX = 1;
@@ -1137,18 +1140,13 @@ public partial class RegionSelectorWindow : Window
         Activate();
         Focus();
 
-        if (NeedsLiveAnnotateSession(_captureOptions))
+        if (NeedsLiveAnnotateSession(_captureOptions) && !_liveAnnotateSession)
         {
             InitializeLiveAnnotateSession();
             UpdateLiveToolbarPlacement();
         }
 
-        if (IsNativeWayland && _layoutApplied)
-        {
-            _ = EnsureHyprlandSelectorOverlayAsync(_screenBounds).ContinueWith(
-                _ => Dispatcher.UIThread.Post(UpdateLiveToolbarPlacement),
-                TaskScheduler.Default);
-        }
+        // Hyprland overlay positioning runs from PrepareAndShowAsync after Show().
     }
     public static async Task<Image?> SelectRegionAsync()
     {
@@ -1719,6 +1717,13 @@ public partial class RegionSelectorWindow : Window
         // and Margin changes do not refresh layout bounds until the next
         // layout pass, so freshly drawn selections would look empty. Derive
         // the current rectangle from the explicit shape properties.
+        if (_liveAnnotateSession && _image is null)
+        {
+            DebugHelper.WriteLine("Region selector is still loading its desktop mirror; ignoring pointer release.");
+            _isSelecting = false;
+            return;
+        }
+
         var drawnRect = new Rect(
             Canvas.GetLeft(_selectionRect),
             Canvas.GetTop(_selectionRect),
@@ -1826,20 +1831,21 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        // Present the inline (non-modal) annotation toolbar over the cropped
-        // capture before committing it: Save composites the marks onto the
-        // image, Cancel commits the plain capture. This is the ShareX-style
-        // "edit on the capture itself", NOT the modal CapturedImageEditorWindow.
-        // Skip it whenever the selection is a pre-defined box (window/monitor
-        // picker) or the caller disabled annotation (scrolling capture), where
-        // the toolbar would force a wasted step. IsSilentMode must NOT gate
-        // this: the core region selector runs silent, so returning early would
-        // skip the window close and hang the caller's closedTask.
         if (_captureOptions.AnnotateCapture &&
             !_captureOptions.WindowPickerMode &&
             !_captureOptions.WindowOrRegionPickerMode &&
             !_captureOptions.MonitorPickerMode)
         {
+            // ShareX-style capture annotates on the frozen desktop before commit.
+            // Never swap to the post-crop dark editor on Wayland/live-annotate flows.
+            if (IsNativeWayland || NeedsLiveAnnotateSession(_captureOptions))
+            {
+                DebugHelper.WriteLine(
+                    "Live annotate session was unavailable at commit; finishing without the post-crop editor.");
+                FinishCapture(_image!);
+                return;
+            }
+
             ShowAnnotationToolbar(cropped);
             return;
         }
@@ -2036,9 +2042,9 @@ public partial class RegionSelectorWindow : Window
 
     private void InitializeLiveAnnotateSession()
     {
-        if (_liveToolbarHost is null)
+        if (_liveToolbarHost is null || _liveAnnotateHost is null)
         {
-            DebugHelper.WriteLine("Live annotate toolbar host is unavailable.");
+            DebugHelper.WriteLine("Live annotate hosts are unavailable.");
             return;
         }
 
@@ -2054,18 +2060,25 @@ public partial class RegionSelectorWindow : Window
             () => _annotations,
             AddAnnotation,
             () => _annotationText,
-            () => _highlightMode)
+            () => _highlightMode,
+            FocusLiveAnnotationTextBox)
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
+            Width = _imageBounds.Width,
+            Height = _imageBounds.Height,
             IsHitTestVisible = false
         };
-        if (_liveAnnotateHost is not null)
-        {
-            _liveAnnotateHost.Children.Clear();
-            _liveAnnotateHost.Children.Add(_liveAnnotateOverlay);
-            _liveAnnotateHost.IsHitTestVisible = false;
-        }
+        _liveAnnotateHost.Children.Clear();
+        _liveAnnotateHost.Children.Add(_liveAnnotateOverlay);
+        _liveAnnotateHost.IsHitTestVisible = false;
+        _liveAnnotateHost.Background = null;
+        _liveAnnotateHost.RemoveHandler(InputElement.PointerPressedEvent, OnLiveAnnotateHostPointerPressed);
+        _liveAnnotateHost.RemoveHandler(InputElement.PointerMovedEvent, OnLiveAnnotateHostPointerMoved);
+        _liveAnnotateHost.RemoveHandler(InputElement.PointerReleasedEvent, OnLiveAnnotateHostPointerReleased);
+        _liveAnnotateHost.AddHandler(InputElement.PointerPressedEvent, OnLiveAnnotateHostPointerPressed, RoutingStrategies.Tunnel);
+        _liveAnnotateHost.AddHandler(InputElement.PointerMovedEvent, OnLiveAnnotateHostPointerMoved, RoutingStrategies.Tunnel);
+        _liveAnnotateHost.AddHandler(InputElement.PointerReleasedEvent, OnLiveAnnotateHostPointerReleased, RoutingStrategies.Tunnel);
 
         _liveToolbarHost.Margin = new Thickness(0, _toolbarTopMargin, 0, 0);
         _liveToolbarHost.Child = BuildLiveAnnotationToolbar();
@@ -2073,6 +2086,44 @@ public partial class RegionSelectorWindow : Window
         _canvas.IsHitTestVisible = true;
 
         DebugHelper.WriteLine("Live annotate toolbar initialized.");
+    }
+
+    private void FocusLiveAnnotationTextBox()
+    {
+        _annotationTextBox?.Focus();
+    }
+
+    private void OnLiveAnnotateHostPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!_liveAnnotateSession || _regionToolActive || _liveAnnotateOverlay is null || IsPointerOverLiveToolbar(e.Source))
+        {
+            return;
+        }
+
+        _liveAnnotateOverlay.HandlePointerPressed(e);
+        e.Handled = true;
+    }
+
+    private void OnLiveAnnotateHostPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_liveAnnotateSession || _regionToolActive || _liveAnnotateOverlay is null)
+        {
+            return;
+        }
+
+        _liveAnnotateOverlay.HandlePointerMoved(e);
+        e.Handled = true;
+    }
+
+    private void OnLiveAnnotateHostPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_liveAnnotateSession || _regionToolActive || _liveAnnotateOverlay is null)
+        {
+            return;
+        }
+
+        _liveAnnotateOverlay.HandlePointerReleased(e);
+        e.Handled = true;
     }
 
     private Control BuildLiveAnnotationToolbar()
@@ -2177,6 +2228,7 @@ public partial class RegionSelectorWindow : Window
         if (_liveAnnotateHost is not null)
         {
             _liveAnnotateHost.IsHitTestVisible = false;
+            _liveAnnotateHost.Background = null;
         }
 
         if (_liveAnnotateOverlay is not null)
@@ -2201,11 +2253,7 @@ public partial class RegionSelectorWindow : Window
         if (_liveAnnotateHost is not null)
         {
             _liveAnnotateHost.IsHitTestVisible = true;
-        }
-
-        if (_liveAnnotateOverlay is not null)
-        {
-            _liveAnnotateOverlay.IsHitTestVisible = true;
+            _liveAnnotateHost.Background = Brushes.Transparent;
         }
 
         _cursorMarker.IsVisible = false;
@@ -2304,6 +2352,7 @@ public partial class RegionSelectorWindow : Window
         private readonly Action<ImageAnnotation, ImageAnnotation.Tool> _onComplete;
         private readonly Func<string> _textProvider;
         private readonly Func<bool> _isHighlightMode;
+        private readonly Action? _focusTextBox;
         private Point _start;
         private Point _current;
         private bool _dragging;
@@ -2315,19 +2364,28 @@ public partial class RegionSelectorWindow : Window
             Func<IReadOnlyList<ImageAnnotation>> getAnnotations,
             Action<ImageAnnotation, ImageAnnotation.Tool> onComplete,
             Func<string> textProvider,
-            Func<bool> isHighlightMode)
+            Func<bool> isHighlightMode,
+            Action? focusTextBox = null)
         {
             _getAnnotations = getAnnotations;
             _onComplete = onComplete;
             _textProvider = textProvider;
             _isHighlightMode = isHighlightMode;
+            _focusTextBox = focusTextBox;
             ClipToBounds = true;
         }
 
         public void SetTool(ImageAnnotation.Tool tool) => _tool = tool;
 
+        public void HandlePointerPressed(PointerPressedEventArgs e) => OnPointerPressed(e);
+
+        public void HandlePointerMoved(PointerEventArgs e) => OnPointerMoved(e);
+
+        public void HandlePointerReleased(PointerReleasedEventArgs e) => OnPointerReleased(e);
+
         public override void Render(DrawingContext context)
         {
+            context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
             base.Render(context);
             foreach (ImageAnnotation annotation in _getAnnotations())
             {
@@ -2455,6 +2513,10 @@ public partial class RegionSelectorWindow : Window
                         Color = SharpColor.White
                     }, _tool);
                     InvalidateVisual();
+                }
+                else
+                {
+                    _focusTextBox?.Invoke();
                 }
 
                 e.Handled = true;
@@ -2930,13 +2992,17 @@ public partial class RegionSelectorWindow : Window
         SetSelectionRect(x, y, width, height);
         var infoText =
             $"X: {_screenBounds.X + (int)x}, Y: {_screenBounds.Y + (int)y}, Width: {(int)width}, Height: {(int)height}";
-        if (_infoBox.Text != infoText)
+        if (now - _lastInfoUpdateTicks >= PointerMoveThrottleMs || _infoBox.Text != infoText)
         {
-            _infoBox.Text = infoText;
-        }
+            _lastInfoUpdateTicks = now;
+            if (_infoBox.Text != infoText)
+            {
+                _infoBox.Text = infoText;
+            }
 
-        Canvas.SetLeft(_infoBox, x);
-        Canvas.SetTop(_infoBox, Math.Max(0, y - 30));
+            Canvas.SetLeft(_infoBox, x);
+            Canvas.SetTop(_infoBox, Math.Max(0, y - 30));
+        }
     }
 
     private void SetSelectionRect(double x, double y, double width, double height)
@@ -3042,7 +3108,7 @@ public partial class RegionSelectorWindow : Window
             return false;
         }
 
-        if (!await PrepareForDisplayAsync())
+        if (!await PrepareForDisplayAsync(cancellationToken))
         {
             RestoreHiddenWindows();
             ReleaseSelectorGate();
@@ -3093,18 +3159,184 @@ public partial class RegionSelectorWindow : Window
         }
     }
 
-    private Task<bool> PrepareForDisplayAsync()
+    private Task<bool> PrepareForDisplayAsync(CancellationToken cancellationToken = default)
     {
-        // Avalonia can raise the window setup path more than once while the
-        // first await is in flight. Coalesce that work: a second grim request
-        // would capture this selector's own overlay instead of the desktop.
         lock (_preparationLock)
         {
-            return _preparationTask ??= PrepareForDisplayCoreAsync();
+            return _preparationTask ??= NeedsLiveAnnotateSession(_captureOptions)
+                ? PrepareLiveAnnotateSessionAsync(cancellationToken)
+                : PrepareForDisplayCoreAsync(cancellationToken);
         }
     }
 
-    private async Task<bool> PrepareForDisplayCoreAsync()
+    private async Task<bool> PrepareLiveAnnotateSessionAsync(CancellationToken cancellationToken)
+    {
+        if (!_ownsSelector)
+        {
+            return false;
+        }
+
+        if (_preparedForDisplay)
+        {
+            return _captureReady;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(HideSnapXWindows, DispatcherPriority.Send);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+        if (IsCancellationRequested || cancellationToken.IsCancellationRequested)
+        {
+            RestoreHiddenWindows();
+            return false;
+        }
+
+        PixelRect displayBounds = await ResolveSelectorBoundsAsync();
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            ApplySelectorLayout(displayBounds);
+            EnsureLoadingDimOverlay();
+            InitializeLiveAnnotateSession();
+            UpdateLiveToolbarPlacement();
+            _layoutApplied = true;
+            _preparedForDisplay = true;
+            _captureReady = _liveAnnotateSession;
+            Opacity = 1;
+        });
+
+        if (!_captureReady)
+        {
+            DebugHelper.WriteLine("Live annotate session could not be initialized.");
+            RestoreHiddenWindows();
+            return false;
+        }
+
+        StartBackgroundDesktopCapture(displayBounds, cancellationToken);
+        return true;
+    }
+
+    private void StartBackgroundDesktopCapture(PixelRect displayBounds, CancellationToken cancellationToken)
+    {
+        if (Interlocked.CompareExchange(ref _backgroundLoadStarted, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _ = LoadGrimBackgroundAsync(displayBounds, cancellationToken);
+    }
+
+    private async Task LoadGrimBackgroundAsync(PixelRect displayBounds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(IsNativeWayland ? 40 : 20, cancellationToken).ConfigureAwait(false);
+            Image? captured = await CaptureSelectorBackgroundAsync(cancellationToken).ConfigureAwait(false);
+            if (captured is null || IsCancellationRequested || cancellationToken.IsCancellationRequested)
+            {
+                captured?.Dispose();
+                return;
+            }
+
+            using Image displayImage = CreateDisplayBackground(captured, displayBounds);
+            var backgroundBitmap = App.SnapX.ConvertImageSharpImgToAvalonia(displayImage);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (IsCancellationRequested || cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                _image?.Dispose();
+                _image = captured;
+                captured = null;
+
+                _backgroundImage = new global::Avalonia.Controls.Image
+                {
+                    Source = backgroundBitmap,
+                    Stretch = Stretch.Fill,
+                    IsHitTestVisible = false,
+                    Width = displayBounds.Width,
+                    Height = displayBounds.Height,
+                };
+                Canvas.SetLeft(_backgroundImage, 0);
+                Canvas.SetTop(_backgroundImage, 0);
+                _canvas.Children.Insert(0, _backgroundImage);
+                RemoveLoadingDimOverlay();
+
+                if (_liveAnnotateOverlay is not null)
+                {
+                    _liveAnnotateOverlay.Width = displayBounds.Width;
+                    _liveAnnotateOverlay.Height = displayBounds.Height;
+                }
+
+                DebugHelper.WriteLine(
+                    $"Selector background loaded: {backgroundBitmap.PixelSize} from raw image bounds {_image!.Bounds}");
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the selector closes before grim finishes.
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteLine($"Selector background capture failed: {ex.Message}");
+        }
+    }
+
+    private async Task<Image?> CaptureSelectorBackgroundAsync(CancellationToken cancellationToken)
+    {
+        Image? image = await Task.Factory.StartNew(
+                async () => await TaskHelpers.GetScreenshot().CaptureActiveMonitor(),
+                TaskCreationOptions.LongRunning)
+            .Unwrap()
+            .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (image is null || !IsLikelyBlackFrame(image))
+        {
+            return image;
+        }
+
+        image.Dispose();
+        await Task.Delay(120, cancellationToken).ConfigureAwait(false);
+        return await Task.Factory.StartNew(
+                async () => await TaskHelpers.GetScreenshot().CaptureActiveMonitor(),
+                TaskCreationOptions.LongRunning)
+            .Unwrap()
+            .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private void EnsureLoadingDimOverlay()
+    {
+        if (_loadingDimOverlay is not null)
+        {
+            return;
+        }
+
+        _loadingDimOverlay = new Rectangle
+        {
+            Fill = new SolidColorBrush(AvaloniaColor.FromArgb(120, 0, 0, 0)),
+            IsHitTestVisible = false,
+            Width = _imageBounds.Width,
+            Height = _imageBounds.Height,
+        };
+        Canvas.SetLeft(_loadingDimOverlay, 0);
+        Canvas.SetTop(_loadingDimOverlay, 0);
+        _canvas.Children.Insert(0, _loadingDimOverlay);
+    }
+
+    private void RemoveLoadingDimOverlay()
+    {
+        if (_loadingDimOverlay is null)
+        {
+            return;
+        }
+
+        _canvas.Children.Remove(_loadingDimOverlay);
+        _loadingDimOverlay = null;
+    }
+
+    private async Task<bool> PrepareForDisplayCoreAsync(CancellationToken cancellationToken = default)
     {
         if (!_ownsSelector)
         {
@@ -3130,17 +3362,15 @@ public partial class RegionSelectorWindow : Window
             // Hiding a window is asynchronous from the compositor's point of
             // view. Give Hyprland a frame to remove SnapX before grim captures
             // the desktop that will become the selector's background.
-            await Task.Delay(IsNativeWayland ? 100 : 50);
-            if (IsCancellationRequested)
+            await Task.Delay(IsNativeWayland ? 40 : 20, cancellationToken);
+            if (IsCancellationRequested || cancellationToken.IsCancellationRequested)
             {
                 RestoreHiddenWindows();
                 return false;
             }
-            var captureTask = Task.Factory.StartNew(
-                async () => await TaskHelpers.GetScreenshot().CaptureActiveMonitor(),
-                TaskCreationOptions.LongRunning).Unwrap();
-            _image = await captureTask.WaitAsync(TimeSpan.FromSeconds(10));
-            if (IsCancellationRequested)
+
+            _image = await CaptureSelectorBackgroundAsync(cancellationToken);
+            if (IsCancellationRequested || cancellationToken.IsCancellationRequested)
             {
                 _image?.Dispose();
                 _image = null;
@@ -3154,44 +3384,14 @@ public partial class RegionSelectorWindow : Window
                 return false;
             }
 
-            // On NVIDIA-backed Hyprland (and some other compositors) grim can
-            // return an all-black frame immediately after the SnapX windows are
-            // hidden. Showing that as the selector background produces a
-            // full-screen black overlay that looks like the machine crashed.
             if (IsLikelyBlackFrame(_image))
             {
                 _image.Dispose();
                 _image = null;
-
-                // Give the compositor one more frame, then retry the capture.
-                // A second attempt is cheap and usually returns the actual
-                // desktop once the hide has been committed to the output.
-                await Task.Delay(250);
-                if (IsCancellationRequested)
-                {
-                    RestoreHiddenWindows();
-                    return false;
-                }
-                captureTask = Task.Factory.StartNew(
-                    async () => await TaskHelpers.GetScreenshot().CaptureActiveMonitor(),
-                    TaskCreationOptions.LongRunning).Unwrap();
-                _image = await captureTask.WaitAsync(TimeSpan.FromSeconds(10));
-                if (IsCancellationRequested)
-                {
-                    _image?.Dispose();
-                    _image = null;
-                    RestoreHiddenWindows();
-                    return false;
-                }
-                if (_image is null || IsLikelyBlackFrame(_image))
-                {
-                    _image?.Dispose();
-                    _image = null;
-                    DebugHelper.WriteLine(
-                        "RegionSelectorWindow: captured background is black; aborting the selector instead of showing a black overlay.");
-                    RestoreHiddenWindows();
-                    return false;
-                }
+                DebugHelper.WriteLine(
+                    "RegionSelectorWindow: captured background is black; aborting the selector instead of showing a black overlay.");
+                RestoreHiddenWindows();
+                return false;
             }
 
             // The selector background is only ever shown, never re-read as a
@@ -3548,7 +3748,7 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        await Task.Delay(80, cancellationToken).ConfigureAwait(false);
+        await Task.Delay(16, cancellationToken).ConfigureAwait(false);
 
         await RunHyprctlDispatchAsync(
             $"hl.dsp.focus({{ window = '{windowSelector}' }})",
