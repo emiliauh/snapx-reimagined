@@ -86,8 +86,8 @@ public partial class RegionSelectorWindow : Window
     private string _annotationText = "";
     private bool _annotationMode;
     private WriteableBitmap? _annotationBitmap;
-    // ShareX-style live annotate session: toolbar + marks on the frozen
-    // desktop before the region is committed (QuickCrop on mouse-up).
+    // ShareX-style live annotate session: toolbar + marks over the desktop
+    // before the region is committed (QuickCrop on mouse-up).
     private bool _liveAnnotateSession;
     private bool _regionToolActive = true;
     private bool _highlightMode;
@@ -95,8 +95,6 @@ public partial class RegionSelectorWindow : Window
     private Border? _liveToolbarHost;
     private Panel? _liveAnnotateHost;
     private global::Avalonia.Controls.Image? _backgroundImage;
-    private Rectangle? _loadingDimOverlay;
-    private int _backgroundLoadStarted;
     private long _lastInfoUpdateTicks;
     private TextBox? _annotationTextBox;
     private readonly Dictionary<ImageAnnotation.Tool, Button> _liveToolButtons = new();
@@ -114,8 +112,8 @@ public partial class RegionSelectorWindow : Window
     }
 
     /// <summary>
-    /// Free-form region capture that uses the ShareX-style frozen-desktop
-    /// selector with a live floating toolbar (annotate before commit).
+    /// Free-form region capture that uses a live desktop overlay and floating
+    /// toolbar, then captures only after the user commits a region.
     /// </summary>
     private static bool NeedsLiveAnnotateSession(RegionCaptureOptions options) =>
         options.AnnotateCapture
@@ -1717,13 +1715,6 @@ public partial class RegionSelectorWindow : Window
         // and Margin changes do not refresh layout bounds until the next
         // layout pass, so freshly drawn selections would look empty. Derive
         // the current rectangle from the explicit shape properties.
-        if (_liveAnnotateSession && _image is null)
-        {
-            DebugHelper.WriteLine("Region selector is still loading its desktop mirror; ignoring pointer release.");
-            _isSelecting = false;
-            return;
-        }
-
         var drawnRect = new Rect(
             Canvas.GetLeft(_selectionRect),
             Canvas.GetTop(_selectionRect),
@@ -1775,6 +1766,39 @@ public partial class RegionSelectorWindow : Window
         Image? cropped = null;
         try
         {
+            if (_liveAnnotateSession && IsNativeWayland)
+            {
+                // The Wayland live selector is a transparent compositor overlay,
+                // not a bitmap editor. Unmap it before grim so the result contains
+                // only the selected desktop pixels.
+                Opacity = 0;
+                Hide();
+                await Task.Delay(32);
+
+                _image = await Methods.CaptureRectangle(screenRect);
+                if (_image is null)
+                {
+                    throw new InvalidOperationException("grim returned no image for the selected region.");
+                }
+
+                double regionScaleX = _image.Width / (double)localRect.Width;
+                double regionScaleY = _image.Height / (double)localRect.Height;
+                await Task.Run(() =>
+                {
+                    foreach (ImageAnnotation annotation in _annotations.Where(x => x is not CropAnnotation))
+                    {
+                        TransformAnnotationForSelection(
+                            annotation,
+                            localRect.X,
+                            localRect.Y,
+                            regionScaleX,
+                            regionScaleY).Apply(_image);
+                    }
+                });
+                cropped = _image;
+            }
+            else
+            {
             await Task.Run(() =>
             {
                 if (_image is null)
@@ -1807,6 +1831,7 @@ public partial class RegionSelectorWindow : Window
                 _image.Mutate(Context => Context.Crop(imageRect));
                 cropped = _image;
             });
+            }
         }
         catch (Exception ex)
         {
@@ -1836,17 +1861,11 @@ public partial class RegionSelectorWindow : Window
             !_captureOptions.WindowOrRegionPickerMode &&
             !_captureOptions.MonitorPickerMode)
         {
-            // ShareX-style capture annotates on the frozen desktop before commit.
-            // Never swap to the post-crop dark editor on Wayland/live-annotate flows.
-            if (IsNativeWayland || NeedsLiveAnnotateSession(_captureOptions))
-            {
-                DebugHelper.WriteLine(
-                    "Live annotate session was unavailable at commit; finishing without the post-crop editor.");
-                FinishCapture(_image!);
-                return;
-            }
-
-            ShowAnnotationToolbar(cropped);
+            // Free-form annotation belongs to the pre-commit selector. Never
+            // replace it with a second cropped-image editor after mouse-up.
+            DebugHelper.WriteLine(
+                "Live annotate session was unavailable at commit; finishing without a post-crop editor.");
+            FinishCapture(_image!);
             return;
         }
 
@@ -2073,12 +2092,12 @@ public partial class RegionSelectorWindow : Window
         _liveAnnotateHost.Children.Add(_liveAnnotateOverlay);
         _liveAnnotateHost.IsHitTestVisible = false;
         _liveAnnotateHost.Background = null;
-        _liveAnnotateHost.RemoveHandler(InputElement.PointerPressedEvent, OnLiveAnnotateHostPointerPressed);
-        _liveAnnotateHost.RemoveHandler(InputElement.PointerMovedEvent, OnLiveAnnotateHostPointerMoved);
-        _liveAnnotateHost.RemoveHandler(InputElement.PointerReleasedEvent, OnLiveAnnotateHostPointerReleased);
-        _liveAnnotateHost.AddHandler(InputElement.PointerPressedEvent, OnLiveAnnotateHostPointerPressed, RoutingStrategies.Tunnel);
-        _liveAnnotateHost.AddHandler(InputElement.PointerMovedEvent, OnLiveAnnotateHostPointerMoved, RoutingStrategies.Tunnel);
-        _liveAnnotateHost.AddHandler(InputElement.PointerReleasedEvent, OnLiveAnnotateHostPointerReleased, RoutingStrategies.Tunnel);
+        _liveAnnotateHost.PointerPressed -= OnLiveAnnotateHostPointerPressed;
+        _liveAnnotateHost.PointerMoved -= OnLiveAnnotateHostPointerMoved;
+        _liveAnnotateHost.PointerReleased -= OnLiveAnnotateHostPointerReleased;
+        _liveAnnotateHost.PointerPressed += OnLiveAnnotateHostPointerPressed;
+        _liveAnnotateHost.PointerMoved += OnLiveAnnotateHostPointerMoved;
+        _liveAnnotateHost.PointerReleased += OnLiveAnnotateHostPointerReleased;
 
         _liveToolbarHost.Margin = new Thickness(0, _toolbarTopMargin, 0, 0);
         _liveToolbarHost.Child = BuildLiveAnnotationToolbar();
@@ -2100,7 +2119,13 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        _liveAnnotateOverlay.HandlePointerPressed(e);
+        if (!e.GetCurrentPoint(_liveAnnotateHost).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        _liveAnnotateOverlay.BeginPointerGesture(e.GetPosition(_liveAnnotateOverlay));
+        e.Pointer.Capture(_liveAnnotateHost);
         e.Handled = true;
     }
 
@@ -2111,7 +2136,7 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        _liveAnnotateOverlay.HandlePointerMoved(e);
+        _liveAnnotateOverlay.UpdatePointerGesture(e.GetPosition(_liveAnnotateOverlay));
         e.Handled = true;
     }
 
@@ -2122,7 +2147,8 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        _liveAnnotateOverlay.HandlePointerReleased(e);
+        _liveAnnotateOverlay.EndPointerGesture(e.GetPosition(_liveAnnotateOverlay));
+        e.Pointer.Capture(null);
         e.Handled = true;
     }
 
@@ -2153,7 +2179,7 @@ public partial class RegionSelectorWindow : Window
         tools.Children.Add(rectangleButton);
         _liveToolButtons[ImageAnnotation.Tool.Rectangle] = rectangleButton;
         tools.Children.Add(CreateIconToolButton(Symbol.Highlight, "Highlight", SetLiveHighlightTool));
-        AddIconToolButton(tools, Symbol.Blur, "Blur", ImageAnnotation.Tool.Redaction);
+        AddIconToolButton(tools, Symbol.Blur, "Blur", ImageAnnotation.Tool.Blur);
         AddIconToolButton(tools, Symbol.Pen, "Freehand", ImageAnnotation.Tool.Freehand);
         AddIconToolButton(tools, Symbol.ArrowRight, "Arrow", ImageAnnotation.Tool.Arrow);
         AddIconToolButton(tools, Symbol.TextT, "Text", ImageAnnotation.Tool.Text);
@@ -2313,6 +2339,11 @@ public partial class RegionSelectorWindow : Window
             {
                 Rectangle = ScaleRect(redaction.Rectangle, scaleX, scaleY)
             },
+            BlurAnnotation blur => new BlurAnnotation
+            {
+                Rectangle = ScaleRect(blur.Rectangle, scaleX, scaleY),
+                Radius = (float)(blur.Radius * Math.Max(scaleX, scaleY))
+            },
             FreehandAnnotation freehand => new FreehandAnnotation
             {
                 Points = freehand.Points
@@ -2338,6 +2369,67 @@ public partial class RegionSelectorWindow : Window
             CropAnnotation crop => new CropAnnotation
             {
                 Rectangle = ScaleRect(crop.Rectangle, scaleX, scaleY)
+            },
+            _ => annotation
+        };
+    }
+
+    private static ImageAnnotation TransformAnnotationForSelection(
+        ImageAnnotation annotation,
+        double offsetX,
+        double offsetY,
+        double scaleX,
+        double scaleY)
+    {
+        SixLabors.ImageSharp.Rectangle TransformRect(SixLabors.ImageSharp.Rectangle rectangle) =>
+            new(
+                (int)Math.Round((rectangle.X - offsetX) * scaleX),
+                (int)Math.Round((rectangle.Y - offsetY) * scaleY),
+                Math.Max(1, (int)Math.Round(rectangle.Width * scaleX)),
+                Math.Max(1, (int)Math.Round(rectangle.Height * scaleY)));
+
+        PointF TransformPoint(PointF point) =>
+            new(
+                (float)((point.X - offsetX) * scaleX),
+                (float)((point.Y - offsetY) * scaleY));
+
+        return annotation switch
+        {
+            RectangleAnnotation rectangle => new RectangleAnnotation
+            {
+                Rectangle = TransformRect(rectangle.Rectangle),
+                Color = rectangle.Color,
+                Thickness = Math.Max(1, (int)Math.Round(rectangle.Thickness * Math.Max(scaleX, scaleY))),
+                Filled = rectangle.Filled
+            },
+            RedactionAnnotation redaction => new RedactionAnnotation
+            {
+                Rectangle = TransformRect(redaction.Rectangle)
+            },
+            BlurAnnotation blur => new BlurAnnotation
+            {
+                Rectangle = TransformRect(blur.Rectangle),
+                Radius = (float)(blur.Radius * Math.Max(scaleX, scaleY))
+            },
+            FreehandAnnotation freehand => new FreehandAnnotation
+            {
+                Points = freehand.Points.Select(TransformPoint).ToList(),
+                Color = freehand.Color,
+                Thickness = Math.Max(1, (int)Math.Round(freehand.Thickness * Math.Max(scaleX, scaleY)))
+            },
+            ArrowAnnotation arrow => new ArrowAnnotation
+            {
+                Start = TransformPoint(arrow.Start),
+                End = TransformPoint(arrow.End),
+                Color = arrow.Color,
+                Thickness = Math.Max(1, (int)Math.Round(arrow.Thickness * Math.Max(scaleX, scaleY)))
+            },
+            TextAnnotation text => new TextAnnotation
+            {
+                Position = TransformPoint(text.Position),
+                Text = text.Text,
+                FontSize = Math.Max(1, (int)Math.Round(text.FontSize * Math.Max(scaleX, scaleY))),
+                Color = text.Color
             },
             _ => annotation
         };
@@ -2377,11 +2469,69 @@ public partial class RegionSelectorWindow : Window
 
         public void SetTool(ImageAnnotation.Tool tool) => _tool = tool;
 
-        public void HandlePointerPressed(PointerPressedEventArgs e) => OnPointerPressed(e);
+        public void BeginPointerGesture(Point position)
+        {
+            _start = position;
+            _current = position;
+            if (_tool == ImageAnnotation.Tool.Text)
+            {
+                string value = _textProvider();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    _onComplete(new TextAnnotation
+                    {
+                        Position = new PointF((float)_start.X, (float)_start.Y),
+                        Text = value,
+                        FontSize = 18,
+                        Color = SharpColor.White
+                    }, _tool);
+                    InvalidateVisual();
+                }
+                else
+                {
+                    _focusTextBox?.Invoke();
+                }
 
-        public void HandlePointerMoved(PointerEventArgs e) => OnPointerMoved(e);
+                return;
+            }
 
-        public void HandlePointerReleased(PointerReleasedEventArgs e) => OnPointerReleased(e);
+            _dragging = true;
+            _freehandPoints.Clear();
+            _freehandPoints.Add(position);
+        }
+
+        public void UpdatePointerGesture(Point position)
+        {
+            if (!_dragging)
+            {
+                return;
+            }
+
+            _current = position;
+            if (_tool == ImageAnnotation.Tool.Freehand)
+            {
+                _freehandPoints.Add(position);
+            }
+
+            long now = Environment.TickCount64;
+            if (now - _lastInvalidateTicks >= 16)
+            {
+                _lastInvalidateTicks = now;
+                InvalidateVisual();
+            }
+        }
+
+        public void EndPointerGesture(Point position)
+        {
+            if (!_dragging)
+            {
+                return;
+            }
+
+            _current = position;
+            _dragging = false;
+            Commit();
+        }
 
         public override void Render(DrawingContext context)
         {
@@ -2413,8 +2563,14 @@ public partial class RegionSelectorWindow : Window
                     case ImageAnnotation.Tool.Redaction:
                         context.FillRectangle(Brushes.Black, rect);
                         break;
+                    case ImageAnnotation.Tool.Blur:
+                        context.FillRectangle(
+                            new SolidColorBrush(AvaloniaColor.FromArgb(145, 90, 90, 90)),
+                            rect);
+                        DrawOutline(context, rect, Brushes.White);
+                        break;
                     case ImageAnnotation.Tool.Arrow:
-                        context.DrawLine(new Pen(Brushes.Green, 3), _start, _current);
+                        DrawArrow(context, _start, _current, Brushes.Green, 3);
                         break;
                 }
             }
@@ -2449,6 +2605,12 @@ public partial class RegionSelectorWindow : Window
                 case RedactionAnnotation redaction:
                     context.FillRectangle(Brushes.Black, ToRect(redaction.Rectangle));
                     break;
+                case BlurAnnotation blur:
+                    context.FillRectangle(
+                        new SolidColorBrush(AvaloniaColor.FromArgb(145, 90, 90, 90)),
+                        ToRect(blur.Rectangle));
+                    DrawOutline(context, ToRect(blur.Rectangle), Brushes.White);
+                    break;
                 case FreehandAnnotation freehand when freehand.Points.Count >= 2:
                 {
                     var pen = new Pen(Brushes.Yellow, freehand.Thickness);
@@ -2462,7 +2624,12 @@ public partial class RegionSelectorWindow : Window
                     break;
                 }
                 case ArrowAnnotation arrow:
-                    context.DrawLine(new Pen(Brushes.Green, arrow.Thickness), new Point(arrow.Start.X, arrow.Start.Y), new Point(arrow.End.X, arrow.End.Y));
+                    DrawArrow(
+                        context,
+                        new Point(arrow.Start.X, arrow.Start.Y),
+                        new Point(arrow.End.X, arrow.End.Y),
+                        Brushes.Green,
+                        arrow.Thickness);
                     break;
                 case TextAnnotation text when !string.IsNullOrWhiteSpace(text.Text):
                     context.DrawText(
@@ -2490,6 +2657,37 @@ public partial class RegionSelectorWindow : Window
             context.DrawLine(pen, new Point(rect.X, rect.Bottom), new Point(rect.X, rect.Y));
         }
 
+        private static void DrawArrow(
+            DrawingContext context,
+            Point start,
+            Point end,
+            IBrush brush,
+            double thickness)
+        {
+            var pen = new Pen(brush, thickness);
+            context.DrawLine(pen, start, end);
+
+            double dx = end.X - start.X;
+            double dy = end.Y - start.Y;
+            double length = Math.Sqrt(dx * dx + dy * dy);
+            if (length < 1)
+            {
+                return;
+            }
+
+            const double headLength = 16;
+            const double headAngle = Math.PI / 6;
+            double angle = Math.Atan2(dy, dx);
+            var left = new Point(
+                end.X - headLength * Math.Cos(angle - headAngle),
+                end.Y - headLength * Math.Sin(angle - headAngle));
+            var right = new Point(
+                end.X - headLength * Math.Cos(angle + headAngle),
+                end.Y - headLength * Math.Sin(angle + headAngle));
+            context.DrawLine(pen, end, left);
+            context.DrawLine(pen, end, right);
+        }
+
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
             base.OnPointerPressed(e);
@@ -2498,34 +2696,7 @@ public partial class RegionSelectorWindow : Window
                 return;
             }
 
-            _start = e.GetPosition(this);
-            _current = _start;
-            if (_tool == ImageAnnotation.Tool.Text)
-            {
-                string value = _textProvider();
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    _onComplete(new TextAnnotation
-                    {
-                        Position = new PointF((float)_start.X, (float)_start.Y),
-                        Text = value,
-                        FontSize = 18,
-                        Color = SharpColor.White
-                    }, _tool);
-                    InvalidateVisual();
-                }
-                else
-                {
-                    _focusTextBox?.Invoke();
-                }
-
-                e.Handled = true;
-                return;
-            }
-
-            _dragging = true;
-            _freehandPoints.Clear();
-            _freehandPoints.Add(_start);
+            BeginPointerGesture(e.GetPosition(this));
             e.Pointer.Capture(this);
             e.Handled = true;
         }
@@ -2538,19 +2709,7 @@ public partial class RegionSelectorWindow : Window
                 return;
             }
 
-            _current = e.GetPosition(this);
-            if (_tool == ImageAnnotation.Tool.Freehand)
-            {
-                _freehandPoints.Add(_current);
-            }
-
-            long now = Environment.TickCount64;
-            if (now - _lastInvalidateTicks >= 16)
-            {
-                _lastInvalidateTicks = now;
-                InvalidateVisual();
-            }
-
+            UpdatePointerGesture(e.GetPosition(this));
             e.Handled = true;
         }
 
@@ -2562,10 +2721,8 @@ public partial class RegionSelectorWindow : Window
                 return;
             }
 
-            _current = e.GetPosition(this);
-            _dragging = false;
+            EndPointerGesture(e.GetPosition(this));
             e.Pointer.Capture(null);
-            Commit();
             e.Handled = true;
         }
 
@@ -2578,13 +2735,18 @@ public partial class RegionSelectorWindow : Window
                     _onComplete(new RectangleAnnotation
                     {
                         Rectangle = ToSharp(rect),
-                        Color = _isHighlightMode() ? SharpColor.Yellow : SharpColor.Red,
+                        Color = _isHighlightMode()
+                            ? SharpColor.FromRgba(255, 255, 0, 128)
+                            : SharpColor.Red,
                         Thickness = 2,
                         Filled = _isHighlightMode()
                     }, _tool);
                     break;
                 case ImageAnnotation.Tool.Redaction:
                     _onComplete(new RedactionAnnotation { Rectangle = ToSharp(rect) }, _tool);
+                    break;
+                case ImageAnnotation.Tool.Blur:
+                    _onComplete(new BlurAnnotation { Rectangle = ToSharp(rect) }, _tool);
                     break;
                 case ImageAnnotation.Tool.Freehand:
                     _onComplete(new FreehandAnnotation
@@ -3163,7 +3325,7 @@ public partial class RegionSelectorWindow : Window
     {
         lock (_preparationLock)
         {
-            return _preparationTask ??= NeedsLiveAnnotateSession(_captureOptions)
+            return _preparationTask ??= IsNativeWayland && NeedsLiveAnnotateSession(_captureOptions)
                 ? PrepareLiveAnnotateSessionAsync(cancellationToken)
                 : PrepareForDisplayCoreAsync(cancellationToken);
         }
@@ -3194,7 +3356,7 @@ public partial class RegionSelectorWindow : Window
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             ApplySelectorLayout(displayBounds);
-            EnsureLoadingDimOverlay();
+            Background = Brushes.Transparent;
             InitializeLiveAnnotateSession();
             UpdateLiveToolbarPlacement();
             _layoutApplied = true;
@@ -3210,76 +3372,9 @@ public partial class RegionSelectorWindow : Window
             return false;
         }
 
-        StartBackgroundDesktopCapture(displayBounds, cancellationToken);
+        DebugHelper.WriteLine(
+            "Live annotate selector ready on transparent desktop overlay; grim is deferred until commit.");
         return true;
-    }
-
-    private void StartBackgroundDesktopCapture(PixelRect displayBounds, CancellationToken cancellationToken)
-    {
-        if (Interlocked.CompareExchange(ref _backgroundLoadStarted, 1, 0) != 0)
-        {
-            return;
-        }
-
-        _ = LoadGrimBackgroundAsync(displayBounds, cancellationToken);
-    }
-
-    private async Task LoadGrimBackgroundAsync(PixelRect displayBounds, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(IsNativeWayland ? 40 : 20, cancellationToken).ConfigureAwait(false);
-            Image? captured = await CaptureSelectorBackgroundAsync(cancellationToken).ConfigureAwait(false);
-            if (captured is null || IsCancellationRequested || cancellationToken.IsCancellationRequested)
-            {
-                captured?.Dispose();
-                return;
-            }
-
-            using Image displayImage = CreateDisplayBackground(captured, displayBounds);
-            var backgroundBitmap = App.SnapX.ConvertImageSharpImgToAvalonia(displayImage);
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (IsCancellationRequested || cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
-
-                _image?.Dispose();
-                _image = captured;
-                captured = null;
-
-                _backgroundImage = new global::Avalonia.Controls.Image
-                {
-                    Source = backgroundBitmap,
-                    Stretch = Stretch.Fill,
-                    IsHitTestVisible = false,
-                    Width = displayBounds.Width,
-                    Height = displayBounds.Height,
-                };
-                Canvas.SetLeft(_backgroundImage, 0);
-                Canvas.SetTop(_backgroundImage, 0);
-                _canvas.Children.Insert(0, _backgroundImage);
-                RemoveLoadingDimOverlay();
-
-                if (_liveAnnotateOverlay is not null)
-                {
-                    _liveAnnotateOverlay.Width = displayBounds.Width;
-                    _liveAnnotateOverlay.Height = displayBounds.Height;
-                }
-
-                DebugHelper.WriteLine(
-                    $"Selector background loaded: {backgroundBitmap.PixelSize} from raw image bounds {_image!.Bounds}");
-            });
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when the selector closes before grim finishes.
-        }
-        catch (Exception ex)
-        {
-            DebugHelper.WriteLine($"Selector background capture failed: {ex.Message}");
-        }
     }
 
     private async Task<Image?> CaptureSelectorBackgroundAsync(CancellationToken cancellationToken)
@@ -3304,36 +3399,6 @@ public partial class RegionSelectorWindow : Window
             .Unwrap()
             .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken)
             .ConfigureAwait(false);
-    }
-
-    private void EnsureLoadingDimOverlay()
-    {
-        if (_loadingDimOverlay is not null)
-        {
-            return;
-        }
-
-        _loadingDimOverlay = new Rectangle
-        {
-            Fill = new SolidColorBrush(AvaloniaColor.FromArgb(120, 0, 0, 0)),
-            IsHitTestVisible = false,
-            Width = _imageBounds.Width,
-            Height = _imageBounds.Height,
-        };
-        Canvas.SetLeft(_loadingDimOverlay, 0);
-        Canvas.SetTop(_loadingDimOverlay, 0);
-        _canvas.Children.Insert(0, _loadingDimOverlay);
-    }
-
-    private void RemoveLoadingDimOverlay()
-    {
-        if (_loadingDimOverlay is null)
-        {
-            return;
-        }
-
-        _canvas.Children.Remove(_loadingDimOverlay);
-        _loadingDimOverlay = null;
     }
 
     private async Task<bool> PrepareForDisplayCoreAsync(CancellationToken cancellationToken = default)

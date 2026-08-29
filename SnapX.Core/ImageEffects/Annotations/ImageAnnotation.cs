@@ -18,6 +18,7 @@ namespace SnapX.Core.ImageEffects.Annotations;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(RectangleAnnotation), "Rectangle")]
 [JsonDerivedType(typeof(RedactionAnnotation), "Redaction")]
+[JsonDerivedType(typeof(BlurAnnotation), "Blur")]
 [JsonDerivedType(typeof(FreehandAnnotation), "Freehand")]
 [JsonDerivedType(typeof(ArrowAnnotation), "Arrow")]
 [JsonDerivedType(typeof(TextAnnotation), "Text")]
@@ -28,6 +29,7 @@ public abstract class ImageAnnotation
     {
         Rectangle,
         Redaction,
+        Blur,
         Freehand,
         Arrow,
         Text,
@@ -74,6 +76,30 @@ public sealed class RedactionAnnotation : ImageAnnotation
         if (!Enabled || Rectangle.IsEmpty) return img;
 
         img.Mutate(ctx => ctx.Fill(Color.Black, Rectangle));
+        return img;
+    }
+}
+
+public sealed class BlurAnnotation : ImageAnnotation
+{
+    public Rectangle Rectangle { get; set; }
+    public float Radius { get; set; } = 12;
+
+    public override Image Apply(Image img)
+    {
+        if (!Enabled || Rectangle.IsEmpty) return img;
+
+        Rectangle clipped = SixLabors.ImageSharp.Rectangle.Intersect(Rectangle, img.Bounds);
+        if (clipped.IsEmpty) return img;
+
+        float maxRadius = Math.Max(0.5f, (Math.Min(clipped.Width, clipped.Height) - 1) / 6f);
+        float radius = Math.Clamp(Radius, 0.5f, maxRadius);
+        using Image blurred = img.Clone(ctx =>
+            ctx.Crop(clipped).GaussianBlur(radius));
+        img.Mutate(ctx => ctx.DrawImage(
+            blurred,
+            new Point(clipped.X, clipped.Y),
+            1f));
         return img;
     }
 }

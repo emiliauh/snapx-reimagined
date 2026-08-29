@@ -381,6 +381,27 @@ static void VerifyAnnotationModel(ref int checks)
     Check(redactPixel.R == 0 && redactPixel.G == 0 && redactPixel.B == 0,
         "Redaction must black out the region.", ref checks);
 
+    // Blur changes pixels inside the selected area without changing dimensions.
+    using Image<Rgba32> blurImage = new(12, 12, Color.Black);
+    for (int y = 0; y < blurImage.Height; y++)
+    {
+        for (int x = 6; x < blurImage.Width; x++)
+        {
+            blurImage[x, y] = Color.White;
+        }
+    }
+    var blur = new BlurAnnotation
+    {
+        Rectangle = new SixLabors.ImageSharp.Rectangle(2, 2, 8, 8),
+        Radius = 3
+    };
+    Image blurResult = blur.Apply(blurImage);
+    Rgba32 blurBoundaryPixel = ((Image<Rgba32>)blurResult)[5, 6];
+    Check(blurResult.Width == 12 && blurResult.Height == 12,
+        "Blur annotation must preserve dimensions.", ref checks);
+    Check(blurBoundaryPixel.R is > 0 and < 255,
+        "Blur annotation must blend pixels inside its region.", ref checks);
+
     // CropAnnotation clamps to the image bounds and returns a new frame.
     using Image cropSource = new Image<Rgba32>(10, 10, Color.Green);
     var crop = new CropAnnotation { Rectangle = new SixLabors.ImageSharp.Rectangle(0, 0, 4, 4) };

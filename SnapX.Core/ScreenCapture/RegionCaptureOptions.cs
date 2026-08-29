@@ -55,10 +55,9 @@ public class RegionCaptureOptions
     [JsonIgnore]
     public bool UpdateRegionHistory { get; set; } = true;
     /// <summary>
-    /// When true (default), the region selector presents an inline (non-modal)
-    /// annotation toolbar over the cropped capture before committing it, so the
-    /// user can mark up the screenshot in place. Scrolling capture disables this
-    /// because it only needs the selected rectangle, not an annotated image.
+    /// When true (default), the region selector presents a live annotation
+    /// toolbar over the desktop before the user commits a region. Scrolling
+    /// capture disables this because it only needs the selected rectangle.
     /// </summary>
     [JsonIgnore, YamlIgnore]
     public bool AnnotateCapture { get; set; } = true;
