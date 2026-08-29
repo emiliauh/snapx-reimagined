@@ -98,8 +98,9 @@ public abstract class CaptureBase
         {
             int delay = (int)(taskSettings.CaptureSettings.ScreenshotDelay * 1000);
 
-            Task.Delay(delay)
-                .ContinueInCurrentContext(() =>
+            // Track the delayed capture so WaitForActiveCaptureAsync() waits for
+            // the entire capture (not just the scheduling) on every platform.
+            activeCaptureTask = Task.Delay(delay).ContinueInCurrentContext(() =>
                 {
                     CaptureInternal(taskSettings, autoHideForm);
                 });

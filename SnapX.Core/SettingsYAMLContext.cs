@@ -37,6 +37,7 @@ namespace SnapX.Core;
 [YamlSerializable(typeof(TaskSettingsImage))]
 [YamlSerializable(typeof(TaskSettingsAdvanced))]
 [YamlSerializable(typeof(TaskSettingsCapture))]
+[YamlSerializable(typeof(ScrollingCaptureOptions))]
 [YamlSerializable(typeof(TaskSettingsTools))]
 [YamlSerializable(typeof(TaskSettingsUpload))]
 [YamlSerializable(typeof(WindowState))]

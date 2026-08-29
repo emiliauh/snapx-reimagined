@@ -21,7 +21,6 @@
                 <StackPanel Spacing="8">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Upload behavior" />
                     <CheckBox Content="Disable uploads" IsChecked="{Binding DisableUpload}" />
-                    <CheckBox Content="Accept invalid TLS certificates" IsChecked="{Binding AcceptInvalidSslCertificates}" />
                     <CheckBox Content="Ignore emoji while URL encoding" IsChecked="{Binding UrlEncodeIgnoreEmoji}" />
                     <CheckBox Content="Show the first upload warning" IsChecked="{Binding ShowUploadWarning}" />
                     <CheckBox Content="Show the multi-file upload warning" IsChecked="{Binding ShowMultiUploadWarning}" />

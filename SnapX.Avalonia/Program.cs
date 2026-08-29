@@ -1,9 +1,18 @@
 ﻿// See https://aka.ms/new-console-template for more information
 #pragma warning disable CA1416 // I am aware
 using System.Reflection;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using SnapX.Avalonia;
 using SnapX.Avalonia.Utils;
+using SnapX.Core;
+using SnapX.Core.Capture;
+using SnapX.Core.Job;
+using SnapX.Core.Media;
+using SnapX.Core.ScreenCapture;
 #if BROWSER
 using Avalonia.Browser;
 #else
@@ -25,6 +34,8 @@ internal static class Program
     /// </summary>
     internal static bool IsNativeWaylandBackend { get; private set; }
     internal static SingleInstanceManager? ForwardedPrimaryInstance { get; private set; }
+    internal static bool OneShotRequested { get; private set; }
+    private static readonly TimeSpan ResidencyTimeout = TimeSpan.FromMinutes(10);
 
     [STAThread]
     public static void Main(string[] args)
@@ -50,6 +61,7 @@ internal static class Program
         }
 
         ForwardedPrimaryInstance = primaryInstance;
+        OneShotRequested = IsOneShotCommand(args);
 
         BuildAvaloniaApp()
 #if !BROWSER
@@ -57,6 +69,90 @@ internal static class Program
 #else
         .StartBrowserAppAsync("out");
 #endif
+    }
+
+    /// <summary>
+    /// A hotkey launched by a compositor binding (for example
+    /// <c>snapx-ui -RectangleRegion</c>) is meant to be a one-shot action, not
+    /// a new resident SnapX process. When this process is the primary, it is
+    /// kept alive only as long as the capture, recording, or upload work it
+    /// started is running, then it exits. A bounded timeout is also applied so
+    /// an abandoned interactive selector cannot keep a Wayland surface and its
+    /// compositor buffers alive indefinitely.
+    /// </summary>
+    internal static void StartOneShotExitGuard()
+    {
+        if (OneShotRequested)
+        {
+            _ = Task.Run(WaitForPrimaryIdleThenExit);
+        }
+    }
+
+    private static bool IsOneShotCommand(IReadOnlyList<string> args)
+    {
+        foreach (string argument in args)
+        {
+            if (argument.Equals("-one-shot", StringComparison.OrdinalIgnoreCase)
+                || argument.Equals("--one-shot", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        foreach (string argument in args)
+        {
+            if (argument.Length <= 1 || argument[0] != '-')
+            {
+                continue;
+            }
+
+            string name = argument[1..].TrimStart('-');
+            if (Enum.TryParse<HotkeyType>(name, ignoreCase: true, out HotkeyType job)
+                && job != HotkeyType.None)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task WaitForPrimaryIdleThenExit()
+    {
+        var deadline = DateTime.UtcNow + ResidencyTimeout;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            bool recordingBusy = ScreenRecordManager.CurrentState != ScreenRecordManager.RecordingManagerState.Idle;
+            bool captureBusy = !CaptureBase.WaitForActiveCaptureAsync().IsCompleted;
+            bool selectionBusy = RegionCaptureTasks.IsSelectionActive;
+            bool uploadBusy = TaskManager.IsBusy;
+            if (recordingBusy || captureBusy || selectionBusy || uploadBusy)
+            {
+                await Task.Delay(200);
+                continue;
+            }
+
+            DebugHelper.WriteLine("One-shot SnapX command completed; exiting the primary process.");
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    desktop.Shutdown();
+                }
+                else
+                {
+                    Environment.Exit(0);
+                }
+            });
+            return;
+        }
+
+        DebugHelper.WriteLine("One-shot SnapX timeout reached; closing the outstanding selection or task and exiting.");
+        TaskHelpers.AbortScreenRecording();
+        CaptureBase.CancelActiveCapture();
+        RegionCaptureTasks.CancelActiveSelection();
+        Environment.Exit(0);
     }
 
     // ReSharper disable once MemberCanBePrivate.Global

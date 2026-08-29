@@ -103,6 +103,12 @@
   <data name="UI_Dropdown_ScreenRecordingGIF">
     <value>Screen recording (GIF)</value>
   </data>
+  <data name="UI_Dropdown_ScrollingCapture">
+    <value>Scrolling capture</value>
+  </data>
+  <data name="UI_Dropdown_Annotate">
+    <value>Annotate</value>
+  </data>
   <data name="UI_Debug_TestImageUpload">
     <value>Test image upload</value>
   </data>

@@ -78,10 +78,15 @@ public static class TaskHelpers
         {
             RegionCaptureOptions options = RegionCaptureTasks.GetRegionCaptureOptions(
                 safeTaskSettings.CaptureSettings.SurfaceOptions);
-            options.WindowOrRegionPickerMode = true;
-            safeTaskSettings.CaptureSettings.SurfaceOptions = options;
-            DebugHelper.WriteLine(
-                $"Hotkey {job} is using the window-or-region selector.");
+            // Annotated region capture uses the live frozen-desktop selector with
+            // a ShareX-style toolbar before the region is committed.
+            if (job is HotkeyType.ScreenRecorder || !options.AnnotateCapture)
+            {
+                options.WindowOrRegionPickerMode = true;
+                safeTaskSettings.CaptureSettings.SurfaceOptions = options;
+                DebugHelper.WriteLine(
+                    $"Hotkey {job} is using the window-or-region selector.");
+            }
         }
 
         switch (job)
@@ -150,16 +155,13 @@ public static class TaskHelpers
                 new CaptureLastRegion().Capture(safeTaskSettings);
                 break;
             case HotkeyType.ScrollingCapture:
-                DebugHelper.WriteException("HotkeyType.ScrollingCapture is NOT implemented.");
-                // await OpenScrollingCapture(safeTaskSettings);
+                OpenScrollingCapture(safeTaskSettings);
                 break;
             case HotkeyType.AutoCapture:
-                DebugHelper.WriteException("HotkeyType.AutoCapture is NOT implemented.");
-                // OpenAutoCapture(safeTaskSettings);
+                AutoCaptureManager.Start(safeTaskSettings);
                 break;
             case HotkeyType.StartAutoCapture:
-                DebugHelper.WriteException("HotkeyType.StartAutoCapture is NOT implemented.");
-                // StartAutoCapture(safeTaskSettings);
+                AutoCaptureManager.Start(safeTaskSettings);
                 break;
             // Screen record
             case HotkeyType.ScreenRecorder:
@@ -208,35 +210,32 @@ public static class TaskHelpers
                 // OpenRuler(safeTaskSettings);
                 break;
             case HotkeyType.PinToScreen:
-                DebugHelper.WriteException("HotkeyType.PinToScreen is NOT implemented.");
-                PinToScreen(safeTaskSettings);
+                PinToScreenFromScreen(safeTaskSettings);
                 break;
             case HotkeyType.PinToScreenFromScreen:
-                DebugHelper.WriteException("HotkeyType.PinToScreenFromScreen is NOT implemented.");
-                // PinToScreenFromScreen(safeTaskSettings);
+                PinToScreenFromScreen(safeTaskSettings);
                 break;
             case HotkeyType.PinToScreenFromClipboard:
-                DebugHelper.WriteException(
-                    "HotkeyType.PinToScreenFromClipboard is NOT implemented."
-                );
-                // PinToScreenFromClipboard(safeTaskSettings);
+                PinToScreenFromClipboard(safeTaskSettings);
                 break;
             case HotkeyType.PinToScreenFromFile:
-                DebugHelper.WriteException("HotkeyType.PinToScreenFromFile is NOT implemented.");
-                // PinToScreenFromFile(safeTaskSettings);
+                PinToScreenFromFile(safeTaskSettings);
                 break;
             case HotkeyType.PinToScreenCloseAll:
-                DebugHelper.WriteException("HotkeyType.PinToScreenCloseAll is NOT implemented.");
-                // PinToScreenCloseAll(safeTaskSettings);
+                PinToScreenCloseAll();
                 break;
             case HotkeyType.ImageEditor:
-                throw new NotImplementedException("ImageEditor not implemented");
+                OpenImageEditor(safeTaskSettings);
+                break;
             case HotkeyType.ImageBeautifier:
-                throw new NotImplementedException("ImageBeautifier not implemented");
+                DebugHelper.WriteException("HotkeyType.ImageBeautifier is NOT implemented.");
+                break;
             case HotkeyType.ImageEffects:
-                throw new NotImplementedException("ImageEffects not implemented");
+                OpenImageEffects(safeTaskSettings);
+                break;
             case HotkeyType.ImageViewer:
-                throw new NotImplementedException("ImageViewer not implemented");
+                DebugHelper.WriteException("HotkeyType.ImageViewer is NOT implemented.");
+                break;
             case HotkeyType.ImageCombiner:
                 DebugHelper.WriteException("HotkeyType.ImageCombiner is NOT implemented.");
                 // OpenImageCombiner(null, safeTaskSettings);
@@ -583,7 +582,8 @@ public static class TaskHelpers
         switch (taskSettings.ImageSettings.FileExistAction)
         {
             case FileExistAction.Ask:
-                new NotImplementedException("FileExistAction.Ask not implemented").ShowError();
+                DebugHelper.WriteLine("The overwrite prompt is unavailable; using a unique file name.");
+                filePath = FileHelpers.GetUniqueFilePath(filePath);
                 break;
             case FileExistAction.UniqueName:
                 filePath = FileHelpers.GetUniqueFilePath(filePath);
@@ -1269,7 +1269,471 @@ public static class TaskHelpers
 
     public static void PinToScreen(TaskSettings taskSettings = null)
     {
-        throw new NotImplementedException("PinToScreen is not implemented");
+        PinToScreenFromScreen(taskSettings);
+    }
+
+    /// <summary>
+    /// Captures the current screen/region and pins it to the screen. When a
+    /// configured auto-capture region is active it is used; otherwise the user
+    /// picks a region interactively.
+    /// </summary>
+    public static void PinToScreenFromScreen(TaskSettings taskSettings = null)
+    {
+        taskSettings ??= TaskSettings.GetDefaultTaskSettings();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                Rectangle region = SnapXL.Settings?.AutoCaptureRegion ?? Rectangle.Empty;
+                Image? image;
+
+                if (!region.IsEmpty)
+                {
+                    image = TaskHelpers.GetScreenshot(taskSettings).CaptureRectangle(region);
+                }
+                else
+                {
+                    RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
+                        taskSettings.CaptureSettings.SurfaceOptions,
+                        captureImage: true);
+
+                    if (selection?.Image is not { } captured)
+                    {
+                        return;
+                    }
+
+                    image = captured;
+                }
+
+                try
+                {
+                    PublishPinToScreen(image, taskSettings);
+                }
+                finally
+                {
+                    image.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex);
+                SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Pin to screen failed", true));
+            }
+        });
+    }
+
+    /// <summary>Pins the first image on the clipboard, if any.</summary>
+    public static void PinToScreenFromClipboard(TaskSettings taskSettings = null)
+    {
+        taskSettings ??= TaskSettings.GetDefaultTaskSettings();
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                if (Clipboard.ContainsImage())
+                {
+                    Image image = Clipboard.GetImage();
+                    try
+                    {
+                        PublishPinToScreen(image, taskSettings);
+                    }
+                    finally
+                    {
+                        image.Dispose();
+                    }
+                }
+                else if (Clipboard.GetFileDropList() is { Count: > 0 } files)
+                {
+                    string? first = files.FirstOrDefault();
+                    if (!string.IsNullOrEmpty(first) && FileHelpers.IsImageFile(first))
+                    {
+                        Image image = Image.Load(first);
+                        try
+                        {
+                            PublishPinToScreen(image, taskSettings);
+                        }
+                        finally
+                        {
+                            image.Dispose();
+                        }
+                    }
+                }
+                else
+                {
+                    SnapXL.EventAggregator.Publish(new ErrorMessageEvent(
+                        new InvalidOperationException("The clipboard does not contain an image."),
+                        "Pin to screen",
+                        false));
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex);
+                SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Pin to screen from clipboard failed", true));
+            }
+        });
+    }
+
+    /// <summary>Pins an image file selected by the user.</summary>
+    public static void PinToScreenFromFile(TaskSettings taskSettings = null)
+    {
+        taskSettings ??= TaskSettings.GetDefaultTaskSettings();
+
+        SnapXL.EventAggregator.Publish(new NeedFileOpenerEvent
+        {
+            Title = "SnapX | Pin image to screen",
+            AcceptedExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"],
+            Multiselect = false,
+            PinToScreen = true,
+            TaskSettings = taskSettings
+        });
+    }
+
+    /// <summary>Closes all pinned screen windows.</summary>
+    public static void PinToScreenCloseAll()
+    {
+        SnapXL.EventAggregator.Publish(new NeedPinToScreenEvent(null!)
+        {
+            CloseAll = true
+        });
+    }
+
+    /// <summary>
+    /// Publishes a pin request with an ownership-safe image clone so the UI can
+    /// retain the bitmap after the worker disposes its own capture.
+    /// </summary>
+    public static void PublishPinToScreen(Image image, TaskSettings taskSettings)
+    {
+        Image clone = image.Clone(ctx => { });
+        var request = new NeedPinToScreenEvent(clone, taskSettings);
+        SnapXL.EventAggregator.Publish(request);
+
+        try
+        {
+            if (!request.Completion.Wait(TimeSpan.FromSeconds(5)) || !request.Completion.GetAwaiter().GetResult())
+            {
+                DebugHelper.WriteLine("Pin to screen timed out or failed.");
+            }
+        }
+        finally
+        {
+            // The UI converts the clone to a bitmap and marks the event handled
+            // before this completes. The clone is owned by this helper and is
+            // always released, whether the UI honored the request or not.
+            clone.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Runs ShareX-style scrolling capture. The user selects a region (or the
+    /// configured auto-capture region is used), frames are captured while the
+    /// page is scrolled by the configured method, and the frames are stitched
+    /// into a single tall image. Unsupported platforms are gated honestly.
+    /// </summary>
+    public static void OpenScrollingCapture(TaskSettings taskSettings)
+    {
+        taskSettings ??= TaskSettings.GetDefaultTaskSettings();
+        _ = Task.Run(async () =>
+        {
+            // The shared instance is the same object the result window's Options
+            // dialog mutates, so a later capture reuses tuned values even though
+            // each hotkey dispatch hands a fresh task-settings clone.
+            ScrollingCaptureOptions options = ScrollingCaptureManager.GetSharedOptions(taskSettings.CaptureSettings.ScrollingCaptureOptions);
+
+            try
+            {
+                Rectangle region = SnapXL.Settings?.AutoCaptureRegion ?? Rectangle.Empty;
+
+                // Respect ShowRegion: the interactive region selector is only
+                // brought up when it is enabled. When disabled, use the
+                // configured auto-capture region; if none is configured there is
+                // nothing to capture, so cancel rather than silently opening a
+                // selector the user asked not to see.
+                if (region.IsEmpty && !options.ShowRegion)
+                {
+                    DebugHelper.WriteLine("Scrolling capture cancelled: ShowRegion is disabled and no auto-capture region is configured.");
+                    return;
+                }
+
+                if (region.IsEmpty)
+                {
+                    // Scrolling capture needs only the selected rectangle; the
+                    // inline annotate toolbar is disabled so the user is not
+                    // forced through an annotation step for an image that the
+                    // stitching pipeline discards.
+                    RegionCaptureOptions surfaceOptions = RegionCaptureTasks.GetRegionCaptureOptions(
+                        taskSettings.CaptureSettings.SurfaceOptions);
+                    surfaceOptions.AnnotateCapture = false;
+                    RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
+                        surfaceOptions,
+                        captureImage: true);
+                    if (selection?.Rectangle is { Width: > 0, Height: > 0 } rect)
+                    {
+                        region = rect;
+                    }
+                    else
+                    {
+                        DebugHelper.WriteLine("Scrolling capture cancelled: no region selected.");
+                        return;
+                    }
+                }
+
+                if (!CanScrollInput())
+                {
+                    SnapXL.EventAggregator.Publish(new ErrorMessageEvent(
+                        new PlatformNotSupportedException(
+                            "Scrolling capture requires a platform input driver. On this session no mouse-wheel/keyboard injection backend could be found (need X11/XTest, or ydotool for the Wayland fallback)."),
+                        "Scrolling capture",
+                        false));
+                    return;
+                }
+
+                var manager = new ScrollingCaptureManager(options, region);
+                Image? result = null;
+                try
+                {
+                    ScrollingCaptureStatus status = await manager.StartCaptureAsync().ConfigureAwait(false);
+                    result = manager.Result;
+
+                    if (result == null)
+                    {
+                        SnapXL.EventAggregator.Publish(new ErrorMessageEvent(
+                            new InvalidOperationException("Scrolling capture produced no image. The page may not have scrolled or the region was empty."),
+                            "Scrolling capture",
+                            false));
+                        return;
+                    }
+
+                    // The result window owns this clone and disposes it on close.
+                    Image uiClone = result.Clone(ctx => { });
+                    SnapXL.EventAggregator.Publish(new NeedScrollCaptureResultEvent(
+                        uiClone,
+                        taskSettings,
+                        options));
+                    if (status != ScrollingCaptureStatus.Failed)
+                    {
+                        SaveImageAsFile(result, taskSettings);
+                    }
+
+                    // Clipboard: use a dedicated clone so the window's close can
+                    // never race the async native copy, and the manager can never
+                    // dispose the image out from under the frontend. Await the
+                    // frontend's completion before releasing the clone.
+                    Image clipboardClone = result.Clone(ctx => { });
+                    try
+                    {
+                        var clipboardEvent = new NeedClipboardCopyEvent(clipboardClone);
+                        SnapXL.EventAggregator.Publish(clipboardEvent);
+                        bool copied = clipboardEvent.Completion.Wait(TimeSpan.FromSeconds(5))
+                            && clipboardEvent.Completion.GetAwaiter().GetResult();
+                        DebugHelper.WriteLine(copied
+                            ? "Scrolling capture image copied to clipboard."
+                            : "Scrolling capture clipboard copy timed out.");
+                    }
+                    finally
+                    {
+                        clipboardClone.Dispose();
+                    }
+                }
+                finally
+                {
+                    result?.Dispose();   // The worker owns manager.Result.
+                    manager.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex);
+                SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Scrolling capture failed", true));
+            }
+        });
+    }
+
+    private static bool CanScrollInput()
+    {
+        // Delegate to InputHelpers so the gate never claims support for a
+        // backend that would silently no-op. Windows SendInput is not
+        // implemented in the cross-platform input layer, so it reports false
+        // there rather than pretending scrolling capture works.
+        return InputHelpers.HasInputBackend();
+    }
+
+    /// <summary>
+    /// Opens the frontend image editor for a capture. If the user accepts the
+    /// edit the returned image is used in place of <paramref name="image"/>;
+    /// if the user cancels (or no editor is available) the original is kept.
+    /// This never silently uploads an unedited image when the user expected a
+    /// modal edit operation — cancellation is treated as a deliberate no-op.
+    /// </summary>
+    public static Image? AnnotateImage(Image image, TaskSettings taskSettings)
+    {
+        if (image == null)
+        {
+            return image;
+        }
+
+        Image clone = image.Clone(ctx => { });
+        var request = new NeedEditImageEvent(clone, taskSettings);
+        SnapXL.EventAggregator.Publish(request);
+
+        try
+        {
+            // A modal editor can legitimately stay open for minutes. Wait
+            // generously so the capture pipeline never proceeds with the
+            // unedited image while the user is still editing. The editor
+            // completes the request on save, cancel, or window close.
+            if (!request.Completion.Wait(TimeSpan.FromMinutes(30)))
+            {
+                DebugHelper.WriteLine("Image editor did not respond within 30 minutes; keeping the original capture.");
+                SnapXL.EventAggregator.Publish(new ErrorMessageEvent(
+                    new TimeoutException("The image editor did not respond in time and the original capture will be kept. This is an unexpected application error, not a user edit."),
+                    "Image editor",
+                    false));
+                return image;
+            }
+
+            Image? result = request.Completion.GetAwaiter().GetResult();
+            if (result == null)
+            {
+                // User cancelled the editor.
+                clone.Dispose();
+                return image;
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex);
+            return image;
+        }
+    }
+
+    /// <summary>
+    /// Opens the image editor for a current capture. The ImageEditor tool
+    /// captures the full screen (or an active region) and then opens the modal
+    /// editor so the user can annotate before any upload.
+    /// </summary>
+    public static void OpenImageEditor(TaskSettings taskSettings)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                Image? image;
+                Rectangle region = SnapXL.Settings?.AutoCaptureRegion ?? Rectangle.Empty;
+                if (!region.IsEmpty)
+                {
+                    image = GetScreenshot(taskSettings).CaptureRectangle(region);
+                }
+                else
+                {
+                    RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
+                        taskSettings.CaptureSettings.SurfaceOptions,
+                        captureImage: true);
+                    image = selection?.Image;
+                }
+
+                if (image is not null)
+                {
+                    AnnotateImage(image, taskSettings);
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex);
+                SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Open image editor failed", true));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Applies the configured image-effect preset to a current capture. This is
+    /// the "apply effects now" tool, distinct from the automatic after-capture
+    /// effect job.
+    /// </summary>
+    public static void OpenImageEffects(TaskSettings taskSettings)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                Image? image;
+                Rectangle region = SnapXL.Settings?.AutoCaptureRegion ?? Rectangle.Empty;
+                if (!region.IsEmpty)
+                {
+                    image = GetScreenshot(taskSettings).CaptureRectangle(region);
+                }
+                else
+                {
+                    RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
+                        taskSettings.CaptureSettings.SurfaceOptions,
+                        captureImage: true);
+                    image = selection?.Image;
+                }
+
+                if (image is not null)
+                {
+                    Image modified = ApplyImageEffects(image, taskSettings);
+                    SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(modified));
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex);
+                SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Apply image effects failed", true));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Applies the configured image-effect preset to a capture, honoring the
+    /// random-preset option and clamping the selection to the available presets.
+    /// Returns the modified image (or the original when no effect is selected).
+    /// </summary>
+    public static Image ApplyImageEffects(Image image, TaskSettings taskSettings)
+    {
+        if (image == null || taskSettings?.ImageSettings == null)
+        {
+            return image;
+        }
+
+        IReadOnlyList<ImageEffectPreset> presets =
+            taskSettings.ImageSettings.ImageEffectPresets ?? [];
+
+        if (presets.Count == 0)
+        {
+            return image;
+        }
+
+        int selected = taskSettings.ImageSettings.SelectedImageEffectPreset;
+        if (taskSettings.ImageSettings.UseRandomImageEffect)
+        {
+            selected = Random.Shared.Next(presets.Count);
+        }
+        else if (selected < 0 || selected >= presets.Count)
+        {
+            DebugHelper.WriteLine(
+                $"SelectedImageEffectPreset {selected} is out of range {presets.Count}; skipping effects.");
+            return image;
+        }
+
+        ImageEffectPreset preset = presets[selected];
+        if (preset?.Effects is not { Count: > 0 })
+        {
+            return image;
+        }
+
+        Image modified = preset.ApplyEffects(image);
+        if (modified == null)
+        {
+            DebugHelper.WriteLine("Applying image effects produced an empty image; keeping the original.");
+            return image;
+        }
+
+        return modified;
     }
 
     private static void CopyScreenColor(TaskSettings taskSettings)
@@ -1544,9 +2008,7 @@ public static class TaskHelpers
 
         if (preset != null && preset.Effects.Count > 0)
         {
-            throw new NotImplementedException(
-                "ImportImageEffect is not implemented. It relies on SnapX.ImageEffectsLib which is not ported yet."
-            );
+            DebugHelper.WriteLine("Image effect presets are unavailable and were not imported.");
         }
     }
 

@@ -9,6 +9,6 @@ jobs:
       - name: Run WinGet Releaser
         uses: vedantmgoyal9/winget-releaser@7bd472be23763def6e16bd06cc8b1cdfab0e2fd5
         with:
-          identifier: SnapXL.SnapX
+          identifier: emiliauh.snapx-reimagined
           max-versions-to-keep: 5
           token: ${{ secrets.WINGET_TOKEN }}

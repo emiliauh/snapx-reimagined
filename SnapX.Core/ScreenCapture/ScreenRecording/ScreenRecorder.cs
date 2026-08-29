@@ -286,6 +286,14 @@ public class ScreenRecorder : IDisposable
             if (!target.CoversWholeOutput)
             {
                 startInfo.ArgumentList.Add("-g");
+                // wf-recorder expects the region in global compositor logical
+                // coordinates and subtracts the output origin itself. SnapX's
+                // CaptureRectangle is already in that space (slurp/native
+                // picker emit global logical coords), so the global rectangle
+                // is passed through unchanged. Converting it to output-local
+                // would be wrong on a multi-monitor layout where an output does
+                // not sit at (0,0), because wf-recorder's "contained_in" check
+                // tests the region against the global output bounds.
                 startInfo.ArgumentList.Add(FormatGeometry(target.GlobalRectangle));
             }
 
@@ -313,6 +321,52 @@ public class ScreenRecorder : IDisposable
         {
             startInfo.ArgumentList.Add("-r");
             startInfo.ArgumentList.Add(fps.ToString());
+        }
+        // When SnapX is generating the capture, wf-recorder is only used to
+        // produce a high-quality intermediate. The user's FFmpeg codec and
+        // quality settings are applied by the final pass in ScreenRecordManager,
+        // so this capture backend must not silently override them with its own
+        // defaults. Keep the intermediate mathematically lossless.
+        if (Options.IsLossless)
+        {
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("libx264");
+            startInfo.ArgumentList.Add("-p");
+            startInfo.ArgumentList.Add("crf=0");
+            startInfo.ArgumentList.Add("-p");
+            startInfo.ArgumentList.Add("preset=ultrafast");
+            startInfo.ArgumentList.Add("-p");
+            startInfo.ArgumentList.Add("tune=zerolatency");
+            if (Options.FFmpeg.IsAudioSourceSelected)
+            {
+                startInfo.ArgumentList.Add("-C");
+                startInfo.ArgumentList.Add("aac");
+                startInfo.ArgumentList.Add("-P");
+                startInfo.ArgumentList.Add("bit_rate=192000");
+            }
+        }
+        // wf-recorder does not capture audio unless it is explicitly told to.
+        // Pass through the user-selected audio source (resolved to a PulseAudio
+        // / PipeWire device name on Linux, matching the FFmpeg path) so a
+        // Wayland recording carries the selected audio track instead of being
+        // silently silent. When no audio source is configured we leave the
+        // default silent behavior intact.
+        string audioSource = Options.FFmpeg.IsAudioSourceSelected
+            ? FFmpegCaptureDevice.ResolveAudioSource(Options.FFmpeg.AudioSource)
+            : string.Empty;
+        if (!string.IsNullOrWhiteSpace(audioSource))
+        {
+            // wf-recorder's --audio takes an OPTIONAL argument and only
+            // consumes it in attached form (-aname / --audio=name). Passing
+            // "-a name" as two argv entries would treat "name" as a stray
+            // positional, so the device must be embedded in a single argument.
+            startInfo.ArgumentList.Add("--audio=" + audioSource);
+            // PipeWire's PulseAudio compatibility layer is the backend enabled
+            // on Omarchy and most Arch/Wayland systems. wf-recorder's default
+            // can also resolve through libpulse when pipewire-pulse is absent;
+            // naming it explicitly avoids an unexpected default-selection change
+            // when multiple audio backends are installed.
+            startInfo.ArgumentList.Add("--audio-backend=pulse");
         }
         startInfo.ArgumentList.Add("-y");
         startInfo.ArgumentList.Add("-f");
@@ -479,7 +533,12 @@ public class ScreenRecorder : IDisposable
                 $"wf-recorder output resolution: requested={FormatGeometry(requested)}, output={chosen.Name}, " +
                 $"bounds={FormatGeometry(bounds)}, overlap={FormatGeometry(clipped)}, " +
                 $"local={FormatGeometry(local)}, clipped={wasClipped}, wholeOutput={coversWholeOutput}.");
-            return new WfRecorderCaptureTarget(chosen.Name, clipped, local, coversWholeOutput, wasClipped);
+            return new WfRecorderCaptureTarget(
+                chosen.Name,
+                clipped,
+                local,
+                coversWholeOutput,
+                wasClipped);
         }
         catch (Exception ex) when (ex is Win32Exception or FileNotFoundException or InvalidOperationException
                                    or JsonException or IOException)

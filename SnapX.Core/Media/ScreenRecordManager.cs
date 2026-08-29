@@ -40,6 +40,8 @@ public static class ScreenRecordManager
     private static long sessionId;
     private static CancellationTokenSource? sessionCancellation;
     private static Rectangle currentCaptureRectangle;
+    private static readonly Stopwatch activeElapsedStopwatch = new();
+    private static TimeSpan accumulatedElapsed;
 
     public static bool IsRecording
     {
@@ -59,6 +61,24 @@ public static class ScreenRecordManager
             lock (StateLock)
             {
                 return state is RecordingManagerState.Paused or RecordingManagerState.Pausing;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Active recording time, excluding paused segments. The value advances
+    /// from the first real capture state and freezes while a pause is active.
+    /// </summary>
+    public static TimeSpan Elapsed
+    {
+        get
+        {
+            lock (StateLock)
+            {
+                return accumulatedElapsed +
+                    (state == RecordingManagerState.Recording
+                        ? activeElapsedStopwatch.Elapsed
+                        : TimeSpan.Zero);
             }
         }
     }
@@ -102,6 +122,15 @@ public static class ScreenRecordManager
                 return;
             }
             state = newState;
+            if (oldState == RecordingManagerState.Recording && newState != RecordingManagerState.Recording)
+            {
+                accumulatedElapsed += activeElapsedStopwatch.Elapsed;
+                activeElapsedStopwatch.Reset();
+            }
+            else if (oldState != RecordingManagerState.Recording && newState == RecordingManagerState.Recording)
+            {
+                activeElapsedStopwatch.Restart();
+            }
         }
         StateChanged?.Invoke(newState);
     }
@@ -225,6 +254,8 @@ public static class ScreenRecordManager
 
             LastError = null;
             LastOutputPath = null;
+            accumulatedElapsed = TimeSpan.Zero;
+            activeElapsedStopwatch.Reset();
             stopRequested = false;
             abortRequested = false;
             pauseRequested = false;
@@ -474,10 +505,17 @@ public static class ScreenRecordManager
     {
         bool hasCustomCommands = taskSettings.CaptureSettings.FFmpegOptions.UseCustomCommands
             && !string.IsNullOrWhiteSpace(taskSettings.CaptureSettings.FFmpegOptions.CustomCommands);
-        // The generated Wayland path records a lossless intermediate before
-        // palette conversion. A custom command owns its own capture output, so
-        // leave it intact and convert that completed segment to GIF instead.
-        bool lossless = !hasCustomCommands && (encodeAsGif
+        // The generated Wayland path is captured by wf-recorder and then encoded
+        // by FFmpeg, so every option on the Screen recorder page (codec, preset,
+        // CRF, audio codec) is applied by a real final pass instead of being
+        // ignored. The intermediate is kept as a lossless MP4 segment. A custom
+        // command owns its own capture output, so leave it intact and convert
+        // that completed segment to GIF instead.
+        bool generatedWaylandCapture = !hasCustomCommands &&
+            !taskSettings.CaptureSettings.FFmpegOptions.OverrideCLIPath &&
+            IsWaylandSession();
+        bool lossless = !hasCustomCommands && (generatedWaylandCapture
+            || encodeAsGif
             || taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding
             || taskSettings.CaptureSettings.FFmpegOptions.IsAnimatedImage);
         string recordingBasePath = (lossless || encodeAsGif)
@@ -1091,12 +1129,6 @@ public static class ScreenRecordManager
 
         if (OperatingSystem.IsLinux() && !IsWaylandSession() && !hasCustomCommands)
         {
-            if (ffmpeg.IsAudioSourceSelected)
-            {
-                throw new PlatformNotSupportedException(
-                    "Generated Linux recording commands currently support X11 video only. Use custom FFmpeg commands for audio capture.");
-            }
-
             string source = ffmpeg.VideoSource;
             if (string.IsNullOrWhiteSpace(source)
                 || source.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase)

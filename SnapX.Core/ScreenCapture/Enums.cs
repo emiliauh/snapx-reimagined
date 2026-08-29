@@ -99,7 +99,7 @@ public enum FFmpegVideoCodec
 public enum FFmpegAudioCodec
 {
     [Description("AAC")]
-    libvoaacenc,
+    aac,
     [Description("Opus")]
     libopus,
     [Description("Vorbis")]
@@ -349,4 +349,16 @@ public enum ScrollingCaptureStatus
     Failed,
     PartiallySuccessful,
     Successful
+}
+
+/// <summary>
+/// How ShareX's scrolling capture drives a page forward. Matches the upstream
+/// ShareX <c>ScrollMethod</c> enum.
+/// </summary>
+public enum ScrollMethod // Localized
+{
+    MouseWheel,
+    DownArrow,
+    PageDown,
+    ScrollMessage
 }

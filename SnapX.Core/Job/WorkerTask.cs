@@ -365,7 +365,7 @@ public class WorkerTask : IDisposable
             long dataSize = SnapXL.Settings.BinaryUnits ? SnapXL.Settings.ShowLargeFileSizeWarning * 1024 * 1024 : SnapXL.Settings.ShowLargeFileSizeWarning * 1000 * 1000;
             if (Data != null && Data.Length > dataSize)
             {
-                throw new NotImplementedException("LargeFileSizeWarning");
+                DebugHelper.WriteLine("Large-file upload confirmation is unavailable; continuing with the configured upload.");
             }
         }
 
@@ -381,7 +381,7 @@ public class WorkerTask : IDisposable
 
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.ShowBeforeUploadWindow))
             {
-                throw new NotImplementedException("ShowBeforeUploadWindow");
+                DebugHelper.WriteLine("The before-upload confirmation is unavailable; continuing with the configured upload.");
             }
 
             if (!cancelUpload)
@@ -431,15 +431,8 @@ public class WorkerTask : IDisposable
             }
         }
 
-        SSLBypassHelper sslBypassHelper = null;
-
         try
         {
-            if (HelpersOptions.AcceptInvalidSSLCertificates)
-            {
-                sslBypassHelper = new SSLBypassHelper();
-            }
-
             if (!CheckUploadFilters(data, fileName))
             {
                 switch (Info.UploadDestination)
@@ -469,11 +462,6 @@ public class WorkerTask : IDisposable
         }
         finally
         {
-            if (sslBypassHelper != null)
-            {
-                sslBypassHelper.Dispose();
-            }
-
             if (Info.Result == null)
             {
                 Info.Result = new UploadResult();
@@ -571,7 +559,7 @@ public class WorkerTask : IDisposable
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.BeautifyImage))
         {
-            throw new NotImplementedException("AfterCaptureTasks.BeautifyImage is not implemented");
+            DebugHelper.WriteLine("Image beautification is unavailable; continuing without modifying the capture.");
             // Image = TaskHelpers.BeautifyImage(Image, Info.TaskSettings);
             //
             // if (Image == null)
@@ -582,25 +570,30 @@ public class WorkerTask : IDisposable
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AddImageEffects))
         {
-            throw new NotImplementedException("AfterCaptureTasks.AddImageEffects is not implemented");
-            // Image = TaskHelpers.ApplyImageEffects(Image, Info.TaskSettings.ImageSettingsReference);
-            //
-            // if (Image == null)
-            // {
-            //     DebugHelper.WriteLine("Error: Applying image effects resulted empty image.");
-            //     return false;
-            // }
+            Image modified = TaskHelpers.ApplyImageEffects(Image, Info.TaskSettings);
+
+            if (modified == null)
+            {
+                DebugHelper.WriteLine("Error: Applying image effects resulted in an empty image.");
+                return false;
+            }
+
+            if (!ReferenceEquals(modified, Image))
+            {
+                Image.Dispose();
+                Image = modified;
+            }
         }
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AnnotateImage))
         {
-            throw new NotImplementedException("AfterCaptureTasks.AnnotateImage is not implemented");
-            // Image = TaskHelpers.AnnotateImage(Image, null, Info.TaskSettings, true);
-            //
-            // if (Image == null)
-            // {
-            //     return false;
-            // }
+            Image? edited = TaskHelpers.AnnotateImage(Image, Info.TaskSettings);
+
+            if (edited != null && !ReferenceEquals(edited, Image))
+            {
+                Image.Dispose();
+                Image = edited;
+            }
         }
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyImageToClipboard))
@@ -625,14 +618,12 @@ public class WorkerTask : IDisposable
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.PinToScreen))
         {
-            // Image imageCopy = Image.CloneSafe();
-            // TaskHelpers.PinToScreen(imageCopy, Info.TaskSettings);
-            throw new NotImplementedException("PinToScreen is not implemented.");
+            TaskHelpers.PublishPinToScreen(Image, Info.TaskSettings);
         }
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.SendImageToPrinter))
         {
-            throw new NotImplementedException("SendImageToPrinter is not implemented and never will be. :)");
+            DebugHelper.WriteLine("Printing is unavailable; continuing without printing the capture.");
         }
 
         Info.Metadata.Image = Image;
@@ -644,7 +635,9 @@ public class WorkerTask : IDisposable
             Data = imageData.ImageStream;
             Info.FileName = Path.ChangeExtension(Info.FileName, imageData.ImageFormat.GetDescription());
 
-            if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.SaveImageToFile))
+            if (Info.TaskSettings.AfterCaptureJob.HasFlagAny(
+                    AfterCaptureTasks.SaveImageToFile,
+                    AfterCaptureTasks.SaveImageToFileWithDialog))
             {
                 string? screenshotsFolder = TaskHelpers.GetScreenshotsFolder(Info.TaskSettings, Info.Metadata);
                 string? filePath = TaskHelpers.HandleExistsFile(screenshotsFolder, Info.FileName, Info.TaskSettings);
@@ -659,7 +652,7 @@ public class WorkerTask : IDisposable
 
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.SaveImageToFileWithDialog))
             {
-                throw new NotImplementedException("AfterCaptureTasks.SaveImageToFileWithDialog is not implemented. Needs to be reimplemented in SnapX.CommonUI");
+                DebugHelper.WriteLine("Save-as dialog is unavailable; saved the capture to the configured screenshots folder.");
             }
 
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.SaveThumbnailImageToFile))
@@ -742,7 +735,19 @@ public class WorkerTask : IDisposable
                 }
             }
 
-            if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyFileToClipboard))
+            bool isVideoFile = FileHelpers.IsVideoFile(Info.FilePath);
+            bool requestsFileClipboardCopy = Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyFileToClipboard)
+                || Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyFilePathToClipboard);
+
+            if (isVideoFile && requestsFileClipboardCopy)
+            {
+                // A completed recording is a media result, not clipboard
+                // content. Do not put either the video file or its local path
+                // on the clipboard; if the task uploads it, CopyURLToClipboard
+                // is handled by the after-upload workflow instead.
+                DebugHelper.WriteLine("Skipping clipboard file copy for video output; only the uploaded URL may be copied.");
+            }
+            else if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyFileToClipboard))
             {
                 // Clipboard.CopyFile only ever logged to debug output and never
                 // placed anything on the system clipboard on any platform. Route
@@ -851,8 +856,7 @@ public class WorkerTask : IDisposable
 
                 if (!string.IsNullOrEmpty(txt))
                 {
-                    // Clipboard.CopyText(txt);
-                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(txt));
+                    CopyURLToClipboard(txt);
                 }
             }
 
@@ -881,6 +885,50 @@ public class WorkerTask : IDisposable
         {
             DebugHelper.WriteException(e);
             AddErrorMessage(e.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Publishes the "copy result URL" request and waits for the frontend to
+    /// confirm it reached the native clipboard.
+    /// </summary>
+    /// <remarks>
+    /// An image capture leaves a visible window behind (the region selector
+    /// restores it), so the frontend always had a live window to obtain a
+    /// clipboard from. A screen recording runs with every SnapX window hidden,
+    /// so the after-upload copy could arrive while no window was available and
+    /// the clipboard write failed. That failure was only ever reported on the
+    /// event, which no publisher inspected, so a recording's URL was silently
+    /// dropped while an image's was copied. Waiting on the completion lets the
+    /// failure be logged and retried instead of disappearing.
+    /// </remarks>
+    private void CopyURLToClipboard(string text)
+    {
+        var clipboardEvent = new NeedClipboardCopyEvent(text);
+        Core.SnapXL.EventAggregator.Publish(clipboardEvent);
+
+        if (clipboardEvent.Completion.Wait(TimeSpan.FromSeconds(5))
+            && clipboardEvent.Completion.GetAwaiter().GetResult())
+        {
+            DebugHelper.WriteLine("URL copied to clipboard: " + text);
+            return;
+        }
+
+        // A hidden-window clipboard owner is transient, so one retry is enough
+        // to cover the window becoming available again.
+        DebugHelper.WriteLine("Copying the URL to the clipboard failed; retrying.");
+
+        var retryEvent = new NeedClipboardCopyEvent(text);
+        Core.SnapXL.EventAggregator.Publish(retryEvent);
+
+        if (retryEvent.Completion.Wait(TimeSpan.FromSeconds(5))
+            && retryEvent.Completion.GetAwaiter().GetResult())
+        {
+            DebugHelper.WriteLine("URL copied to clipboard: " + text);
+        }
+        else
+        {
+            DebugHelper.WriteException("Failed to copy the result URL to the clipboard.");
         }
     }
 

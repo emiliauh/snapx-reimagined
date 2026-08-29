@@ -248,7 +248,10 @@ public static class Extensions
                 is DefaultValueAttribute attr
             )
             {
-                prop.SetValue(self, attr.Value);
+                if (TryGetDefaultValue(attr, out object? value))
+                {
+                    prop.SetValue(self, value);
+                }
             }
         }
 
@@ -262,8 +265,35 @@ public static class Extensions
                 is DefaultValueAttribute attr
             )
             {
-                field.SetValue(self, attr.Value);
+                if (TryGetDefaultValue(attr, out object? value))
+                {
+                    field.SetValue(self, value);
+                }
             }
+        }
+    }
+
+    /// <summary>
+    /// Reads a <see cref="DefaultValueAttribute"/> value without letting a
+    /// runtime-uninstantiable converter abort object construction. In a
+    /// fully-trimmed / AOT build, a <c>[DefaultValue(typeof(T), "…")]</c>
+    /// attribute resolves its value lazily through a <see cref="TypeConverter"/>
+    /// that can only be created via reflection, and the runtime rejects that
+    /// with "Runtime instantiation of this attribute is not allowed". In that
+    /// situation the property/field's own initializer already supplies the
+    /// correct default, so we simply skip applying the attribute default.
+    /// </summary>
+    private static bool TryGetDefaultValue(DefaultValueAttribute attr, out object? value)
+    {
+        try
+        {
+            value = attr.Value;
+            return !ReferenceEquals(value, DBNull.Value);
+        }
+        catch
+        {
+            value = null;
+            return false;
         }
     }
 

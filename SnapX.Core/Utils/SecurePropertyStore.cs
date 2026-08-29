@@ -254,7 +254,16 @@ public sealed class SecurePropertyStore(byte[] masterKey)
 
     private static byte[] RemovePaddingWithLength(byte[] paddedData)
     {
+        if (paddedData.Length < 4)
+        {
+            throw new CryptographicException("Encrypted payload is missing its length prefix.");
+        }
+
         var originalLength = BinaryPrimitives.ReadInt32LittleEndian(paddedData.AsSpan(0, 4));
+        if (originalLength < 0 || originalLength > paddedData.Length - 4)
+        {
+            throw new CryptographicException("Encrypted payload has an invalid length prefix.");
+        }
 
         return paddedData.AsSpan(4, originalLength).ToArray();
     }

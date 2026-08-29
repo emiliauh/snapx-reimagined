@@ -377,12 +377,17 @@ public partial class App : Application
         }
         _singleInstance?.Dispose();
         _singleInstance = null;
+        SingleInstanceManager.RelaunchWithoutCommandRequested -= OnRelaunchWithoutCommandRequested;
         foreach (IDisposable registration in _signalRegistrations)
         {
             registration.Dispose();
         }
         _signalRegistrations.Clear();
-        StopWaylandClipboardProcess();
+        // A foreground wl-copy process owns a Wayland selection after a
+        // one-shot upload exits. Releasing our handle lets it survive until
+        // the next clipboard owner replaces it; killing it here would clear
+        // a just-copied upload URL before the user can paste it.
+        ReleaseWaylandClipboardProcess();
         ReplaceClipboardBitmap(null);
         MyMainWindow = null;
     }
@@ -544,6 +549,59 @@ public partial class App : Application
         }
     }
 
+    private static async Task<bool> TrySetWaylandClipboardTextAsync(string text)
+    {
+        if (!IsWaylandSession()) return false;
+
+        try
+        {
+            Process? process = Process.Start(
+                new ProcessStartInfo
+                {
+                    FileName = "wl-copy",
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    ArgumentList = { "--foreground", "--type", "text/plain;charset=utf-8" }
+                }
+            );
+
+            if (process is null)
+            {
+                throw new InvalidOperationException("Could not start wl-copy.");
+            }
+
+            await process.StandardInput.WriteAsync(text);
+            await process.StandardInput.DisposeAsync();
+
+            // wl-copy stays alive while it owns the Wayland selection. Keep
+            // it after the application exits so a one-shot recording upload
+            // remains pasteable, just as image clipboard writes do.
+            Task exited = process.WaitForExitAsync();
+            if (await Task.WhenAny(exited, Task.Delay(100)) == exited)
+            {
+                string error = await process.StandardError.ReadToEndAsync();
+                if (process.ExitCode != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"wl-copy exited with status {process.ExitCode}: {error.Trim()}"
+                    );
+                }
+
+                process.Dispose();
+                return true;
+            }
+
+            RetainWaylandClipboardProcess(process);
+            return true;
+        }
+        catch (Win32Exception)
+        {
+            return false;
+        }
+    }
+
     private static void RetainWaylandClipboardProcess(Process process)
     {
         Process? previous;
@@ -583,6 +641,20 @@ public partial class App : Application
         }
     }
 
+    private static void ReleaseWaylandClipboardProcess()
+    {
+        Process? process;
+        lock (WaylandClipboardProcessLock)
+        {
+            process = _waylandClipboardProcess;
+            _waylandClipboardProcess = null;
+        }
+
+        // Do not signal the process. The compositor will end it when a later
+        // clipboard write replaces this selection.
+        process?.Dispose();
+    }
+
     public static async Task SetClipboardDataObjectAsync(
         IClipboard clipboard,
         DataTransfer dataTransfer,
@@ -617,6 +689,12 @@ public partial class App : Application
         await ClipboardWriteGate.WaitAsync();
         try
         {
+            if (await TrySetWaylandClipboardTextAsync(text))
+            {
+                ReplaceClipboardBitmap(null);
+                return;
+            }
+
             StopWaylandClipboardProcess();
             await clipboard.SetTextAsync(text);
             ReplaceClipboardBitmap(null);
@@ -646,8 +724,27 @@ public partial class App : Application
         Core.SnapXL.EventAggregator.Subscribe<NeedOCRWindowEvent>(HandleOCRWindowRequestEvent);
         Core.SnapXL.EventAggregator.Subscribe<NeedScanQRCodeEvent>(HandleScanQRCodeEvent);
         Core.SnapXL.EventAggregator.Subscribe<NeedToastNotificationEvent>(HandleToastNotificationEvent);
+        Core.SnapXL.EventAggregator.Subscribe<NeedScrollCaptureResultEvent>(HandleScrollCaptureResultEvent);
     }
-    void HandleOCRWindowRequestEvent(NeedOCRWindowEvent @event)
+    void HandleScrollCaptureResultEvent(NeedScrollCaptureResultEvent @event)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                // The result window takes ownership of the image clone and
+                // disposes it (and its display bitmap) on close.
+                var window = new ScrollingCaptureWindow(@event.Image, @event.TaskSettings, @event.Options);
+                window.Show();
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Failed to open the scrolling capture window");
+                try { @event.Image?.Dispose(); } catch { /* already released */ }
+            }
+        });
+    }
+     void HandleOCRWindowRequestEvent(NeedOCRWindowEvent @event)
     {
         Dispatcher.UIThread.Invoke(() =>
         {
@@ -664,6 +761,68 @@ public partial class App : Application
             if (@event.HasImage) qrView.ScanImage(@event.Image);
             else qrView.QRText.Text = @event.Text;
         });
+    }
+
+    void HandlePinToScreenEvent(NeedPinToScreenEvent @event)
+    {
+        try
+        {
+            if (@event.CloseAll)
+            {
+                PinToScreenWindowManager.CloseAll();
+                @event.MarkAsHandled();
+                return;
+            }
+
+            if (@event.Image is not { } source)
+            {
+                @event.MarkAsFailed();
+                return;
+            }
+
+            // Convert to an Avalonia bitmap on the dispatcher before completing
+            // the event. The worker owns the source Image and disposes it as soon
+            // as the event completes, so the pixels must be copied out first. The
+            // window manager takes ownership of the resulting bitmap.
+            Bitmap bitmap = Dispatcher.UIThread.Invoke(() => SnapX.ConvertImageSharpImgToAvalonia(source));
+            PinToScreenWindowManager.Pin(bitmap, @event.TaskSettings);
+            @event.MarkAsHandled();
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to pin image to screen");
+            @event.MarkAsFailed();
+        }
+    }
+
+    void HandleEditImageEvent(NeedEditImageEvent @event)
+    {
+        try
+        {
+            if (@event.Image is not { } source)
+            {
+                @event.Complete(null);
+                return;
+            }
+
+            // Convert on the dispatcher before completing the request. The
+            // worker owns the cloned source image and the editor must be able
+            // to composite onto it, so use the event's clone directly. The
+            // editor takes responsibility for closing the window and completing
+            // the request with either an edited image or null (cancel).
+            Dispatcher.UIThread.Post(() =>
+            {
+                var editor = new CapturedImageEditorWindow(@event, SnapX.ConvertImageSharpImgToAvalonia(source));
+                editor.Show();
+            });
+            // The worker awaits Completion; it is completed when the editor
+            // window is saved or cancelled.
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to open the image editor");
+            @event.Complete(null);
+        }
     }
 
     void HandleToastNotificationEvent(NeedToastNotificationEvent @event)
@@ -962,10 +1121,29 @@ public partial class App : Application
 
     private static async Task<IClipboard> GetClipboardAsync()
     {
+        // A live window owns the native clipboard selection on X11/Wayland. A
+        // screen recording runs with the main window hidden (and possibly
+        // closed) so the after-upload "copy URL" can arrive with no reusable
+        // window; the old fallback re-showed MyMainWindow, which throws
+        // "Cannot re-show a closed window" and silently dropped the URL.
+        // RestoreAndFocusMainWindow re-creates a closed window or re-shows a
+        // hidden one, then we read the clipboard from that live window.
+        if (MyMainWindow is { IsLoaded: true } liveWindow)
+        {
+            return liveWindow.Clipboard;
+        }
+
+        RestoreAndFocusMainWindow();
+        if (MyMainWindow is { IsLoaded: true } restoredWindow)
+        {
+            return restoredWindow.Clipboard;
+        }
+
         if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var window =
-                desktop.Windows.FirstOrDefault(w => w.IsActive) ?? desktop.Windows.FirstOrDefault();
+                desktop.Windows.FirstOrDefault(w => w.IsActive && w.IsLoaded)
+                ?? desktop.Windows.FirstOrDefault(w => w.IsLoaded);
             if (window != null)
             {
                 return window.Clipboard;
@@ -975,49 +1153,25 @@ public partial class App : Application
         return await GetOrCreateClipboardWindowAsync();
     }
 
-    private static async Task<IClipboard> GetOrCreateClipboardWindowAsync()
+    private static Task<IClipboard> GetOrCreateClipboardWindowAsync()
     {
         lock (_windowLock)
         {
-            if (!MyMainWindow?.IsVisible ?? false)
+            // MyMainWindow can be null (never created) or a closed window
+            // object (Closed never nulls the field). Never call Show() on a
+            // closed Avalonia window: it throws and the clipboard write is
+            // lost. RestoreAndFocusMainWindow re-creates/re-shows a live one.
+            if (MyMainWindow is null || !MyMainWindow.IsLoaded)
             {
-                DebugHelper.WriteLine("Creating persistent clipboard window");
-                var openedTcs = new TaskCompletionSource<bool>();
-
-                MyMainWindow.Opened += (s, e) =>
-                {
-                    DebugHelper.WriteLine($"{nameof(MyMainWindow)}: opened");
-                    openedTcs.TrySetResult(true);
-                };
-
-                Task.Run(async () =>
-                {
-                    try
-                    {
-                        var openedTask = openedTcs.Task;
-                        var timeoutTask = Task.Delay(500);
-
-                        var completedTask = await Task.WhenAny(openedTask, timeoutTask);
-
-                        if (completedTask == openedTask)
-                        {
-                            DebugHelper.WriteLine("Window opened successfully");
-                        }
-                        else
-                        {
-                            DebugHelper.WriteLine("Window opened timed out, but continuing");
-                            openedTcs.TrySetResult(false);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        DebugHelper.WriteLine($"Error waiting for window open: {ex.Message}");
-                    }
-                });
-                MyMainWindow.Show();
+                RestoreAndFocusMainWindow();
             }
 
-            return MyMainWindow.Clipboard;
+            if (MyMainWindow?.Clipboard is { } clipboard)
+            {
+                return Task.FromResult(clipboard);
+            }
+
+            throw new InvalidOperationException("Failed to obtain the SnapX clipboard window.");
         }
     }
     CancellationTokenSource? _pollingCts = null;
@@ -1146,6 +1300,11 @@ public partial class App : Application
                     // Forwarding now happens before Avalonia starts, so secondary
                     // processes exit immediately without entering this lifetime.
                     _singleInstance = Program.ForwardedPrimaryInstance;
+                    // A relaunch that carries no CLI command (app launcher,
+                    // desktop entry, dock) must resurface this instance's
+                    // window instead of silently doing nothing.
+                    SingleInstanceManager.RelaunchWithoutCommandRequested -= OnRelaunchWithoutCommandRequested;
+                    SingleInstanceManager.RelaunchWithoutCommandRequested += OnRelaunchWithoutCommandRequested;
                     // Drain anything received while Avalonia was starting and
                     // make future arrivals dispatch immediately.
                     _singleInstance?.MarkDispatchReady();
@@ -1156,6 +1315,7 @@ public partial class App : Application
                         _coreStarted = true;
                         var CLIManager = SnapX.GetCLIManager();
                         CLIManager.UseCommandLineArgs().GetAwaiter().GetResult();
+                        Program.StartOneShotExitGuard();
                     }
                     catch (Exception ex)
                     {
@@ -1396,6 +1556,14 @@ public partial class App : Application
                         var regionCaptureMenuItem = new NativeMenuItem(Lang.UI_Dropdown_Region);
                         regionCaptureMenuItem.Click += async (_, _) => await TaskHelpers.ExecuteJob(HotkeyType.RectangleRegion);
                         capture.Menu.Items.Add(regionCaptureMenuItem);
+                        var scrollingCaptureMenuItem = new NativeMenuItem(Lang.UI_Dropdown_ScrollingCapture);
+                        scrollingCaptureMenuItem.Click += async (_, _) =>
+                            TaskHelpers.OpenScrollingCapture(TaskSettings.GetDefaultTaskSettings());
+                        capture.Menu.Items.Add(scrollingCaptureMenuItem);
+                        var annotateMenuItem = new NativeMenuItem(Lang.UI_Dropdown_Annotate);
+                        annotateMenuItem.Click += async (_, _) =>
+                            TaskHelpers.OpenImageEditor(TaskSettings.GetDefaultTaskSettings());
+                        capture.Menu.Items.Add(annotateMenuItem);
                         // capture.Menu.Items.Add(new NativeMenuItem("Region (Light)"));
                         // capture.Menu.Items.Add(new NativeMenuItem("Region (Transparent)"));
                         menu.Items.Add(capture);
@@ -1519,13 +1687,14 @@ public partial class App : Application
                         menu.Items.Add(latestVideo);
 
                         var settingsItem = new NativeMenuItem("Settings");
-                        settingsItem.Click += (_, _) => CreateOrOpenSettingsWindowStatic();
+                        settingsItem.Click += (_, _) => OpenInAppSettings();
                         menu.Items.Add(settingsItem);
 
                         menu.Items.Add(new NativeMenuItemSeparator());
 
                         var open = new NativeMenuItem("Open");
                         open.Command = OpenSnapXCommand;
+                        open.Click += NativeMenuItem_Open_OnClick;
                         menu.Items.Add(open);
 
                         var quit = new NativeMenuItem("Quit");
@@ -1563,7 +1732,7 @@ public partial class App : Application
                         _recordingTrayController = new RecordingTrayController();
                     }
 
-                    if (SnapX.isSilent())
+                    if (SnapX.isSilent() || Program.OneShotRequested)
                         return;
                     if (SnapX.GetCLIManager().IsCommandExist("video"))
                     {
@@ -1628,6 +1797,33 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Opens the settings page inside the main SnapX window rather than in a
+    /// detached SettingsWindow. The main window is restored to the foreground
+    /// first (it may be minimized or hidden to the tray), then its current
+    /// page is switched to the in-app settings host. Keeping settings inside
+    /// the app avoids the separate windowed settings surface.
+    /// </summary>
+    public static void OpenInAppSettings()
+    {
+        RestoreAndFocusMainWindow();
+
+        if (MyMainWindow?.DataContext is not MainViewModel mainViewModel)
+        {
+            DebugHelper.WriteLine("OpenInAppSettings: the main window has no MainViewModel data context.");
+            return;
+        }
+
+        try
+        {
+            mainViewModel.CurrentPage = Ioc.Default.GetRequiredService<InAppSettingsHostVM>();
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to open settings inside the SnapX main window.");
+        }
+    }
+
     public static void CreateAboutWindowStatic()
     {
         var aboutWindow = Design.IsDesignMode
@@ -1664,7 +1860,7 @@ public partial class App : Application
         services.AddLogging(loggingBuilder => loggingBuilder.AddSerilog(dispose: true));
 
         services.AddTransient<MainViewModel>();
-        services.AddTransient<MainWindow>();
+        services.AddSingleton<MainWindow>();
         services.AddTransient<RegionSelectorViewModel>();
         services.AddTransient<RegionSelectorWindow>();
         services.AddTransient<InAppSettingsHost>();
@@ -1755,35 +1951,281 @@ public partial class App : Application
 
     private void NativeMenuItem_Open_OnClick(object? Sender, EventArgs E)
     {
-        if (MyMainWindow is null || !MyMainWindow.IsLoaded)
+        RestoreAndFocusMainWindow();
+    }
+
+    /// <summary>
+    /// Brings the main window back from every state it can be parked in:
+    /// never created, closed, hidden to the tray, or minimized. This is the
+    /// single entry point used by the tray "Open" item and by a relaunch of
+    /// SnapX from the app launcher, so both always end with a visible,
+    /// focused, foreground window.
+    /// </summary>
+    public static void RestoreAndFocusMainWindow()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
         {
-            var mainWindow = Design.IsDesignMode
-                ? Activator.CreateInstance<MainWindow>()
-                : Ioc.Default.GetService<MainWindow>();
-            if (mainWindow is null)
+            Dispatcher.UIThread.Post(RestoreAndFocusMainWindow);
+            return;
+        }
+
+        try
+        {
+            // On Hyprland a minimized window lives on the special:minimized
+            // workspace, which Avalonia's Show/Activate/Focus cannot leave on
+            // its own. Move the SnapX window back to a real workspace first so
+            // the subsequent Activate/Focus actually lands somewhere visible.
+            TryRestoreHyprlandSpecialWindow();
+
+            if (MyMainWindow is null || !MyMainWindow.IsLoaded)
             {
-                DebugHelper.WriteLine("Failed to create main window, got null back from IoC");
+                var mainWindow = Design.IsDesignMode
+                    ? Activator.CreateInstance<MainWindow>()
+                    : Ioc.Default.GetService<MainWindow>();
+                if (mainWindow is null)
+                {
+                    DebugHelper.WriteLine("Failed to create main window, got null back from IoC");
+                    return;
+                }
+
+                MyMainWindow = mainWindow;
+                WaylandAppIdentity.Attach(MyMainWindow);
+                if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    desktop.MainWindow ??= MyMainWindow;
+                }
+
+                MyMainWindow.Show();
+            }
+
+            var window = MyMainWindow;
+            if (window is null || !window.IsLoaded)
+            {
                 return;
             }
 
-            MyMainWindow = mainWindow;
-            MyMainWindow.Show();
+            // Order matters: a minimized window must leave the minimized state
+            // before Show/Activate, otherwise some backends re-show it still
+            // iconified and the activation request is dropped.
+            if (window.WindowState == global::Avalonia.Controls.WindowState.Minimized)
+            {
+                window.WindowState = global::Avalonia.Controls.WindowState.Normal;
+            }
+
+            if (!window.IsVisible)
+            {
+                try
+                {
+                    window.Show();
+                }
+                catch (Exception showEx)
+                {
+                    DebugHelper.WriteException(showEx, "Main window could not be shown; recreating it.");
+                    MyMainWindow = null;
+                    RestoreAndFocusMainWindow();
+                    return;
+                }
+            }
+
+            window.ShowInTaskbar = true;
+            window.Activate();
+            window.Focus();
+            ForceForegroundWindow(window);
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to restore and focus the SnapX main window.");
+        }
+    }
+
+    /// <summary>
+    /// Moves any SnapX toplevel parked on Hyprland's special:minimized
+    /// workspace back to the currently focused real workspace. On Wayland the
+    /// compositor owns window placement, so this uses hyprctl directly rather
+    /// than relying on Avalonia. No-ops on non-Hyprland sessions.
+    /// </summary>
+    private static void TryRestoreHyprlandSpecialWindow()
+    {
+        if (!OperatingSystem.IsLinux() || !IsHyprlandSession())
+        {
+            return;
         }
 
-        if (!MyMainWindow?.IsVisible ?? true)
-            MyMainWindow?.Show();
-        MyMainWindow?.Focus();
-        MyMainWindow?.Activate();
-        if (MyMainWindow != null)
+        try
         {
-            // MyMainWindow.Closed += (_, _) => MyMainWindow = null;
+            string appClass = "io.emiliauh.SnapXL.SnapX";
+            string workspace = GetHyprlandActiveWorkspaceId();
+            if (string.IsNullOrWhiteSpace(workspace) || workspace == "-99" || workspace == "-98")
+            {
+                workspace = "1";
+            }
+
+            // Single quotes are literal in the Hyprland Lua dispatch, avoiding
+            // the need to escape double quotes embedded in the C# string.
+            string dispatchExpression = string.Format(
+                "hl.dsp.window.move({{ workspace = '{0}', window = 'class:{1}', follow = false }})",
+                workspace,
+                appClass);
+
+            if (!TryRunHyprctlCommand(dispatchExpression))
+            {
+                DebugHelper.WriteLine("Failed to move SnapX out of special:minimized on Hyprland.");
+            }
         }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to restore SnapX from Hyprland's special workspace.");
+        }
+    }
+
+    private static string GetHyprlandActiveWorkspaceId()
+    {
+        try
+        {
+            ProcessResult result = RunHyprctlCommand("activeworkspace");
+            if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Output))
+            {
+                string line = result.Output.Split('\n').FirstOrDefault(l => l.StartsWith("workspace ID")) ?? "";
+                string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 3 && int.TryParse(parts[2], out int id))
+                {
+                    return id.ToString();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to read the Hyprland active workspace.");
+        }
+
+        return "1";
+    }
+
+    private static bool IsHyprlandSession()
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE")))
+        {
+            return true;
+        }
+
+        string desktops = string.Join(' ',
+            Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP"),
+            Environment.GetEnvironmentVariable("XDG_SESSION_DESKTOP"));
+        return desktops.Contains("Hyprland", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryRunHyprctlCommand(string dispatchExpression)
+    {
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "hyprctl",
+                    ArgumentList = { "dispatch", dispatchExpression },
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            process.Start();
+            process.StandardOutput.ReadToEnd();
+            process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(5000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* already exited */ }
+                return false;
+            }
+            return process.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to run a Hyprland dispatch.");
+            return false;
+        }
+    }
+
+    private readonly record struct ProcessResult(int ExitCode, string Output, string Error);
+
+    private static ProcessResult RunHyprctlCommand(string argument)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "hyprctl",
+                ArgumentList = { argument },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        process.Start();
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(5000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* already exited */ }
+            throw new InvalidOperationException("hyprctl did not respond within five seconds.");
+        }
+        return new ProcessResult(process.ExitCode, output, error);
+    }
+
+    /// <summary>
+    /// Platform assist for the case Avalonia cannot cover on its own: a window
+    /// restored out of the tray still loses the foreground race on Windows,
+    /// and a background macOS app needs an explicit application activation.
+    /// </summary>
+    private static void ForceForegroundWindow(Window window)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var handle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+                if (handle != IntPtr.Zero)
+                {
+                    ShowWindow(handle, SW_RESTORE);
+                    SetForegroundWindow(handle);
+                }
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                // Avalonia's macOS backend maps Activate() onto
+                // activateIgnoringOtherApps for the owning application, so a
+                // second Activate after the window is visible is what pulls a
+                // background SnapX to the front.
+                window.Activate();
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to force the SnapX main window to the foreground.");
+        }
+    }
+
+    private const int SW_RESTORE = 9;
+
+    [DllImport("user32.dll")]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    private static void OnRelaunchWithoutCommandRequested()
+    {
+        RestoreAndFocusMainWindow();
     }
 
     [RelayCommand]
     private void OpenSnapX()
     {
-        NativeMenuItem_Open_OnClick(this, EventArgs.Empty);
+        RestoreAndFocusMainWindow();
     }
 
     private void NativeMenu_OnNeedsUpdate(object? Sender, EventArgs E)

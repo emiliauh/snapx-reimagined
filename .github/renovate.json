@@ -3,7 +3,7 @@
 	"extends": ["config:recommended", ":semanticCommitTypeAll(build)"],
 	"prCreation": "not-pending",
 	"semanticCommits": "enabled",
-	"automerge": true,
+	"automerge": false,
 	"labels": ["dependencies"],
 	"automergeSchedule": ["before 8am every weekday"],
     "rebaseWhen": "conflicted",
@@ -29,11 +29,11 @@
 			  "matchDepNames": ["dotnet-sdk"],
 			  "enabled": false
 		  },
-          {
-            "description": "Merge maintained BrycensRanch packages soon as possible",
-            "matchDepNames": ["*BrycensRanch*", "WaylandSharper"],
-            "minimumReleaseAge": "0 minutes"
-          },
+		  {
+			  "description": "Review internal and Wayland package updates before merging",
+			  "matchDepNames": ["*BrycensRanch*", "WaylandSharper"],
+			  "minimumReleaseAge": "2 days"
+		  },
           {
             "matchDepNames": ["*Wayland*", "*DBus*"],
             "labels": ["linux"]

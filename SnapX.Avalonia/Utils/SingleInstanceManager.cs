@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -11,6 +12,9 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using SnapX.Core.CLI;
 using SnapX.Core;
+using SnapX.Core.Capture;
+using SnapX.Core.ScreenCapture;
+using SnapX.Core.Job;
 
 namespace SnapX.Avalonia.Utils;
 
@@ -45,6 +49,14 @@ public sealed class SingleInstanceManager : IDisposable
     private readonly SemaphoreSlim _clientSlots = new(MaximumConcurrentClients, MaximumConcurrentClients);
     private volatile bool _dispatchReady;
     private bool _disposed;
+
+    /// <summary>
+    /// Raised on the UI thread when another launch of SnapX forwarded no
+    /// runnable CLI command (for example the user picked SnapX again in the
+    /// app launcher). The primary instance handles this by restoring and
+    /// focusing its main window instead of doing nothing visible.
+    /// </summary>
+    public static event Action? RelaunchWithoutCommandRequested;
 
     private SingleInstanceManager(Socket listener, FileStream instanceLock)
     {
@@ -390,7 +402,7 @@ public sealed class SingleInstanceManager : IDisposable
     {
         while (_pendingArgs.TryDequeue(out string[]? args))
         {
-            Dispatcher.UIThread.Post(() => ExecuteForwardedArgs(args));
+            Dispatcher.UIThread.Post(() => DispatchForwardedArgs(args));
         }
     }
 
@@ -445,8 +457,63 @@ public sealed class SingleInstanceManager : IDisposable
         return Encoding.UTF8.GetString(payload).Split('\0');
     }
 
+    /// <summary>
+    /// Routes one forwarded launch: a launch that carries no CLI command is a
+    /// plain "open SnapX again" request and is turned into a restore+focus
+    /// signal, anything else keeps the existing CLI execution path.
+    /// </summary>
+    private static void DispatchForwardedArgs(string[] args)
+    {
+        string[] meaningful = args
+            .Where(argument => !string.IsNullOrWhiteSpace(argument))
+            .ToArray();
+
+        if (meaningful.Length == 0 || !HasRunnableCommand(meaningful))
+        {
+            DebugHelper.WriteLine("Forwarded SnapX launch carried no command; restoring the main window.");
+            try
+            {
+                RelaunchWithoutCommandRequested?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Failed to restore the SnapX window for a forwarded launch.");
+            }
+
+            return;
+        }
+
+        ExecuteForwardedArgs(meaningful);
+    }
+
+    private static bool HasRunnableCommand(string[] args)
+    {
+        try
+        {
+            var manager = new SnapXCLIManager(args);
+            return manager.ParseCommands() && manager.Commands.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to inspect forwarded SnapX arguments.");
+            return false;
+        }
+    }
+
     private static void ExecuteForwardedArgs(string[] args)
     {
+        // Hyprland managed bindings spawn a one-shot CLI while the GlobalShortcuts
+        // portal can deliver the same hotkey to the resident instance. Ignore the
+        // forwarded duplicate when an interactive selector is already active.
+        if (IsForwardedInteractiveCapture(args)
+            && (RegionCaptureTasks.IsSelectionActive
+                || !CaptureBase.WaitForActiveCaptureAsync().IsCompleted))
+        {
+            DebugHelper.WriteLine(
+                "Ignoring forwarded capture command because an interactive selector is already active.");
+            return;
+        }
+
         // Dispatch the forwarded CLI commands on a background thread so running
         // a capture job (which may itself await the UI or select a region) does
         // not block the UI thread or deadlock around Dispatcher.UIThread.
@@ -464,6 +531,28 @@ public sealed class SingleInstanceManager : IDisposable
                     DebugHelper.WriteException(ex, "Failed to execute forwarded SnapX arguments."));
             }
         });
+    }
+
+    private static bool IsForwardedInteractiveCapture(string[] args)
+    {
+        foreach (string argument in args)
+        {
+            if (argument.Length <= 1 || argument[0] != '-')
+            {
+                continue;
+            }
+
+            string name = argument[1..].TrimStart('-');
+            if (Enum.TryParse(name, ignoreCase: true, out HotkeyType job)
+                && job is HotkeyType.RectangleRegion
+                    or HotkeyType.ScreenRecorder
+                    or HotkeyType.ScrollingCapture)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string SocketPath() =>

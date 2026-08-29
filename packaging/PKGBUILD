@@ -12,6 +12,8 @@ makedepends=(
     'dotnet-sdk>=10.0'
     'clang'
     'zlib'
+    'pango'
+    'wayland'
 )
 source=("$pkgbase::git+https://github.com/emiliauh/snapx-reimagined.git#branch=main")
 sha256sums=('SKIP')
@@ -62,6 +64,7 @@ check() {
 package_snapx-core() {
     depends=(
         'ffmpeg'
+        'wf-recorder'
         'fontconfig'
         'freetype2'
         'openssl'
@@ -109,7 +112,7 @@ package_snapx() {
 }
 package_snapx-ui() {
     pkgdesc="Screenshot tool that handles images, text, and video (fork of ShareX). SnapX Avalonia-based UI (works best on X11)"
-    depends=('snapx-core')
+    depends=('snapx-core' 'pango' 'cairo' 'wayland')
 
     cd "$pkgbase"
     ./build.sh install --prefix /usr --dest-dir "${pkgdir}" --assembly snapx-ui --skip compile

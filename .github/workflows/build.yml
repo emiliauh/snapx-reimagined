@@ -63,6 +63,7 @@ jobs:
         id: build_rpm
         env:
           API_KEYS: ${{ secrets.API_KEYS }}
+          API_KEYS_SHA256: ${{ secrets.API_KEYS_SHA256 }}
         run: |
           cd packaging
           VERSION_STRING=$(../build.sh --version | tail -n1 | tr -d '\n')
@@ -115,14 +116,12 @@ jobs:
             arch: X64
           - os: ubuntu-24.04-arm
             arch: ARM64
-    env:
-      API_KEYS: ${{ secrets.API_KEYS }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
@@ -136,14 +135,6 @@ jobs:
           large-packages: false
           docker-images: false
           swap-storage: false
-      - name: Download API keys
-        env:
-          API_KEYS: ${{ secrets.API_KEYS }}
-        if: env.API_KEYS != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL "$API_KEYS" -o SnapX.Core/Upload/APIKeysLocal.cs
       - name: Grab pretty OS name
         id: osname
         run: |
@@ -152,13 +143,23 @@ jobs:
       - name: Setup environment
         if: matrix.pretty_arch == ''
         run: |
+          set -euo pipefail
           sudo apt update
           sudo apt -y install git gpg snapd
           sudo snap install snapcraft --classic
-          sudo bash -c "$(curl -fsSL https://pacstall.dev/q/install)"
+          pacstall_deb="${RUNNER_TEMP}/pacstall_6.3.11-pacstall1_all.deb"
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --silent --show-error \
+            "https://github.com/pacstall/pacstall/releases/download/6.3.11/pacstall_6.3.11-pacstall1_all.deb" \
+            --output "$pacstall_deb"
+          echo "6739f25f41e47f031d87cec79c26559647512c7ad5a961a2d45a3fc8eb85e00d  $pacstall_deb" | sha256sum --check --status
+          sudo apt -y install "$pacstall_deb"
+          rm -f "$pacstall_deb"
       - name: Build Deb
         if: matrix.pretty_arch == ''
         working-directory: packaging
+        env:
+          API_KEYS: ${{ secrets.API_KEYS }}
+          API_KEYS_SHA256: ${{ secrets.API_KEYS_SHA256 }}
         run: |
           # Pin the pacscript source to the exact commit being built so pacstall's
           # git-integrity check cannot race the flathub-vendor bot that advances main.
@@ -273,11 +274,11 @@ jobs:
       - name: Download API keys
         env:
           API_KEYS: ${{ secrets.API_KEYS }}
+          API_KEYS_SHA256: ${{ secrets.API_KEYS_SHA256 }}
         if: env.API_KEYS != ''
         shell: bash
         run: |
-          set -euo pipefail
-          curl -fsSL "$API_KEYS" -o SnapX.Core/Upload/APIKeysLocal.cs
+          bash build/download_api_keys.sh
       - name: Prepare Flatpak build directory
         run: |
           # Copy flatpak files to workspace root, preserving directory structure
@@ -327,7 +328,7 @@ jobs:
           fetch-depth: 0
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
@@ -353,9 +354,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-nuget-
       - name: Restore
-        run: dotnet restore --packages ./vendor SnapX.slnx
+        run: dotnet restore --locked-mode --packages ./vendor SnapX.slnx
       - name: Restore build project
-        run: dotnet restore --packages ./vendor build/build.csproj
+        run: dotnet restore --locked-mode --packages ./vendor build/build.csproj
       - name: Run fuzz and property checks (Linux x64)
         if: runner.os == 'Linux' && runner.arch == 'X64' && matrix.configuration == 'Release'
         run: dotnet run --project tests/SnapX.Core.Fuzz --configuration Release --no-restore
@@ -437,11 +438,11 @@ jobs:
       - name: Download API keys
         env:
           API_KEYS: ${{ secrets.API_KEYS }}
+          API_KEYS_SHA256: ${{ secrets.API_KEYS_SHA256 }}
         if: env.API_KEYS != ''
         shell: bash
         run: |
-          set -euo pipefail
-          curl -fsSL "$API_KEYS" -o SnapX.Core/Upload/APIKeysLocal.cs
+          bash build/download_api_keys.sh
       #      - name: Enforce code style using dotnet format
       #        if: matrix.configuration == 'Debug' && runner.os == 'Linux' && runner.arch == 'X64'
       #        run: |
@@ -449,7 +450,9 @@ jobs:
       #            --include $(find . -type f -name '*.cs' ! -path './build/*' ! -path './SnapX.Core/Upload/APIKeysLocal.cs')
       - name: Publish
         shell: bash
-        run: ./build.sh --configuration ${{ matrix.configuration }}
+        run: |
+          ./build.sh --configuration ${{ matrix.configuration }}
+          rm -f SnapX.Core/Upload/APIKeysLocal.cs
       - name: Assemble and ad-hoc sign macOS app bundle
         if: runner.os == 'macOS'
         shell: bash

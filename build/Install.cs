@@ -105,6 +105,16 @@ public class Install(IBuildLogger Logger, ICommandRunner CommandRunner, FS FileS
 
             if (config.TargetInstallAssembly is not null)
             {
+                // Only files from the requested assembly can establish ownership.
+                // Otherwise files first seen in another assembly's output directory
+                // (for example libe_sqlite3.so in snapx) prevent the requested UI
+                // assembly from installing its own required native dependencies.
+                if (!string.Equals(assembly, config.TargetInstallAssembly, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Information($"{outputFile} is not apart of the requested assembly!");
+                    continue;
+                }
+
                 if (!seenFileOwners.TryAdd(fileName, assembly))
                 {
                     // Someone else already owns this file
@@ -114,12 +124,6 @@ public class Install(IBuildLogger Logger, ICommandRunner CommandRunner, FS FileS
                         Logger.Information($"{fileName} is owned by another assembly!");
                         continue;
                     }
-                }
-
-                if (!string.Equals(assembly, config.TargetInstallAssembly, StringComparison.OrdinalIgnoreCase))
-                {
-                    Logger.Information($"{outputFile} is not apart of the requested assembly!");
-                    continue;
                 }
             }
             var (destinationFile, permissions) = GetBuildOutputDestination(outputFile);

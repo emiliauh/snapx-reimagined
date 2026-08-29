@@ -26,6 +26,7 @@ public sealed class RecordingTrayController : IDisposable
     private readonly Bitmap? _recordingIcon;
     private bool _recordingUiVisible;
     private bool _disposed;
+    private DispatcherTimer? _elapsedTimer;
 
     public RecordingTrayController(TrayIcon? trayIcon = null)
     {
@@ -127,13 +128,46 @@ public sealed class RecordingTrayController : IDisposable
         if (_trayIcon is not null && _recordingIcon is not null)
         {
             _trayIcon.Icon = new WindowIcon(_recordingIcon);
-            _trayIcon.ToolTipText = "SnapX is recording";
+            _trayIcon.ToolTipText = FormatElapsed(ScreenRecordManager.Elapsed);
         }
         var captureRectangle = ScreenRecordManager.CurrentCaptureRectangle;
         RecordingRegionOutline.Show(captureRectangle);
         RecordingControlWindow.ShowRecording(captureRectangle);
+        StartElapsedTicker();
         App.SendDesktopNotification(Core.SnapXL.AppName, "Recording started.");
     }
+
+    private void StartElapsedTicker()
+    {
+        StopElapsedTicker();
+        _elapsedTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _elapsedTimer.Tick += (_, _) =>
+        {
+            if (_disposed || !_recordingUiVisible)
+            {
+                return;
+            }
+
+            if (_trayIcon is not null)
+            {
+                _trayIcon.ToolTipText = FormatElapsed(ScreenRecordManager.Elapsed);
+            }
+            RecordingControlWindow.RefreshState();
+        };
+        _elapsedTimer.Start();
+    }
+
+    private void StopElapsedTicker()
+    {
+        _elapsedTimer?.Stop();
+        _elapsedTimer = null;
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed) =>
+        $"SnapX is recording — {elapsed:hh\\:mm\\:ss}";
 
     private void HideRecordingUi()
     {
@@ -142,6 +176,7 @@ public sealed class RecordingTrayController : IDisposable
             _trayIcon.Icon = new WindowIcon(_normalIcon);
             _trayIcon.ToolTipText = Core.SnapXL.AppName;
         }
+        StopElapsedTicker();
         RecordingRegionOutline.Hide();
         RecordingControlWindow.HideRecording();
     }

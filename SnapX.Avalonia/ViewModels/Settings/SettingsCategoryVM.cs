@@ -195,7 +195,6 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
     public bool HistoryCheckUrl { get => Config.HistoryCheckURL; set => SetApplicationBool(Config.HistoryCheckURL, x => Config.HistoryCheckURL = x, value, nameof(HistoryCheckUrl)); }
 
     public bool DisableUpload { get => Config.DisableUpload; set => SetApplicationBool(Config.DisableUpload, x => Config.DisableUpload = x, value, nameof(DisableUpload)); }
-    public bool AcceptInvalidSslCertificates { get => Config.AcceptInvalidSSLCertificates; set => SetApplicationBool(Config.AcceptInvalidSSLCertificates, x => Config.AcceptInvalidSSLCertificates = x, value, nameof(AcceptInvalidSslCertificates)); }
     public bool UrlEncodeIgnoreEmoji { get => Config.URLEncodeIgnoreEmoji; set => SetApplicationBool(Config.URLEncodeIgnoreEmoji, x => Config.URLEncodeIgnoreEmoji = x, value, nameof(UrlEncodeIgnoreEmoji)); }
     public bool ShowUploadWarning { get => Config.ShowUploadWarning; set => SetApplicationBool(Config.ShowUploadWarning, x => Config.ShowUploadWarning = x, value, nameof(ShowUploadWarning)); }
     public bool ShowMultiUploadWarning { get => Config.ShowMultiUploadWarning; set => SetApplicationBool(Config.ShowMultiUploadWarning, x => Config.ShowMultiUploadWarning = x, value, nameof(ShowMultiUploadWarning)); }

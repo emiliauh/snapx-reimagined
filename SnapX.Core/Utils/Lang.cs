@@ -37,6 +37,8 @@ public static class Lang
     public static string UI_Dropdown_Monitor => Get("UI_Dropdown_Monitor");
     public static string UI_Dropdown_ScreenRecording => Get("UI_Dropdown_ScreenRecording");
     public static string UI_Dropdown_ScreenRecordingGIF => Get("UI_Dropdown_ScreenRecordingGIF");
+    public static string UI_Dropdown_ScrollingCapture => Get("UI_Dropdown_ScrollingCapture");
+    public static string UI_Dropdown_Annotate => Get("UI_Dropdown_Annotate");
     public static string UI_Debug_TestImageUpload => Get("UI_Debug_TestImageUpload");
     public static string UI_Debug_TestTextUpload => Get("UI_Debug_TestTextUpload");
     public static string UI_Debug_TestFileUpload => Get("UI_Debug_TestFileUpload");

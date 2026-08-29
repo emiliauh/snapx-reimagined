@@ -34,7 +34,7 @@ while IFS= read -r row; do
         new_sha=$(sha512sum "$local_path" | cut -d' ' -f1)
     else
         echo "[$current/$item_count] Not in cache. Downloading: $url"
-        new_sha=$(curl -sL "$url" | sha512sum | cut -d' ' -f1)
+        new_sha=$(curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --silent --show-error "$url" | sha512sum | cut -d' ' -f1)
     fi
 
     updated_row=$(echo "$row" | jq --arg sha "$new_sha" '.sha512 = $sha')

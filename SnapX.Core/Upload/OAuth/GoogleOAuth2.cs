@@ -39,13 +39,16 @@ public class GoogleOAuth2 : IOAuth2Loopback
 
     public string? GetAuthorizationURL()
     {
+        AuthInfo.Proof = new OAuth2ProofKey(OAuth2ChallengeMethod.SHA256);
         var args = new Dictionary<string, string?>
         {
             { "response_type", "code" },
             { "client_id", AuthInfo.Client_ID },
             { "redirect_uri", RedirectURI },
             { "state", State },
-            { "scope", Scope }
+            { "scope", Scope },
+            { "code_challenge", AuthInfo.Proof.CodeChallenge },
+            { "code_challenge_method", AuthInfo.Proof.ChallengeMethod }
         };
 
         return URLHelpers.CreateQueryString(AuthorizationEndpoint, args);
@@ -59,7 +62,8 @@ public class GoogleOAuth2 : IOAuth2Loopback
             { "client_id", AuthInfo.Client_ID },
             { "client_secret", AuthInfo.Client_Secret },
             { "redirect_uri", RedirectURI },
-            { "grant_type", "authorization_code" }
+            { "grant_type", "authorization_code" },
+            { "code_verifier", AuthInfo.Proof?.CodeVerifier }
         };
 
         var response = GoogleUploader.SendRequestURLEncoded(HttpMethod.Post, TokenEndpoint, args);
@@ -143,4 +147,3 @@ public class GoogleOAuth2 : IOAuth2Loopback
     }
 
 }
-

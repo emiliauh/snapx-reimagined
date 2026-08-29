@@ -1,5 +1,6 @@
 using SixLabors.ImageSharp;
 using SnapX.Core.Job;
+using SnapX.Core.ScreenCapture;
 using Xdg.Directories;
 
 namespace SnapX.Core;
@@ -16,6 +17,7 @@ public class NeedFileOpenerEvent
     public bool HashCheck { get; set; }
     public bool VideoThumbnailer { get; set; }
     public bool VideoConverter { get; set; }
+    public bool PinToScreen { get; set; }
     public TaskSettings TaskSettings { get; set; }
 }
 
@@ -113,6 +115,107 @@ public class NeedOCRWindowEvent(Image Image, TaskSettings Settings)
 {
     public Image Image { get; set; } = Image;
     public TaskSettings TaskSettings { get; set; } = Settings;
+}
+
+/// <summary>
+/// Requests that the frontend pin an image to the screen in a topmost window.
+/// The worker publishes this with an ownership-safe clone so the UI may keep
+/// the bitmap after the worker disposes its own source. The result is reported
+/// back through <see cref="Completion"/> so the worker knows the UI honored the
+/// request (or failed) before releasing the capture.
+/// </summary>
+public class NeedPinToScreenEvent
+{
+    private readonly TaskCompletionSource<bool> _completion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
+
+    public NeedPinToScreenEvent(Image image, TaskSettings? taskSettings = null)
+    {
+        Image = image;
+        TaskSettings = taskSettings;
+    }
+
+    public Image Image { get; set; }
+    public TaskSettings? TaskSettings { get; set; }
+    public bool CloseAll { get; set; }
+
+    public Task<bool> Completion => _completion.Task;
+
+    public void MarkAsHandled()
+    {
+        _completion.TrySetResult(true);
+    }
+
+    public void MarkAsFailed()
+    {
+        _completion.TrySetResult(false);
+    }
+}
+
+/// <summary>
+/// Requests that the frontend open a modal image editor/annotation window.
+/// The worker publishes this with an ownership-safe clone so the editor may
+/// mutate or replace the image without touching the worker's capture. The
+/// result is returned through <see cref="Result"/>: a non-null image means the
+/// user accepted the edit, while <c>null</c> means the user cancelled.
+/// </summary>
+public class NeedEditImageEvent
+{
+    private readonly TaskCompletionSource<Image?> _completion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
+
+    public NeedEditImageEvent(Image image, TaskSettings? taskSettings = null)
+    {
+        Image = image;
+        TaskSettings = taskSettings;
+    }
+
+    public Image Image { get; set; }
+    public TaskSettings? TaskSettings { get; set; }
+    public Image? Result { get; private set; }
+
+    public Task<Image?> Completion => _completion.Task;
+
+    public void Complete(Image? result)
+    {
+        if (ReferenceEquals(result, Image))
+        {
+            // The editor mutated the clone in place; keep it as the result.
+            Result = Image;
+        }
+        else
+        {
+            Result = result;
+        }
+
+        _completion.TrySetResult(Result);
+    }
+}
+
+/// <summary>
+/// Requests that the frontend present the finished scroll-capture result in a
+/// window offering Capture, Upload/Save and Options actions, mirroring the
+/// upstream ShareX scrolling-capture window. The worker transfers ownership of
+/// <see cref="Image"/> to the UI (a clone); the UI disposes it when the window
+/// closes.
+/// </summary>
+public class NeedScrollCaptureResultEvent
+{
+    public NeedScrollCaptureResultEvent(
+        Image image,
+        TaskSettings taskSettings,
+        ScrollingCaptureOptions options)
+    {
+        Image = image;
+        TaskSettings = taskSettings;
+        Options = options;
+    }
+
+    public Image Image { get; }
+    public TaskSettings TaskSettings { get; }
+    public ScrollingCaptureOptions Options { get; }
 }
 
 public class NeedScanQRCodeEvent

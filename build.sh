@@ -61,8 +61,9 @@ fi
 BUILD_PROJECT_FILE="$SCRIPT_DIR/build/build.csproj"
 TEMP_DIRECTORY="$SCRIPT_DIR/build/temp"
 
-DOTNET_INSTALL_URL="https://dot.net/v1/dotnet-install.sh"
-DOTNET_CHANNEL="LTS"
+DOTNET_INSTALL_URL="https://raw.githubusercontent.com/dotnet/install-scripts/47940ac9fc30a2f2dd19167165d0bb0774625f67/src/dotnet-install.sh"
+DOTNET_INSTALL_SHA256="082f7685e156738a1b2e2ed8381a621870d4ce8e8c59278034556f05c186eb2e"
+DOTNET_VERSION="${DOTNET_VERSION:-$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SCRIPT_DIR/global.json" | head -n 1)}"
 
 export AVALONIA_TELEMETRY_OPTOUT=1
 export DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true
@@ -106,22 +107,36 @@ else
     DOTNET_INSTALL_FILE="$TEMP_DIRECTORY/dotnet-install.sh"
     mkdir -p "$TEMP_DIRECTORY"
     if command -v curl >/dev/null 2>&1; then
-        curl -Lsfo "$DOTNET_INSTALL_FILE" "$DOTNET_INSTALL_URL"
+        curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --silent --show-error \
+            "$DOTNET_INSTALL_URL" --output "$DOTNET_INSTALL_FILE"
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$DOTNET_INSTALL_FILE" "$DOTNET_INSTALL_URL"
+        wget --https-only --secure-protocol=TLSv1_2 -qO "$DOTNET_INSTALL_FILE" "$DOTNET_INSTALL_URL"
     else
         echo "Neither curl nor wget is installed. Please install one to proceed."
         exit 1
     fi
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        actual_sha256=$(sha256sum "$DOTNET_INSTALL_FILE" | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+        actual_sha256=$(shasum -a 256 "$DOTNET_INSTALL_FILE" | awk '{print $1}')
+    else
+        echo "A SHA-256 utility is required to verify the .NET installer." >&2
+        exit 1
+    fi
+    if [ "$actual_sha256" != "$DOTNET_INSTALL_SHA256" ]; then
+        echo "The downloaded .NET installer did not match its expected SHA-256." >&2
+        exit 1
+    fi
     chmod +x "$DOTNET_INSTALL_FILE"
 
-    # Install by channel or version
+    # Use the repository's exact SDK version rather than a moving channel.
     DOTNET_DIRECTORY="$TEMP_DIRECTORY/dotnet-unix"
-    if [ -z "${DOTNET_VERSION+x}" ]; then
-        "$DOTNET_INSTALL_FILE" --install-dir "$DOTNET_DIRECTORY" --channel "$DOTNET_CHANNEL" --no-path
-    else
-        "$DOTNET_INSTALL_FILE" --install-dir "$DOTNET_DIRECTORY" --version "$DOTNET_VERSION" --no-path
+    if [ -z "$DOTNET_VERSION" ]; then
+        echo "The SDK version is missing from global.json." >&2
+        exit 1
     fi
+    "$DOTNET_INSTALL_FILE" --install-dir "$DOTNET_DIRECTORY" --version "$DOTNET_VERSION" --no-path
     export DOTNET_EXE="$DOTNET_DIRECTORY/dotnet"
     export PATH="$DOTNET_DIRECTORY:$PATH"
 fi

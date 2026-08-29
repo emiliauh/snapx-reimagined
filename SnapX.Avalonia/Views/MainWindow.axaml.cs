@@ -179,6 +179,22 @@ public partial class MainWindow : FAAppWindow
                     }
                 }
             }
+            else if (@event.PinToScreen)
+            {
+                string? filePath = itemPaths.FirstOrDefault(File.Exists);
+                if (!string.IsNullOrEmpty(filePath))
+                {
+                    await Task.Run(() =>
+                    {
+                        SixLabors.ImageSharp.Image image = SixLabors.ImageSharp.Image.Load(filePath);
+                        // PublishPinToScreen clones the image and hands ownership
+                        // of that clone to the event, so this caller can dispose
+                        // its local copy immediately after publishing.
+                        TaskHelpers.PublishPinToScreen(image, @event.TaskSettings);
+                        image.Dispose();
+                    });
+                }
+            }
             else
             {
                 UploadManager.UploadFile(itemPaths, @event.TaskSettings);

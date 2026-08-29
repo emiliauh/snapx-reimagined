@@ -55,7 +55,6 @@
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Application upload" />
                     <TextBlock Opacity="0.7" Text="Set upload rules that apply to all tasks." TextWrapping="Wrap" />
                     <CheckBox Content="Disable all uploads (reports an error for upload tasks)" IsChecked="{Binding DisableUpload}" />
-                    <CheckBox Content="Accept invalid TLS certificates" IsChecked="{Binding AcceptInvalidSslCertificates}" />
                     <CheckBox Content="Ignore emoji while URL encoding" IsChecked="{Binding UrlEncodeIgnoreEmoji}" />
                     <CheckBox Content="Show the first upload warning" IsChecked="{Binding ShowUploadWarning}" />
                     <CheckBox Content="Show the multi-file upload warning" IsChecked="{Binding ShowMultiUploadWarning}" />
@@ -241,7 +240,6 @@
                     <CheckBox Content="Select the last completed task automatically" IsChecked="{Binding AutoSelectLastCompletedTask}" />
                     <CheckBox Content="Show most recent task first" IsChecked="{Binding ShowMostRecentTaskFirst}" />
                     <CheckBox Content="Only show edited workflows" IsChecked="{Binding WorkflowsOnlyShowEdited}" />
-                    <CheckBox Content="Accept invalid TLS certificates" IsChecked="{Binding AcceptInvalidSslCertificates}" />
                     <CheckBox Content="Ignore emoji while URL encoding" IsChecked="{Binding UrlEncodeIgnoreEmoji}" />
                     <CheckBox Content="Show upload warning" IsChecked="{Binding ShowUploadWarning}" />
                     <CheckBox Content="Show multi-upload warning" IsChecked="{Binding ShowMultiUploadWarning}" />

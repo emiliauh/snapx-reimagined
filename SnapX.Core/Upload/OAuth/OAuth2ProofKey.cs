@@ -34,16 +34,12 @@ public class OAuth2ProofKey
             return "";
         }
     }
-    public OAuth2ProofKey() : this(OAuth2ChallengeMethod.Plain) { }
+    public OAuth2ProofKey() : this(OAuth2ChallengeMethod.SHA256) { }
     public OAuth2ProofKey(OAuth2ChallengeMethod method)
     {
         Method = method;
 
         var buffer = RandomNumberGenerator.GetBytes(32);
-
-
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(buffer);
         CodeVerifier = CleanBase64(buffer);
         CodeChallenge = CodeVerifier;
         if (Method != OAuth2ChallengeMethod.SHA256) return;
@@ -60,4 +56,3 @@ public class OAuth2ProofKey
             .TrimEnd('=');
     }
 }
-

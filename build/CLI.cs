@@ -181,7 +181,7 @@ public class CLI
                 SkippedStepsRaw = parseResult.GetValue(skipStepOption) ?? [],
                 EnableWrapperScriptFallback = parseResult.GetValue(enableWrapperFallbackOption),
                 TargetInstallAssembly = parseResult.GetValue(targetAssemblyOption),
-                SignBinaries = parseResult.GetValue(enableWrapperFallbackOption),
+                SignBinaries = parseResult.GetValue(signBinaries),
                 BullseyeOptions = new Options
                 {
                     Clear = parseResult.GetValue(clearOption),

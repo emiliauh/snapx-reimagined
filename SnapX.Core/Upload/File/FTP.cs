@@ -122,16 +122,6 @@ public sealed class FTP : FtpBase
                 var cert = X509CertificateLoader.LoadCertificateFromFile(account.FTPSCertificateLocation);
                 client.Config.ClientCertificates.Add(cert);
             }
-            else
-            {
-                client.ValidateCertificate += (control, e) =>
-                {
-                    if (e.PolicyErrors != SslPolicyErrors.None)
-                    {
-                        e.Accept = true;
-                    }
-                };
-            }
         }
     }
 

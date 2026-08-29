@@ -12,6 +12,7 @@ makedepends=(
     'clang'
     'zlib1g'
     'libwayland-dev'
+    'libpango1.0-dev'
     'wayland-protocols'
 )
 source=("$pkgbase::git+https://github.com/emiliauh/snapx-reimagined.git#branch=main")
@@ -31,9 +32,7 @@ pkgver() {
 build() {
     cd "$pkgbase"
     git fetch --unshallow || true
-    if [ -n "$API_KEYS" ]; then
-        curl -fsSL "$API_KEYS" -o SnapX.Core/Upload/APIKeysLocal.cs
-    fi
+    bash build/download_api_keys.sh
     git checkout -B develop >/dev/null 2>&1
 
     export VERSION=$pkgver
@@ -41,6 +40,7 @@ build() {
     # Build logic requires being on a known branch
     git checkout -B develop
     ./build.sh --configuration Release
+    rm -f SnapX.Core/Upload/APIKeysLocal.cs
     # We are going to use the system provided AVIF for now on
     find Output -type f -name 'avif*' -delete
 }
@@ -53,6 +53,7 @@ check() {
 package_snapx-core() {
     depends=(
         'ffmpeg'
+        'wf-recorder'
         'fontconfig'
         'libfreetype6-dev'
         'openssl'
@@ -96,7 +97,7 @@ package_snapx() {
 }
 package_snapx-ui() {
     pkgdesc="Screenshot tool that handles images, text, and video (fork of ShareX). SnapX Avalonia-based UI (works best on X11)"
-    pacdeps=('snapx-core')
+    pacdeps=('snapx-core' 'libpango-1.0-0' 'libcairo2' 'libwayland-client0')
 
     cd "$pkgbase"
     ./build.sh install --prefix /usr --dest-dir "${pkgdir}" --assembly snapx-ui --skip compile

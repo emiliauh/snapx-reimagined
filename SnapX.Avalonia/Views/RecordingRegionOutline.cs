@@ -20,11 +20,9 @@ namespace SnapX.Avalonia.Views;
 /// (snapx-outline) that renders four 2px dashed red edges (dash 14, gap 6,
 /// #FF2A2A) strictly OUTSIDE the region. Each edge has its own two-pixel layer
 /// surface, so an alpha or compositor failure cannot obscure the selected
-/// pixels. A layer-shell
-/// OVERLAY surface is not a normal toplevel window:
-/// it is absent from <c>hyprctl clients</c>, has no decorations/taskbar/focus,
-/// is click-through, and is excluded from grim/wf-recorder capture so the
-/// marker is never recorded.
+/// pixels. A layer-shell OVERLAY surface is not a normal toplevel window: it
+/// is absent from <c>hyprctl clients</c>, has no decorations/taskbar/focus,
+/// and is click-through. wf-recorder still captures visible layer surfaces.
 ///
 /// On non-Wayland (or if the helper is unavailable) it falls back to four thin
 /// Avalonia windows placed outside the region.

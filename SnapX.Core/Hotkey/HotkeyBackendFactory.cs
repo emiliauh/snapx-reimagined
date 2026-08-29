@@ -90,7 +90,7 @@ public static class HotkeyBackendFactory
         if (OperatingSystem.IsMacOS())
         {
             return new UnavailableHotkeyBackend(
-                "Global hotkey registration is not implemented for macOS.",
+                "macOS global hotkeys require a native event-tap/Carbon backend that SnapX does not implement. A portable global-hotkey backend is unavailable on macOS because the OS does not expose a cross-platform registration API; adding one needs an Objective-C integration that must be built and validated on macOS.",
                 "macOS (unsupported)");
         }
 

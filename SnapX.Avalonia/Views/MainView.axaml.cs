@@ -76,6 +76,18 @@ public partial class MainView : UserControl
                 }
                 await TaskHelpers.ExecuteJob(TaskSettings.GetDefaultTaskSettings(), HotkeyType.RectangleRegion);
             },
+            [Lang.UI_Dropdown_ScrollingCapture] = async () =>
+            {
+                DebugHelper.WriteLine("ExecuteSelectedCaptureAction: ScrollingCapture clicked.");
+                TaskHelpers.OpenScrollingCapture(TaskSettings.GetDefaultTaskSettings());
+                await Task.CompletedTask;
+            },
+            [Lang.UI_Dropdown_Annotate] = async () =>
+            {
+                DebugHelper.WriteLine("ExecuteSelectedCaptureAction: Annotate clicked.");
+                TaskHelpers.OpenImageEditor(TaskSettings.GetDefaultTaskSettings());
+                await Task.CompletedTask;
+            },
             [Lang.UI_Dropdown_RegionLight] = async () =>
             {
                 await TaskHelpers.ExecuteJob(TaskSettings.GetDefaultTaskSettings(), HotkeyType.RectangleLight);
@@ -465,7 +477,7 @@ public partial class MainView : UserControl
                 {
                     UploadManager.UploadImage(
                         await WebHelpers.DownloadImageAsync(
-                            "https://github.com/SnapXL/SnapX/blob/v0.3.0/.github/Linux.png?raw=true"
+                            $"{Links.GitHub}/blob/main/.github/Linux.png?raw=true"
                         )
                     );
                 },
@@ -478,7 +490,7 @@ public partial class MainView : UserControl
                 [Lang.UI_Debug_TestFileUpload] = async () =>
                 {
                     UploadManager.DownloadAndUploadFile(
-                        "https://raw.githubusercontent.com/SnapXL/SnapX/830fc50125e7af3e760b2ff908635d97e2464695/.github/Progress.md"
+                        $"{Links.GitHub}/raw/main/.github/Progress.md"
                     );
                 },
                 [Lang.UI_Debug_TestURLShortener] = async () =>

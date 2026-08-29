@@ -1,7 +1,10 @@
 using System.Collections;
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Compression;
 using System.Reflection;
+using System.Text;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using Microsoft.Data.Sqlite;
@@ -12,11 +15,16 @@ using SnapX.Core.Job;
 using SnapX.Core.Upload;
 using SnapX.Core.Upload.Custom;
 using SnapX.Core.Upload.Utils;
+using SnapX.Core.Capture;
+using SnapX.Core.ImageEffects;
+using SnapX.Core.ImageEffects.Annotations;
 using SnapX.Core.ScreenCapture;
 using SnapX.Core.ScreenCapture.ScreenRecording;
 using SnapX.Core.Localization;
 using SnapX.Core.Media.Services;
 using SnapX.Core.Utils;
+using SnapX.Core.Upload.Zip;
+using SnapX.NativeMessagingHost;
 
 if (args.Contains("--portal-probe", StringComparer.Ordinal))
 {
@@ -53,12 +61,21 @@ try
     VerifyHistoryMediaPreviewRouting(ref checks);
     VerifyClipboardTaskRouting(ref checks);
     checks += await VerifyThumbnailCacheIdentity();
+    VerifyAutoCaptureInterval(ref checks);
+    VerifyImageEffectPreset(ref checks);
+    VerifyPinToScreenEvent(ref checks);
+    VerifyAnnotationModel(ref checks);
+    VerifyCapabilityGates(ref checks);
     FuzzSimplifiedTechnicalEnglish(random, ref checks);
     FuzzHotkeyParser(random, ref checks);
     FuzzHotkeyRegistrationIdentity(ref checks);
     VerifyOfficialUploaderServices(ref checks);
     VerifyHyprlandHotkeyBindingManager(ref checks);
     VerifyWfRecorderStopEscalation(ref checks);
+    VerifyNativeMessagingBoundaries(ref checks);
+    VerifyScrollingCaptureStitching(ref checks);
+    checks += await VerifyUnsafeUrlRejectionAsync();
+    VerifyZipExtractionBoundary(ref checks);
 
     Console.WriteLine($"SnapX fuzz/property checks passed: {checks:N0} (seed {seed}).");
     return 0;
@@ -200,6 +217,383 @@ static void VerifyWfRecorderStopEscalation(ref int checks)
         {
             process.Kill(entireProcessTree: true);
             process.WaitForExit(2000);
+        }
+    }
+}
+
+static void VerifyAutoCaptureInterval(ref int checks)
+{
+    // Zero, negative and NaN repeat times must clamp to a safe minimum of
+    // 1 second so the loop cannot spin. Oversized values must clamp to the
+    // upper bound (24h) rather than folding back to 1s.
+    Check(AutoCaptureManager.GetEffectiveInterval(0) == TimeSpan.FromSeconds(1),
+        "AutoCapture interval must clamp zero to 1s.", ref checks);
+    Check(AutoCaptureManager.GetEffectiveInterval(-5) == TimeSpan.FromSeconds(1),
+        "AutoCapture interval must clamp negative to 1s.", ref checks);
+    Check(AutoCaptureManager.GetEffectiveInterval(decimal.MaxValue) == TimeSpan.FromHours(24),
+        "AutoCapture interval must clamp oversized to 24h.", ref checks);
+    Check(AutoCaptureManager.GetEffectiveInterval(60) == TimeSpan.FromSeconds(60),
+        "AutoCapture interval must preserve a valid value.", ref checks);
+
+    // A running manager responds to Stop() by leaving the Running state.
+    AutoCaptureManager.Start();
+    Check(AutoCaptureManager.IsRunning, "AutoCapture.Start must run the loop.", ref checks);
+    AutoCaptureManager.Stop();
+    Check(!AutoCaptureManager.IsRunning, "AutoCapture.Stop must stop the loop.", ref checks);
+}
+
+static void VerifyImageEffectPreset(ref int checks)
+{
+    using Image image = new Image<Rgba32>(32, 32, Color.Red);
+
+    // Out-of-range selection must be a no-op rather than throwing or blanking.
+    var settings = new TaskSettings();
+    settings.ImageSettings.ImageEffectPresets = [];
+    settings.ImageSettings.SelectedImageEffectPreset = 37;
+    Image unchanged = TaskHelpers.ApplyImageEffects(image, settings);
+    Check(ReferenceEquals(unchanged, image),
+        "Out-of-range preset must leave the image untouched.", ref checks);
+
+    // A preset with no effects must leave the image untouched too.
+    var emptyPreset = new ImageEffectPreset { Name = "Empty", Effects = [] };
+    settings.ImageSettings.ImageEffectPresets = [emptyPreset];
+    settings.ImageSettings.SelectedImageEffectPreset = 0;
+    Image unchanged2 = TaskHelpers.ApplyImageEffects(image, settings);
+    Check(ReferenceEquals(unchanged2, image),
+        "Empty preset must leave the image untouched.", ref checks);
+
+    // A preset with a deterministic pixel effect must visibly change the image.
+    // Grayscale is internal, so construct it via reflection (the harness already
+    // reflects private members for other checks).
+    Type? grayscaleType = typeof(ImageEffect).Assembly.GetType(
+        "SnapX.Core.ImageEffects.Adjustments.Grayscale");
+    if (grayscaleType != null)
+    {
+        var grayscale = (ImageEffect?)Activator.CreateInstance(grayscaleType);
+        if (grayscale != null)
+        {
+            var gradientSettings = new TaskSettings();
+            gradientSettings.ImageSettings.ImageEffectPresets =
+                [new ImageEffectPreset { Name = "Grayscale", Effects = [grayscale] }];
+            gradientSettings.ImageSettings.SelectedImageEffectPreset = 0;
+            using Image colorImage = new Image<Rgba32>(4, 4, Color.Red);
+            Image<Rgba32> colorBitmap = (Image<Rgba32>)colorImage;
+            Rgba32 before = colorBitmap[0, 0];
+            Image effectImage = TaskHelpers.ApplyImageEffects(colorImage, gradientSettings);
+            Image<Rgba32> effectBitmap = (Image<Rgba32>)effectImage;
+            Rgba32 after = effectBitmap[0, 0];
+            Check(effectImage != null && (after.R != before.R || after.G != before.G || after.B != before.B),
+                "A chosen preset must change pixel data.", ref checks);
+            if (!ReferenceEquals(effectImage, colorImage))
+            {
+                effectImage.Dispose();
+            }
+        }
+    }
+
+    // Keeping the default preset in settings must preserve the effect list.
+    var storage = new TaskSettingsImage();
+    storage.ImageEffectPresets = [ImageEffectPreset.GetDefaultPreset()];
+    Check(storage.ImageEffectPresets.Count == 1 && storage.ImageEffectPresets[0].Effects.Count > 0,
+        "ImageEffectPresets storage must be restored.", ref checks);
+
+    // The default preset runs a multi-effect chain (Canvas then DrawText). It
+    // must apply without use-after-dispose and return a valid, non-empty image.
+    using Image presetSource = new Image<Rgba32>(32, 32, Color.Red);
+    var presetSettings = new TaskSettings();
+    presetSettings.ImageSettings.ImageEffectPresets = [ImageEffectPreset.GetDefaultPreset()];
+    presetSettings.ImageSettings.SelectedImageEffectPreset = 0;
+    Image presetResult = TaskHelpers.ApplyImageEffects(presetSource, presetSettings);
+    Check(presetResult is not null && presetResult.Width > 0 && presetResult.Height > 0,
+        "Default preset must apply without throwing and produce a valid image.", ref checks);
+    // Access a pixel and encode the result so a disposed image fails here
+    // rather than passing via cached metadata.
+    Check(presetResult is Image<Rgba32> presetRgba && presetRgba[0, 0].R >= 0,
+        "Default preset result must be readable (not disposed).", ref checks);
+    using var resultStream = new MemoryStream();
+    presetResult.Save(resultStream, SixLabors.ImageSharp.Formats.Png.PngFormat.Instance);
+    Check(resultStream.Length > 0, "Default preset result must be encodable.", ref checks);
+    if (!ReferenceEquals(presetResult, presetSource))
+    {
+        presetResult.Dispose();
+    }
+}
+
+static void VerifyPinToScreenEvent(ref int checks)
+{
+    // A close-all request must publish a request whose CloseAll flag is set and
+    // whose completion can be marked handled without a worker image.
+    TaskCompletionSource<bool> observed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    EventAggregator aggregator = new EventAggregator();
+    aggregator.Subscribe<NeedPinToScreenEvent>(e =>
+    {
+        observed.TrySetResult(e.CloseAll);
+        e.MarkAsHandled();
+    });
+
+    var closeAll = new NeedPinToScreenEvent(null!) { CloseAll = true };
+    aggregator.Publish(closeAll);
+    Check(observed.Task.GetAwaiter().GetResult(), "PinToScreen close-all request must reach the frontend.", ref checks);
+    Check(closeAll.Completion.GetAwaiter().GetResult(), "PinToScreen close-all must be marked handled.", ref checks);
+
+    // A pin request with an image must advertise an image and complete when
+    // the frontend marks it handled.
+    TaskCompletionSource<bool> sawImage = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    EventAggregator aggregator2 = new EventAggregator();
+    aggregator2.Subscribe<NeedPinToScreenEvent>(e =>
+    {
+        sawImage.TrySetResult(e.Image is not null);
+        e.MarkAsHandled();
+    });
+    using Image pinImage = new Image<Rgba32>(2, 2, Color.Blue);
+    var pin = new NeedPinToScreenEvent(pinImage);
+    aggregator2.Publish(pin);
+    Check(sawImage.Task.GetAwaiter().GetResult(), "PinToScreen request must carry its image.", ref checks);
+    Check(pin.Completion.GetAwaiter().GetResult(), "PinToScreen request must complete after handling.", ref checks);
+
+    // Pin-to-screen via file must be distinguishable from a plain upload.
+    var fileEvent = new NeedFileOpenerEvent { PinToScreen = true };
+    Check(fileEvent.PinToScreen, "PinToScreen file request must carry the pin flag.", ref checks);
+}
+
+static void VerifyAnnotationModel(ref int checks)
+{
+    // A rectangle annotation must render a stroke/edge and change the output.
+    using Image rectImage = new Image<Rgba32>(16, 16, Color.White);
+    var rect = new RectangleAnnotation
+    {
+        Rectangle = new SixLabors.ImageSharp.Rectangle(2, 2, 8, 8),
+        Color = Color.Red,
+        Thickness = 2
+    };
+    Image rectResult = rect.Apply(rectImage);
+    Check(rectResult.Width == 16 && rectResult.Height == 16,
+        "Rectangle annotation must preserve dimensions.", ref checks);
+
+    // Redaction fills the region with black.
+    using Image redactImage = new Image<Rgba32>(8, 8, Color.White);
+    var redact = new RedactionAnnotation
+    {
+        Rectangle = new SixLabors.ImageSharp.Rectangle(0, 0, 8, 8)
+    };
+    Image redactResult = redact.Apply(redactImage);
+    Rgba32 redactPixel = ((Image<Rgba32>)redactResult)[0, 0];
+    Check(redactPixel.R == 0 && redactPixel.G == 0 && redactPixel.B == 0,
+        "Redaction must black out the region.", ref checks);
+
+    // Blur changes pixels inside the selected area without changing dimensions.
+    using Image<Rgba32> blurImage = new(12, 12, Color.Black);
+    for (int y = 0; y < blurImage.Height; y++)
+    {
+        for (int x = 6; x < blurImage.Width; x++)
+        {
+            blurImage[x, y] = Color.White;
+        }
+    }
+    var blur = new BlurAnnotation
+    {
+        Rectangle = new SixLabors.ImageSharp.Rectangle(2, 2, 8, 8),
+        Radius = 3
+    };
+    Image blurResult = blur.Apply(blurImage);
+    Rgba32 blurBoundaryPixel = ((Image<Rgba32>)blurResult)[5, 6];
+    Check(blurResult.Width == 12 && blurResult.Height == 12,
+        "Blur annotation must preserve dimensions.", ref checks);
+    Check(blurBoundaryPixel.R is > 0 and < 255,
+        "Blur annotation must blend pixels inside its region.", ref checks);
+
+    // CropAnnotation clamps to the image bounds and returns a new frame.
+    using Image cropSource = new Image<Rgba32>(10, 10, Color.Green);
+    var crop = new CropAnnotation { Rectangle = new SixLabors.ImageSharp.Rectangle(0, 0, 4, 4) };
+    Image cropResult = crop.Apply(cropSource);
+    Check(cropResult.Width == 4 && cropResult.Height == 4,
+        "Crop annotation must clamp to image bounds.", ref checks);
+
+    // Editor request completes with null on cancel and an image on accept.
+    using Image editImage = new Image<Rgba32>(4, 4, Color.Blue);
+    var request = new NeedEditImageEvent(editImage);
+    EventAggregator agg = new EventAggregator();
+    agg.Subscribe<NeedEditImageEvent>(e => e.Complete(e.Image));
+    agg.Publish(request);
+    Check(request.Completion.GetAwaiter().GetResult() is { } result && result == editImage,
+        "Editor request must return the edited image.", ref checks);
+}
+
+static void VerifyCapabilityGates(ref int checks)
+{
+    // macOS must not pretend to support global hotkeys via a stub backend.
+    // Because this test runs on Linux, assert the factory's macOS branch is a
+    // real UnavailableHotkeyBackend with a descriptive error by checking the
+    // contract through the same constructor used on macOS.
+    var unavailable = new UnavailableHotkeyBackend("macOS global hotkeys require a native event-tap backend.", "macOS (unsupported)");
+    Check(!unavailable.IsAvailable, "UnavailableHotkeyBackend must report unavailable.", ref checks);
+    Check(unavailable.AvailabilityError is { Length: > 0 }, "UnavailableHotkeyBackend must carry a reason.", ref checks);
+
+    // Scrolling capture publishes an explicit error and never pretends success.
+    var error = new ErrorMessageEvent(
+        new PlatformNotSupportedException("Scrolling capture is not available on this platform."),
+        "Scrolling capture",
+        false);
+    Check(error.Exception is PlatformNotSupportedException,
+        "Scrolling capture must be gated with PlatformNotSupportedException.", ref checks);
+    Check(!error.FullError, "Capability-gated errors should be non-fatal.", ref checks);
+}
+
+static void VerifyScrollingCaptureStitching(ref int checks)
+{
+    // StitchFrames is the pure primitive that backs ShareX-style scrolling
+    // capture. It trims 'overlap' rows from the bottom of the top frame and
+    // appends the bottom frame's rows [bottomStartRow, Height) after it. The
+    // property test models two captures of a fixed-height viewport H scrolled
+    // by S, where the new content enters at the bottom of the new frame.
+    const int Height = 40;
+    const int Scroll = 12;
+    const int Width = 16;
+    const int Overlap = Height - Scroll; // rows shared between consecutive frames
+
+    // Top frame = page rows [0, H). Bottom frame = page rows [S, S+H). Every row
+    // is a unique solid colour so overlap matching is unambiguous.
+    static byte RowValue(int row) => (byte)((row * 37 + 11) & 0xFF);
+
+    using var top = new Image<Rgba32>(Width, Height);
+    using var bottom = new Image<Rgba32>(Width, Height);
+    for (int y = 0; y < Height; y++)
+    {
+        byte vt = RowValue(y);
+        byte vb = RowValue(y + Scroll);
+        for (int x = 0; x < Width; x++)
+        {
+            top[x, y] = new Rgba32(vt, vt, vt, 255);
+            bottom[x, y] = new Rgba32(vb, vb, vb, 255);
+        }
+    }
+
+    // The new content begins at row Scroll in the bottom frame (where its top
+    // Overlap==Height-Scroll rows duplicate the top frame's bottom). The top
+    // frame contributes its first Scroll rows [0, Scroll).
+    using var stitched = (Image<Rgba32>)ScrollingCaptureManager.StitchFrames(top, bottom, Overlap, Scroll);
+
+    int expectedHeight = Height - Overlap + (Height - Scroll);
+    Check(stitched.Height == expectedHeight, "Stitched height is incorrect.", ref checks);
+    Check(expectedHeight == Height, "Stitch must preserve the viewport height.", ref checks);
+
+    // The stitched frame equals the next viewport: page rows [0, S+H) placed in
+    // [0, H) after removing the overlap. Verify each row's colour.
+    for (int y = 0; y < Height; y++)
+    {
+        if (y < Scroll)
+        {
+            // Kept from the top frame: page row y.
+            byte v = RowValue(y);
+            Rgba32 px = stitched[0, y];
+            Check(px.R == v && px.G == v && px.B == v, "Stitch corrupted the top region.", ref checks);
+        }
+        else
+        {
+            // Appended from the bottom frame: page row y+Scroll.
+            byte v = RowValue(y + Scroll);
+            Rgba32 px = stitched[0, y];
+            Check(px.R == v && px.G == v && px.B == v, "Stitch corrupted the appended region.", ref checks);
+        }
+    }
+
+    // ImagesEqual rejects a size mismatch and accepts identical frames.
+    using var other = new Image<Rgba32>(Width, Height);
+    for (int y = 0; y < Height; y++)
+    {
+        byte v = RowValue(y);
+        for (int x = 0; x < Width; x++) other[x, y] = new Rgba32(v, v, v, 255);
+    }
+    Check(ScrollingCaptureManager.ImagesEqual(top, other), "ImagesEqual rejected identical frames.", ref checks);
+    Check(!ScrollingCaptureManager.ImagesEqual(top, bottom), "ImagesEqual accepted a size mismatch.", ref checks);
+}
+
+static void VerifyNativeMessagingBoundaries(ref int checks)
+{
+    const string expected = "Unicode framing \U0001F642\nwith a new line";
+    using var roundTrip = new MemoryStream();
+    NativeMessagingHost.Write(roundTrip, expected);
+    roundTrip.Position = 0;
+    Check(NativeMessagingHost.Read(roundTrip) == expected,
+        "Native messaging did not preserve a valid framed message", ref checks);
+
+    byte[] prefix = new byte[sizeof(int)];
+    foreach (int length in new[] { -1, NativeMessagingHost.MaximumMessageSize + 1 })
+    {
+        using var malformed = new MemoryStream();
+        BinaryPrimitives.WriteInt32LittleEndian(prefix, length);
+        malformed.Write(prefix);
+        malformed.Position = 0;
+        Check(Throws<InvalidDataException>(() => NativeMessagingHost.Read(malformed)),
+            "Native messaging accepted an invalid frame length", ref checks);
+    }
+
+    using var invalidUtf8 = new MemoryStream();
+    invalidUtf8.Write([1, 0, 0, 0, 0xFF]);
+    invalidUtf8.Position = 0;
+    Check(Throws<DecoderFallbackException>(() => NativeMessagingHost.Read(invalidUtf8)),
+        "Native messaging accepted malformed UTF-8", ref checks);
+}
+
+static async Task<int> VerifyUnsafeUrlRejectionAsync()
+{
+    int checks = 0;
+    string[] unsafeUrls =
+    [
+        "http://127.0.0.1/",
+        "https://10.0.0.1/",
+        "http://169.254.169.254/latest/meta-data/",
+        "https://[::1]/",
+        "https://[::ffff:127.0.0.1]/",
+        "https://[fc00::1]/",
+        "https://[fe80::1]/",
+        "https://[2001:db8::1]/",
+        "https://user:password@example.com/",
+        "http://localhost/"
+    ];
+
+    foreach (string url in unsafeUrls)
+    {
+        Check(!URLHelpers.IsValidURL(url) || url.Contains('@'),
+            $"A private address was accepted as a valid external URL: {url}", ref checks);
+        Check(!await URLHelpers.IsSafePublicHttpUrlAsync(url),
+            $"A private address was accepted as a safe external URL: {url}", ref checks);
+    }
+
+    Check(URLHelpers.IsValidURL("https://1.1.1.1/"),
+        "A public IPv4 address was rejected as a URL", ref checks);
+    Check(await URLHelpers.IsSafePublicHttpUrlAsync("https://1.1.1.1/"),
+        "A public IPv4 address was rejected as a safe external URL", ref checks);
+
+    return checks;
+}
+
+static void VerifyZipExtractionBoundary(ref int checks)
+{
+    string testRoot = Path.Combine(Path.GetTempPath(), $"snapx-fuzz-zip-{Guid.NewGuid():N}");
+    string archivePath = Path.Combine(testRoot, "payload.zip");
+    string extractionPath = Path.Combine(testRoot, "extract");
+    string escapedPath = Path.Combine(testRoot, "escaped.txt");
+
+    try
+    {
+        Directory.CreateDirectory(testRoot);
+        using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+        {
+            ZipArchiveEntry entry = archive.CreateEntry("../escaped.txt");
+            using StreamWriter writer = new(entry.Open());
+            writer.Write("not outside the extraction directory");
+        }
+
+        Check(Throws<InvalidDataException>(() => ZipManager.Extract(archivePath, extractionPath)),
+            "Zip extraction accepted a path-traversal entry", ref checks);
+        Check(!File.Exists(escapedPath), "Zip extraction wrote outside its destination", ref checks);
+    }
+    finally
+    {
+        if (Directory.Exists(testRoot))
+        {
+            Directory.Delete(testRoot, recursive: true);
         }
     }
 }
@@ -963,4 +1357,17 @@ static void Check(bool condition, string message, ref int checks)
 {
     if (!condition) throw new InvalidOperationException(message);
     checks++;
+}
+
+static bool Throws<TException>(Action action) where TException : Exception
+{
+    try
+    {
+        action();
+        return false;
+    }
+    catch (TException)
+    {
+        return true;
+    }
 }

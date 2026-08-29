@@ -46,7 +46,7 @@ public abstract partial class SettingsBase<T>
     public bool CreateWeeklyBackup { get; set; }
 
     [Browsable(false), JsonIgnore, YamlIgnore]
-    public bool UseEncryption { get; set; } = !OperatingSystem.IsFreeBSD();
+    public bool UseEncryption { get; set; } = true;
 
     public bool IsUpgradeFrom(string version)
     {
@@ -111,9 +111,20 @@ public abstract partial class SettingsBase<T>
             {
                 EnsureDirectoryExists(filePath);
 
-                var tempFilePath = WriteTempFile(filePath);
-
-                ReplaceFileWithBackup(filePath, tempFilePath);
+                string? tempFilePath = null;
+                try
+                {
+                    tempFilePath = WriteTempFile(filePath);
+                    ReplaceFileWithBackup(filePath, tempFilePath);
+                    tempFilePath = null;
+                }
+                finally
+                {
+                    if (!string.IsNullOrEmpty(tempFilePath))
+                    {
+                        File.Delete(tempFilePath);
+                    }
+                }
 
                 if (CreateWeeklyBackup && !string.IsNullOrEmpty(BackupFolder))
                     FileHelpers.BackupFileWeekly(filePath, BackupFolder);
@@ -141,21 +152,57 @@ public abstract partial class SettingsBase<T>
 
     private string WriteTempFile(string filePath)
     {
-        var tempFilePath = filePath + ".temp";
+        var directory = Path.GetDirectoryName(filePath)
+            ?? throw new ArgumentException("The settings path does not have a parent directory.", nameof(filePath));
+        var fileName = Path.GetFileName(filePath);
 
-        using var fileStream = new FileStream(
-            tempFilePath,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.Read,
-            4096,
-            FileOptions.WriteThrough
-        );
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var tempFilePath = Path.Combine(directory, $".{fileName}.{Path.GetRandomFileName()}.tmp");
+            try
+            {
+                using var fileStream = CreatePrivateTempStream(tempFilePath);
 
-        SaveToStream(fileStream, UseEncryption);
+                // SaveToStream writes through a StreamWriter that disposes the
+                // underlying stream when leaveOpen is false. Keep the stream
+                // open so the subsequent Flush(flushToDisk: true) below does
+                // not throw ObjectDisposedException ("Cannot access a closed
+                // file") and the temp file is never durable. The stream is
+                // disposed by the using scope right after this method returns.
+                SaveToStream(fileStream, UseEncryption, leaveOpen: true);
+                fileStream.Flush(flushToDisk: true);
+                return tempFilePath;
+            }
+            catch (IOException) when (attempt < 9)
+            {
+                // A random-name collision is exceptionally unlikely. Retry without
+                // falling back to a predictable filename.
+            }
+        }
 
-        return tempFilePath;
+        throw new IOException("Could not create a private settings temporary file.");
     }
+
+    private static FileStream CreatePrivateTempStream(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough);
+        }
+
+        return CreateUnixPrivateTempStream(path);
+    }
+
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private static FileStream CreateUnixPrivateTempStream(string path) => new(path, new FileStreamOptions
+    {
+        Mode = FileMode.CreateNew,
+        Access = FileAccess.Write,
+        Share = FileShare.None,
+        BufferSize = 4096,
+        Options = FileOptions.WriteThrough,
+        UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+    });
 
     private void ReplaceFileWithBackup(string filePath, string tempFilePath)
     {
@@ -196,6 +243,7 @@ public abstract partial class SettingsBase<T>
             .WithTypeConverter(new UIFontYamlTypeConverter())
             .WithTypeConverter(new ImageSharpYamlTypeConverter())
             .WithTypeConverter(new TimeZoneInfoYamlTypeConverter())
+            .WithTypeConverter(new FFmpegAudioCodecYamlConverter())
             .WithTypeConverter(new HeaderCollectionYamlConverter(store, () => CustomUploaderItem.SensitiveKeys, useEncryption))
             .WithTypeConverter(new HttpMethodYamlConverter())
             .WithEnumNamingConvention(NullNamingConvention.Instance)
@@ -272,6 +320,7 @@ public abstract partial class SettingsBase<T>
             .WithTypeConverter(new UIFontYamlTypeConverter())
             .WithTypeConverter(new ImageSharpYamlTypeConverter())
             .WithTypeConverter(new TimeZoneInfoYamlTypeConverter())
+            .WithTypeConverter(new FFmpegAudioCodecYamlConverter())
             .WithTypeConverter(new HeaderCollectionYamlConverter(store, () => CustomUploaderItem.SensitiveKeys))
             .WithTypeConverter(new HttpMethodYamlConverter())
             .WithTypeInspector(inner => new ReadableAndWritablePropertiesTypeInspector(inner), loc => loc.OnBottom())
@@ -338,6 +387,12 @@ public abstract partial class SettingsBase<T>
 
         if (!File.Exists(filePath))
             throw new FileNotFoundException("File not found.", filePath);
+
+        const long maximumSettingsFileBytes = 16 * 1024 * 1024;
+        if (new FileInfo(filePath).Length > maximumSettingsFileBytes)
+        {
+            throw new InvalidDataException($"Settings file exceeds the {maximumSettingsFileBytes} byte limit.");
+        }
 
         return File.ReadAllText(filePath);
     }
