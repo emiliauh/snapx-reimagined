@@ -12,6 +12,7 @@ internal static class MacOSRecordingChecks
 {
     public static void Fuzz(Random random, ref int checks)
     {
+        VerifyAVFoundationAudioDiscovery(ref checks);
         var method = typeof(ScreenRecordingOptions).GetMethod("ResolveMacOSCaptureTarget", BindingFlags.Static | BindingFlags.NonPublic)!;
         for (int i = 0; i < 2000; i++)
         {
@@ -45,7 +46,10 @@ internal static class MacOSRecordingChecks
                 var settings = new TaskSettings();
                 settings.CaptureSettings.FFmpegOptions = new FFmpegOptions
                 {
-                    OverrideCLIPath = true, CLIPath = executableFixture, UseCustomCommands = false
+                    OverrideCLIPath = true,
+                    CLIPath = executableFixture,
+                    UseCustomCommands = false,
+                    AudioSource = FFmpegCaptureDevice.DefaultMicrophone.Value
                 };
                 try
                 {
@@ -63,9 +67,58 @@ internal static class MacOSRecordingChecks
                 {
                     // Expected on a host that has not granted this test process Screen Recording access.
                 }
+                if (settings.CaptureSettings.FFmpegOptions.AudioSource != FFmpegCaptureDevice.None.Value)
+                    throw new InvalidOperationException("Legacy default-microphone recording was not disabled.");
                 checks++;
             }
             finally { File.Delete(executableFixture); }
+        }
+    }
+
+    private static void VerifyAVFoundationAudioDiscovery(ref int checks)
+    {
+        const string listing = """
+            [AVFoundation indev @ 0x1] AVFoundation video devices:
+            [AVFoundation indev @ 0x1] [0] Capture screen 0
+            [AVFoundation indev @ 0x1] AVFoundation audio devices:
+            [AVFoundation indev @ 0x1] [0] MacBook Pro Microphone
+            [AVFoundation indev @ 0x1] [1] BlackHole 2ch
+            [AVFoundation indev @ 0x1] [2] Loopback Audio
+            """;
+        MethodInfo parser = typeof(FFmpegCLIManager).GetMethod(
+            "ParseAVFoundationAudioDevices",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new MissingMethodException(typeof(FFmpegCLIManager).FullName,
+                "ParseAVFoundationAudioDevices");
+        var devices = (IReadOnlyList<string>)(parser.Invoke(null, [listing])
+            ?? throw new InvalidOperationException("AVFoundation parser returned no device list."));
+        if (!devices.SequenceEqual(["MacBook Pro Microphone", "BlackHole 2ch", "Loopback Audio"]))
+            throw new InvalidOperationException("AVFoundation audio discovery mixed video and audio devices.");
+        if (FFmpegCaptureDevice.IsLikelySystemAudioLoopback(devices[0]) ||
+            !FFmpegCaptureDevice.IsLikelySystemAudioLoopback(devices[1]) ||
+            !FFmpegCaptureDevice.IsLikelySystemAudioLoopback(devices[2]))
+            throw new InvalidOperationException("System-audio discovery confused a physical microphone with a loopback device.");
+        checks += 2;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            Screen screen = MacOSAPI.GetScreens().First();
+            var options = new ScreenRecordingOptions
+            {
+                IsRecording = true,
+                FPS = 30,
+                CaptureArea = new Rectangle(screen.Bounds.X, screen.Bounds.Y, 320, 240),
+                OutputPath = Path.Combine(Path.GetTempPath(), "snapx-system-audio-command.mp4"),
+                FFmpeg = new FFmpegOptions
+                {
+                    VideoSource = FFmpegCaptureDevice.AVFoundation.Value,
+                    AudioSource = "BlackHole 2ch"
+                }
+            };
+            string command = options.GetFFmpegCommands();
+            if (!command.Contains($"Capture screen {screen.Index}:BlackHole 2ch", StringComparison.Ordinal))
+                throw new InvalidOperationException("The macOS recording command did not combine display and loopback audio.");
+            checks++;
         }
     }
 

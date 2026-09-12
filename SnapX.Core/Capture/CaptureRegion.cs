@@ -28,6 +28,7 @@ public class CaptureRegion : CaptureBase
     // A selector is UI-owned. Running the synchronous legacy Capture API on a
     // worker keeps the Avalonia dispatcher free to show and drive the selector.
     protected override bool ExecuteOnBackgroundThread => true;
+    protected override bool PrepareHostForCapture => false;
 
     protected override TaskMetadata? Execute(TaskSettings taskSettings)
     {

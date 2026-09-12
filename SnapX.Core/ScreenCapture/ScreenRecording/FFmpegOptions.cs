@@ -170,5 +170,14 @@ public class FFmpegOptions
         {
             AudioSource = FFmpegCaptureDevice.None.Value;
         }
+        else if (OperatingSystem.IsMacOS() &&
+                 AudioSource.Equals(FFmpegCaptureDevice.DefaultMicrophone.Value,
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            // Earlier macOS builds offered the physical default microphone.
+            // System audio is now opt-in through an explicitly selected
+            // loopback device, so never silently retain voice capture.
+            AudioSource = FFmpegCaptureDevice.None.Value;
+        }
     }
 }

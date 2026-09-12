@@ -13,6 +13,7 @@ namespace SnapX.Core.Capture;
 public class CaptureMonitorPicker : CaptureBase
 {
     protected override bool ExecuteOnBackgroundThread => true;
+    protected override bool PrepareHostForCapture => false;
 
     protected override TaskMetadata? Execute(TaskSettings taskSettings)
     {

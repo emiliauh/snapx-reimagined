@@ -37,7 +37,7 @@ public sealed class MacOSPermissionException : UnauthorizedAccessException
         MacOSPermissionKind.ScreenRecording =>
             "SnapX needs Screen Recording permission. Open System Settings > Privacy & Security > Screen Recording, allow SnapX, then try again.",
         MacOSPermissionKind.Microphone =>
-            "SnapX needs Microphone permission to record audio. Open System Settings > Privacy & Security > Microphone, allow SnapX, then try again.",
+            "SnapX needs Audio Input permission for the selected system-audio loopback device. Open System Settings > Privacy & Security > Microphone, allow SnapX, then try again. macOS classifies virtual loopback feeds as microphone inputs.",
         _ => "SnapX does not have the required macOS permission."
     };
 }

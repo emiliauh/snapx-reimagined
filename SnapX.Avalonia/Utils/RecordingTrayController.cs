@@ -101,6 +101,10 @@ public sealed class RecordingTrayController : IDisposable
             {
                 return;
             }
+            if (state == ScreenRecordManager.RecordingManagerState.Starting)
+            {
+                App.HideWindowsForRecording();
+            }
             if (isRecording && !_recordingUiVisible)
             {
                 ShowRecordingUi();

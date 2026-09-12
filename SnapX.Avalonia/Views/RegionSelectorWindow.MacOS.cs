@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using System.Runtime.InteropServices;
 using SnapX.Core;
 using SnapX.Core.Job;
 using SnapX.Core.Media;
@@ -11,11 +12,53 @@ using SnapX.Core.Utils.Native;
 using DesktopPoint = SixLabors.ImageSharp.Point;
 using DesktopRectangle = SixLabors.ImageSharp.Rectangle;
 using CapturedImage = SixLabors.ImageSharp.Image;
+using IPlatformHandle = Avalonia.Platform.IPlatformHandle;
 
 namespace SnapX.Avalonia.Views;
 
 public partial class RegionSelectorWindow
 {
+    private const string CoreGraphicsFramework =
+        "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
+    private const string ObjectiveCLibrary = "/usr/lib/libobjc.A.dylib";
+    private const int MainMenuWindowLevelKey = 8;
+    private const nuint CanJoinAllSpaces = 1 << 0;
+    private const nuint FullScreenAuxiliary = 1 << 8;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public double X;
+        public double Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeSize
+    {
+        public double Width;
+        public double Height;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public NativePoint Origin;
+        public NativeSize Size;
+    }
+
+    [DllImport(CoreGraphicsFramework)]
+    private static extern int CGWindowLevelForKey(int key);
+
+    [DllImport(ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
+    private static extern void SendObjectiveCInteger(IntPtr receiver, IntPtr selector, nint value);
+
+    [DllImport(ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
+    private static extern void SendObjectiveCRect(
+        IntPtr receiver,
+        IntPtr selector,
+        NativeRect frame,
+        byte display);
+
     private MacOSLiveSelectionSession? _liveSession;
 
     private async Task<bool> PrepareLiveDisplaysAsync(CancellationToken cancellationToken)
@@ -96,6 +139,7 @@ public partial class RegionSelectorWindow
                 overlay.Width = bounds.Width;
                 overlay.Height = bounds.Height;
                 overlay._screenBounds = new PixelRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+                overlay._requestedScreenBounds = overlay._screenBounds;
                 overlay._canvas.Width = bounds.Width;
                 overlay._canvas.Height = bounds.Height;
                 overlay._imageBounds = new Rect(0, 0, bounds.Width, bounds.Height);
@@ -150,6 +194,7 @@ public partial class RegionSelectorWindow
             {
                 overlay.IsVisible = true;
                 await Task.Yield();
+                overlay.ApplyMacOSFullDisplayFrame();
                 await overlay.SynchronizeLiveWindowBoundsAsync();
                 if (_cancelled) { _opened[overlay].TrySetResult(false); return; }
                 overlay._captureReady = true;
@@ -319,6 +364,7 @@ public partial class RegionSelectorWindow
                     if (image is null) throw new InvalidOperationException("The selected region could not be captured.");
                 }
                 if (_cancelled) return;
+                _owner._selectionSucceeded = true;
                 _owner._resultRect.TrySetResult(rectangle);
                 _owner._resultImg.TrySetResult(image);
                 if (image != null && !_owner.IsSilentMode)
@@ -379,5 +425,38 @@ public partial class RegionSelectorWindow
             _owner.RestoreHiddenWindows();
             _owner.ReleaseSelectorGate();
         }
+    }
+
+    private void ApplyMacOSFullDisplayFrame()
+    {
+        IPlatformHandle? handle = TryGetPlatformHandle();
+        if (handle is not { HandleDescriptor: "NSWindow" } || handle.Handle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("The macOS selector NSWindow is unavailable.");
+        }
+
+        Screen primary = MacOSAPI.GetScreens().FirstOrDefault(screen => screen.IsPrimary)
+            ?? throw new InvalidOperationException("The primary macOS display is unavailable.");
+        PixelRect requested = _requestedScreenBounds;
+        double appKitY = primary.Bounds.Bottom - (requested.Y + requested.Height);
+        var frame = new NativeRect
+        {
+            Origin = new NativePoint { X = requested.X, Y = appKitY },
+            Size = new NativeSize { Width = requested.Width, Height = requested.Height }
+        };
+
+        SendObjectiveCInteger(
+            handle.Handle,
+            GetObjectiveCSelector("setCollectionBehavior:"),
+            (nint)(CanJoinAllSpaces | FullScreenAuxiliary));
+        SendObjectiveCInteger(
+            handle.Handle,
+            GetObjectiveCSelector("setLevel:"),
+            CGWindowLevelForKey(MainMenuWindowLevelKey) + 1);
+        SendObjectiveCRect(
+            handle.Handle,
+            GetObjectiveCSelector("setFrame:display:"),
+            frame,
+            1);
     }
 }

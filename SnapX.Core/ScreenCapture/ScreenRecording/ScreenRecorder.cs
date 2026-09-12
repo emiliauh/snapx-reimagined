@@ -792,6 +792,20 @@ public class ScreenRecorder : IDisposable
         StopRecording();
     }
 
+    internal void ForceStopRecording()
+    {
+        Interlocked.Exchange(ref aborted, 1);
+        Interlocked.Exchange(ref stopRequested, 1);
+        LastRunSucceeded = false;
+        pauseGate.Set();
+        ffmpeg?.ForceClose();
+        Process? process = wfRecorderProcess;
+        if (process is not null)
+        {
+            ForceStopWfRecorder(process);
+        }
+    }
+
     public void SaveAsGIF(string? path, GIFQuality quality)
     {
         if (string.IsNullOrWhiteSpace(path))

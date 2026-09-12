@@ -368,15 +368,22 @@ static async Task<int> VerifyRegionSelectionLifecycleAsync()
     try
     {
         var returnedImage = new Image<Rgba32>(expected.Width, expected.Height);
-        RegionCaptureTasks.SetRegionSelector((_, _) => Task.FromResult<RegionCaptureSelection?>(new()
+        RegionCaptureRequest? validRequest = null;
+        RegionCaptureTasks.SetRegionSelector((request, _) =>
         {
-            Rectangle = expected,
-            CaptureBounds = bounds,
-            Image = returnedImage
-        }));
+            validRequest = request;
+            return Task.FromResult<RegionCaptureSelection?>(new()
+            {
+                Rectangle = expected,
+                CaptureBounds = bounds,
+                Image = returnedImage
+            });
+        });
 
         RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(captureImage: true);
         Check(selection is not null, "A valid selector result was discarded", ref checks);
+        Check(validRequest is { RestoreHiddenWindowsAfterSelection: false },
+            "A successful screenshot requested that application windows reopen over its result", ref checks);
         Check(selection!.Rectangle == expected, "A valid selector rectangle was changed", ref checks);
         Check(ReferenceEquals(selection.Image, returnedImage), "The successful selector image ownership changed", ref checks);
         Check(RegionCaptureTasks.TryGetLastRegion(out Rectangle last, out _ ) && last == expected,

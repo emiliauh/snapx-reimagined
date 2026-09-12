@@ -568,7 +568,38 @@ jobs:
             exit 1
           fi
 
-          echo "PASS: SnapX launched, forwarding acknowledged by prompt secondary exit, and primary remained alive."
+          echo "=== Verifying bounded graceful SIGTERM shutdown ==="
+          kill -TERM "$primary_pid"
+          primary_finished=false
+          for attempt in {1..60}; do
+            if ! kill -0 "$primary_pid" 2>/dev/null; then
+              primary_finished=true
+              break
+            fi
+            sleep 0.1
+          done
+          if [ "$primary_finished" != true ]; then
+            echo "FAIL: Primary SnapX process did not shut down within 6 seconds."
+            sed -n '1,240p' "$primary_log"
+            exit 1
+          fi
+          if wait "$primary_pid"; then
+            primary_rc=0
+          else
+            primary_rc=$?
+          fi
+          if [ "$primary_rc" -ne 0 ]; then
+            echo "FAIL: Primary SnapX process crashed during graceful shutdown (exit $primary_rc)."
+            sed -n '1,240p' "$primary_log"
+            exit 1
+          fi
+          if grep -q 'shutdown timed out' "$primary_log"; then
+            echo "FAIL: Primary SnapX process hit the shutdown watchdog."
+            sed -n '1,240p' "$primary_log"
+            exit 1
+          fi
+
+          echo "PASS: SnapX launched, forwarded a secondary command, and shut down cleanly within 6 seconds."
       - name: Clean up macOS smoke-test processes
         if: runner.os == 'macOS' && always()
         shell: bash

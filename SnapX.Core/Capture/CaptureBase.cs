@@ -13,6 +13,16 @@ public abstract class CaptureBase
 {
     private static int captureInProgress;
     private static Task activeCaptureTask = Task.CompletedTask;
+    private static Func<Task>? prepareHostCapture;
+    private static Action<bool>? completeHostCapture;
+
+    public static void SetHostCaptureVisibilityHandlers(
+        Func<Task>? prepare,
+        Action<bool>? complete)
+    {
+        Volatile.Write(ref prepareHostCapture, prepare);
+        Volatile.Write(ref completeHostCapture, complete);
+    }
 
     /// <summary>
     /// Awaits the background capture launched by the most recent <see cref="Capture"/>
@@ -40,13 +50,17 @@ public abstract class CaptureBase
     public bool AllowAnnotation { get; set; } = true;
 
     /// <summary>
-    /// Wayland capture is process and image-decoding work.  Keep it off the
-    /// frontend dispatcher so pressing a capture action never freezes the UI
-    /// while grim or the portal returns the frame. Interactive implementations
-    /// can opt in on other platforms as well.
+    /// Capture backends and image decoding run away from the frontend
+    /// dispatcher. This also lets the desktop host finish hiding its windows
+    /// before a direct capture reads the display on every supported platform.
     /// </summary>
-    protected virtual bool ExecuteOnBackgroundThread =>
-        OperatingSystem.IsLinux() && LinuxAPI.IsWayland();
+    protected virtual bool ExecuteOnBackgroundThread => true;
+
+    /// <summary>
+    /// Interactive selectors own their window visibility lifecycle. Direct
+    /// captures ask the desktop host to hide its windows before pixels are read.
+    /// </summary>
+    protected virtual bool PrepareHostForCapture => true;
 
     public void Capture(bool autoHideForm)
     {
@@ -121,10 +135,17 @@ public abstract class CaptureBase
         }
 
         TaskMetadata? metadata = null;
+        bool hostPrepared = false;
 
         try
         {
             MacOSPermissions.ThrowIfScreenCaptureAccessDenied();
+            Func<Task>? prepare = Volatile.Read(ref prepareHostCapture);
+            if (PrepareHostForCapture && prepare is not null)
+            {
+                hostPrepared = true;
+                prepare().ConfigureAwait(false).GetAwaiter().GetResult();
+            }
             AllowAnnotation = true;
             metadata = Execute(taskSettings);
         }
@@ -137,6 +158,10 @@ public abstract class CaptureBase
         {
             try
             {
+                if (hostPrepared)
+                {
+                    Volatile.Read(ref completeHostCapture)?.Invoke(metadata?.Image is not null);
+                }
                 if (autoHideForm && AllowAutoHideForm)
                 {
                     // SnapX.MainWindow.ForceActivate();

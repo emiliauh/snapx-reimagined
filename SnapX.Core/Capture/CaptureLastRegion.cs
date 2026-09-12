@@ -7,6 +7,9 @@ namespace SnapX.Core.Capture;
 
 public class CaptureLastRegion : CaptureRegion
 {
+    protected override bool PrepareHostForCapture =>
+        RegionCaptureTasks.TryGetLastRegion(out _, out _);
+
     protected override TaskMetadata? Execute(TaskSettings taskSettings)
     {
         if (!RegionCaptureTasks.TryGetLastRegion(out var rectangle, out var captureType))

@@ -60,7 +60,7 @@ Run SnapX:
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/emiliauh/snapx-reimagined/releases), then drag SnapX into Applications. Requires macOS 14 or later. The published DMG includes FFmpeg. This prerelease is ad-hoc signed and is not notarized.
 
-On first launch, grant Screen Recording and Microphone access through the permission checklist. It links to each System Settings panel and enables **Finish setup** after macOS confirms both permissions. Reopen SnapX if macOS requests a restart. Then choose **Enable launch at login** or **Not now**. macOS manages any required approval. You can disable startup in SnapX's Application settings or in **System Settings > General > Login Items & Extensions > Open at Login**.
+On first launch, grant the required Screen Recording access through the permission checklist. Reopen SnapX if macOS requests a restart. System-audio recording is optional: install and route output through a virtual loopback device such as BlackHole or Loopback, refresh the **System audio source** list in Screen recorder settings, and explicitly allow its audio-input access. SnapX does not select the physical microphone. Then choose **Enable launch at login** or **Not now**. macOS manages any required approval. You can disable startup in SnapX's Application settings or in **System Settings > General > Login Items & Extensions > Open at Login**.
 
 See [packaging instructions](packaging/MACOS.md) and [validation results](MACOS-VALIDATION.md).
 

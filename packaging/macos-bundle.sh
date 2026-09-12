@@ -148,6 +148,29 @@ fi
 find "$bundle/Contents/MacOS" -depth -type d -name '*.dSYM' -exec rm -rf {} +
 find "$bundle/Contents/MacOS" -type f -name '*.pdb' -delete
 
+# NuGet native assets commonly ship as universal binaries even when the app's
+# NativeAOT executable targets one architecture. Thin those nested Mach-O files
+# to the executable architecture and remove local/debug symbols before signing.
+# This keeps all features while avoiding roughly 20 MiB of unused release data.
+main_arches="$(lipo -archs "$bundle/Contents/MacOS/snapx-ui")"
+if [[ "$main_arches" == 'arm64' || "$main_arches" == 'x86_64' ]]; then
+    while IFS= read -r -d '' candidate; do
+        if [[ "$candidate" == "$bundle/Contents/MacOS/snapx-ui" ]]; then
+            continue
+        fi
+        if candidate_arches="$(lipo -archs "$candidate" 2>/dev/null)"; then
+            if [[ " $candidate_arches " == *" $main_arches "* && "$candidate_arches" == *' '* ]]; then
+                temporary="$candidate.snapx-thin"
+                original_mode="$(stat -f '%Lp' "$candidate")"
+                lipo "$candidate" -thin "$main_arches" -output "$temporary"
+                chmod "$original_mode" "$temporary"
+                mv "$temporary" "$candidate"
+            fi
+            strip -S -x "$candidate" 2>/dev/null || true
+        fi
+    done < <(find "$bundle/Contents/MacOS" -depth -type f -print0)
+fi
+
 # Shared/downloaded workspaces can attach quarantine or stale detached-signature
 # attributes to resource files. A newly assembled bundle must be signed from a
 # clean resource tree.
@@ -168,7 +191,7 @@ cat > "$bundle/Contents/Info.plist" <<EOF
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><false/>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSMicrophoneUsageDescription</key><string>SnapX uses the microphone when you choose to record audio.</string>
+  <key>NSMicrophoneUsageDescription</key><string>SnapX accesses a virtual loopback input only when you enable system audio recording.</string>
 </dict></plist>
 EOF
 

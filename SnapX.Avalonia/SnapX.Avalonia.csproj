@@ -31,6 +31,12 @@
     <PublishTrimmed>true</PublishTrimmed>
     <Optimize>true</Optimize>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetMacOS)' == 'true' and '$(PublishAot)' == 'true'">
+    <!-- NativeAOT defaults to balanced code generation. The macOS bundle is a
+         tray utility, so favor substantially smaller code while preserving the
+         same feature set. -->
+    <OptimizationPreference>Size</OptimizationPreference>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <DebugSymbols>false</DebugSymbols>
     <DebugType>none</DebugType>
@@ -38,7 +44,7 @@
     <!-- During development on Windows though, this is very helpful. -->
     <OutputType>WinExe</OutputType>
   </PropertyGroup>
-  <ItemGroup Condition="'$(PublishAot)' == 'true'">
+  <ItemGroup Condition="'$(PublishAot)' == 'true' and '$(TargetLinux)' == 'true'">
     <TrimmerRootDescriptor Include="$(MSBuildThisFileDirectory)../build/SnapX.Trimming.Roots.xml" />
   </ItemGroup>
   <ItemGroup>

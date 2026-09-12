@@ -102,10 +102,14 @@ mounting the image.
 The Applications shortcut installs to `/Applications`; copying the app to
 `~/Applications` is also supported. Development images contain `SnapX
 Local.app`, so they cannot overwrite a production `SnapX.app` by name. On first
-launch, a permission checklist requests Screen Recording and Microphone access
-one at a time and links to their System Settings panels. Finish setup stays
-disabled until macOS confirms both permissions; quitting resumes setup next
-time. The app may need to be reopened after changing Screen Recording access.
+launch, a permission checklist requests the required Screen Recording access
+and links to its System Settings panel. Finish setup stays disabled until macOS
+confirms that permission; quitting resumes setup next time. The app may need to
+be reopened after changing Screen Recording access. Optional system-audio
+recording uses an explicitly selected virtual loopback device. macOS classifies
+that feed as an audio input, so its separate access request is available from
+the permission page and Screen recorder settings without making it a first-run
+requirement. SnapX does not select the physical microphone.
 After permission setup, an installed copy of SnapX offers **Enable launch at
 login** and **Not now**, with **Not now** as the default. The Application
 settings page later provides Enable, Disable, status, and Open Login Items

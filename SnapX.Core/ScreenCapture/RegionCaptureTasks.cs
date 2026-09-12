@@ -29,6 +29,7 @@ public sealed class RegionCaptureRequest
     public RegionCaptureOptions Options { get; init; } = new();
     public RegionCaptureType CaptureType { get; init; }
     public bool CaptureImage { get; init; }
+    public bool RestoreHiddenWindowsAfterSelection { get; init; }
 }
 
 public static class RegionCaptureTasks

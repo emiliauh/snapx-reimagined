@@ -13,7 +13,7 @@ public sealed class MacOSPermissionsView : UserControl
     private readonly TextBlock _microphoneStatus = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _error = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Button _screenGrant = new() { Content = "Grant screen access" };
-    private readonly Button _microphoneGrant = new() { Content = "Grant microphone access" };
+    private readonly Button _microphoneGrant = new() { Content = "Allow loopback audio access" };
     private Window? _window;
     private CancellationTokenSource? _activationRefresh;
     private bool _requesting;
@@ -33,13 +33,13 @@ public sealed class MacOSPermissionsView : UserControl
             Children =
             {
                 new TextBlock { Text = "macOS permissions", FontSize = 18, FontWeight = FontWeight.SemiBold },
-                Paragraph("Grant screen access first, then microphone access. SnapX requests each permission so macOS can list it in System Settings > Privacy & Security. Only you can approve the toggles."),
+                Paragraph("Screen access is required for capture. Audio-input access is optional and is requested only when you enable system audio through a loopback device. Only you can approve macOS privacy toggles."),
                 Heading("Screen Recording — required for screenshots and video"),
                 Paragraph("Allow SnapX to capture your displays and other windows. macOS may call this Screen & System Audio Recording. After enabling SnapX, quit and reopen it if macOS requests a restart."),
                 _screenStatus,
                 Buttons(_screenGrant, screenSettings),
-                Heading("Microphone — for recorded audio"),
-                Paragraph("Allow SnapX to include your voice when you choose to record microphone audio. Granting access does not turn on the microphone."),
+                Heading("System audio loopback — optional"),
+                Paragraph("FFmpeg records speaker output from a virtual device such as BlackHole or Loopback. macOS classifies that virtual feed as a microphone input, even though SnapX does not select your physical microphone."),
                 _microphoneStatus,
                 Buttons(_microphoneGrant, microphoneSettings),
                 Paragraph("Global shortcuts use macOS's hotkey API and do not need Accessibility or Input Monitoring access. Launch at login is a separate optional setting."),
@@ -111,8 +111,8 @@ public sealed class MacOSPermissionsView : UserControl
             bool screen = MacOSPermissions.HasScreenCaptureAccess();
             var microphone = MacOSPermissions.GetMicrophoneStatus();
             _screenStatus.Text = screen ? "1. Screen access: complete." : "1. Screen access: incomplete. Choose Grant screen access, enable SnapX in System Settings, then reopen it if needed.";
-            _microphoneStatus.Text = microphone == MacOSPermissionStatus.Authorized ? "2. Microphone access: complete." : "2. Microphone access: incomplete (" + microphone + ").";
-            IsComplete = screen && microphone == MacOSPermissionStatus.Authorized;
+            _microphoneStatus.Text = microphone == MacOSPermissionStatus.Authorized ? "2. Optional loopback audio access: enabled." : "2. Optional loopback audio access: " + microphone + ".";
+            IsComplete = screen;
             CompletionChanged?.Invoke(IsComplete);
             _screenGrant.IsEnabled = !_requesting && !screen;
             _microphoneGrant.IsEnabled = !_requesting && screen && microphone is not (MacOSPermissionStatus.Authorized or MacOSPermissionStatus.Restricted or MacOSPermissionStatus.Unavailable);

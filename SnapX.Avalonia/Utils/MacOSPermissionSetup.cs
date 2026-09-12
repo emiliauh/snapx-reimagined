@@ -21,14 +21,12 @@ public static class MacOSPermissionSetup
         // settings. Re-check the effective grants on every launch so an update,
         // rebuilt local bundle, or revoked permission cannot be hidden by a
         // previously persisted "setup complete" value.
-        bool permissionsComplete = MacOSPermissions.HasScreenCaptureAccess() &&
-            MacOSPermissions.GetMicrophoneStatus() == MacOSPermissionStatus.Authorized;
+        bool permissionsComplete = MacOSPermissions.HasScreenCaptureAccess();
         if (!SnapXL.Settings.MacOSPermissionSetupDismissed || !permissionsComplete)
         {
             if (!await ShowAsync(owner, firstLaunch: true))
             {
-                if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-                    desktop.Shutdown();
+                App.RequestShutdown();
                 return;
             }
         }
@@ -72,8 +70,7 @@ public static class MacOSPermissionSetup
             if (owner != null) { owner.Show(); owner.Activate(); result = await dialog.ShowAsync(owner); }
             else result = await dialog.ShowAsync();
             if (result != FAContentDialogResult.Primary ||
-                !MacOSPermissions.HasScreenCaptureAccess() ||
-                MacOSPermissions.GetMicrophoneStatus() != MacOSPermissionStatus.Authorized) return;
+                !MacOSPermissions.HasScreenCaptureAccess()) return;
             SnapXL.Settings.MacOSPermissionSetupDismissed = true;
             // Persist completion before offering the next first-run step so a fast
             // quit/relaunch cannot reopen an already completed permission wizard.

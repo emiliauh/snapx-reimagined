@@ -39,6 +39,8 @@ public static class ScreenRecordManager
     private static bool pauseRequested;
     private static long sessionId;
     private static CancellationTokenSource? sessionCancellation;
+    private static Task? sessionTask;
+    private static bool shutdownRequested;
     private static Rectangle currentCaptureRectangle;
 
     public static bool IsRecording
@@ -198,6 +200,12 @@ public static class ScreenRecordManager
 
         lock (StateLock)
         {
+            if (shutdownRequested)
+            {
+                DebugHelper.WriteLine("Ignoring a screen-recording start requested during application shutdown.");
+                return;
+            }
+
             if (state != RecordingManagerState.Idle)
             {
                 // Preserve the established toggle behavior.
@@ -236,11 +244,64 @@ public static class ScreenRecordManager
             sessionCancellation = new CancellationTokenSource();
             sessionId++;
             long currentSession = sessionId;
-            _ = Task.Run(() => RunRecordingSessionAsync(
+            sessionTask = Task.Run(() => RunRecordingSessionAsync(
                 currentSession,
                 outputType,
                 startMethod,
                 taskSettings));
+        }
+    }
+
+    /// <summary>
+    /// Finalizes an active recording before the application lifetime exits.
+    /// FFmpeg normally receives <c>q</c> so its container remains playable; a
+    /// stuck encoder is force-stopped only after the grace period expires.
+    /// </summary>
+    public static async Task StopForShutdownAsync()
+    {
+        Task? pending;
+        lock (StateLock)
+        {
+            // Close the race in which a hotkey starts another encoder after we
+            // snapshot the current session but before Core unregisters hotkeys.
+            shutdownRequested = true;
+            pending = sessionTask;
+            if (state == RecordingManagerState.Idle || pending is null)
+            {
+                return;
+            }
+        }
+
+        StopRecording();
+        try
+        {
+            await pending.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            return;
+        }
+        catch (TimeoutException)
+        {
+            DebugHelper.WriteLine("Recording did not finalize within 3 seconds; force-stopping it for shutdown.");
+        }
+
+        ScreenRecorder? recorder;
+        FFmpegCLIManager? encoder;
+        lock (StateLock)
+        {
+            abortRequested = true;
+            recorder = screenRecorder;
+            encoder = activeFfmpeg;
+            sessionCancellation?.Cancel();
+        }
+        recorder?.ForceStopRecording();
+        encoder?.ForceClose();
+
+        try
+        {
+            await pending.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            DebugHelper.WriteLine("Recording worker did not exit after its encoder was force-stopped.");
         }
     }
 
@@ -456,6 +517,7 @@ public static class ScreenRecordManager
                     ResumeGate.Set();
                     sessionCancellation?.Dispose();
                     sessionCancellation = null;
+                    sessionTask = null;
                 }
             }
         }
@@ -1040,11 +1102,14 @@ public static class ScreenRecordManager
         ScreenRecordStartMethod startMethod,
         TaskSettings taskSettings)
     {
+        FFmpegOptions ffmpeg = taskSettings.CaptureSettings.FFmpegOptions;
+        ffmpeg.FixSources();
+
         if (OperatingSystem.IsMacOS())
         {
             MacOSPermissions.ThrowIfScreenCaptureAccessDenied();
             if (outputType == ScreenRecordOutput.FFmpeg &&
-                taskSettings.CaptureSettings.FFmpegOptions.IsAudioSourceSelected)
+                ffmpeg.IsAudioSourceSelected)
             {
                 MacOSPermissions.ThrowIfMicrophoneAccessDenied();
             }
@@ -1079,7 +1144,6 @@ public static class ScreenRecordManager
             }
         }
 
-        FFmpegOptions ffmpeg = taskSettings.CaptureSettings.FFmpegOptions;
         bool hasCustomCommands = ffmpeg.UseCustomCommands && !string.IsNullOrWhiteSpace(ffmpeg.CustomCommands);
         bool hasFfmpegExecutableOverride = ffmpeg.OverrideCLIPath && !string.IsNullOrWhiteSpace(ffmpeg.CLIPath);
 

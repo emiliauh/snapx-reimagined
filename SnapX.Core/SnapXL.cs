@@ -88,8 +88,17 @@ public class SnapXL
         }
     }
     public void setQualifier(string qualifier) => Qualifier = qualifier;
+    public static event Action? QuitRequested;
+
     public static void quit()
     {
+        Action? handler = QuitRequested;
+        if (handler is not null)
+        {
+            handler();
+            return;
+        }
+
         CloseSequence();
     }
     public static string Title
@@ -285,7 +294,9 @@ public class SnapXL
 
     #endregion Paths
 
-    public static bool CloseSequenceStarted, restartRequested, restartAsAdmin;
+    private static int closeSequenceStarted;
+    public static bool CloseSequenceStarted => Volatile.Read(ref closeSequenceStarted) != 0;
+    public static bool restartRequested, restartAsAdmin;
 
     public void start()
     {
@@ -705,8 +716,7 @@ public class SnapXL
 
     public static void CloseSequence()
     {
-        if (CloseSequenceStarted) return;
-        CloseSequenceStarted = true;
+        if (Interlocked.Exchange(ref closeSequenceStarted, 1) != 0) return;
 
         DebugHelper.WriteLine("SnapX closing!");
         TaskManager.StopAllTasks();
@@ -722,13 +732,17 @@ public class SnapXL
         _optimizeTimer.Dispose();
         if (TelemetryEnabled())
         {
-            aptabaseClient?.DisposeAsync().GetAwaiter().GetResult();
+            Task? telemetryShutdown = aptabaseClient?.DisposeAsync().AsTask();
+            if (telemetryShutdown is not null &&
+                !telemetryShutdown.Wait(TimeSpan.FromSeconds(2)))
+            {
+                DebugHelper.WriteLine("Telemetry shutdown exceeded 2 seconds; continuing application exit.");
+            }
             SentrySdk.Close();
         }
 
         DebugHelper.WriteLine("SnapX closed.");
         DebugHelper.FlushBufferedMessages();
-        Environment.Exit(0);
     }
 
     private static void UpdatePersonalPath()

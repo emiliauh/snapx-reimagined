@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -38,6 +39,7 @@ public partial class RegionSelectorWindow : Window
     private Point _pressedPoint;
     private bool _isSelecting;
     private bool _selectionCompleted;
+    private bool _selectionSucceeded;
     private bool _captureReady;
     private bool _ownsSelector;
     private int _selectorGateReleased;
@@ -53,6 +55,7 @@ public partial class RegionSelectorWindow : Window
     private Stream? _imageStream;
     private Rect _imageBounds;
     private PixelRect _screenBounds;
+    private PixelRect _requestedScreenBounds;
     private List<Window> windowsHiddenByUs = [];
     private TaskCompletionSource<Image?> _resultImg = new();
     private TaskCompletionSource<SixLabors.ImageSharp.Rectangle?> _resultRect = new();
@@ -63,6 +66,7 @@ public partial class RegionSelectorWindow : Window
     private bool IsSilentMode { get; set; } = false;
 
     private bool TakeScreenshot { get; set; } = true;
+    private bool RestoreHiddenWindowsAfterSelection { get; set; }
     private static bool UseLiveOverlay => OperatingSystem.IsMacOS();
 
     [ModuleInitializer]
@@ -424,7 +428,8 @@ public partial class RegionSelectorWindow : Window
 
         var selector = new RegionSelectorWindow(true, request.CaptureImage)
         {
-            _captureOptions = request.Options
+            _captureOptions = request.Options,
+            RestoreHiddenWindowsAfterSelection = request.RestoreHiddenWindowsAfterSelection
         };
         // Do not return a completed selection until its window has completely
         // closed.  The selector gate is released in OnClosed, so returning on
@@ -932,11 +937,18 @@ public partial class RegionSelectorWindow : Window
         {
             return (await SelectRegionForCoreAsync(new RegionCaptureRequest
             {
-                CaptureImage = true
+                CaptureImage = true,
+                RestoreHiddenWindowsAfterSelection = true
             }, CancellationToken.None))?.Image;
         }
 
-        var selector = new RegionSelectorWindow(true);
+        var selector = new RegionSelectorWindow(true)
+        {
+            // OCR and QR scanning continue in the tool window after capture.
+            // The ordinary screenshot workflow uses the Core selector request
+            // and intentionally remains headless instead.
+            RestoreHiddenWindowsAfterSelection = true
+        };
         var windowClosedTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         selector.Closed += (_, _) => windowClosedTask.TrySetResult();
@@ -963,11 +975,15 @@ public partial class RegionSelectorWindow : Window
         {
             return (await SelectRegionForCoreAsync(new RegionCaptureRequest
             {
-                CaptureImage = false
+                CaptureImage = false,
+                RestoreHiddenWindowsAfterSelection = true
             }, CancellationToken.None))?.Rectangle;
         }
 
-        var selector = new RegionSelectorWindow(true, false);
+        var selector = new RegionSelectorWindow(true, false)
+        {
+            RestoreHiddenWindowsAfterSelection = true
+        };
         var windowClosedTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         selector.Closed += (_, _) => windowClosedTask.TrySetResult();
@@ -1108,6 +1124,15 @@ public partial class RegionSelectorWindow : Window
         var bounds = ReadLiveWindowBounds();
         if (bounds.Width <= 0 || bounds.Height <= 0 || ClientSize.Width <= 0 || ClientSize.Height <= 0)
             throw new InvalidOperationException("The live selector has no usable client area.");
+        if (_requestedScreenBounds.Width > 0 && _requestedScreenBounds.Height > 0 &&
+            (Math.Abs(bounds.X - _requestedScreenBounds.X) > 1 ||
+             Math.Abs(bounds.Y - _requestedScreenBounds.Y) > 1 ||
+             Math.Abs(bounds.Width - _requestedScreenBounds.Width) > 1 ||
+             Math.Abs(bounds.Height - _requestedScreenBounds.Height) > 1))
+        {
+            throw new InvalidOperationException(
+                $"The live selector was constrained to {bounds} instead of full display {_requestedScreenBounds}.");
+        }
         _screenBounds = new PixelRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
         _imageBounds = new Rect(0, 0, ClientSize.Width, ClientSize.Height);
         _canvas.Width = ClientSize.Width;
@@ -1355,6 +1380,7 @@ public partial class RegionSelectorWindow : Window
         DebugHelper.WriteLine($"RegionSelectorWindow.OnPointerReleased: Region: {selectedRegion}");
         if (!TakeScreenshot)
         {
+            _selectionSucceeded = true;
             Close();
             return;
         }
@@ -1427,7 +1453,8 @@ public partial class RegionSelectorWindow : Window
             _resultImg.TrySetException(ex);
             ShowErrorDialog(ex);
         }
-        App.MyMainWindow?.Show();
+        _selectionSucceeded = _resultImg.Task.IsCompletedSuccessfully &&
+            _resultImg.Task.Result is not null;
         Close();
     }
     private Task CancelSelection()
@@ -1442,7 +1469,6 @@ public partial class RegionSelectorWindow : Window
         _isSelecting = false;
         _resultRect.TrySetResult(null);
         _resultImg.TrySetResult(null);
-        App.MyMainWindow?.Show();
         Close();
         return Task.CompletedTask;
     }
@@ -1943,23 +1969,28 @@ public partial class RegionSelectorWindow : Window
 
     private void HideSnapXWindows()
     {
-        foreach (var win in App.MyMainWindow?.OwnedWindows.Where(w => w != this && w.IsVisible) ?? [])
+        IEnumerable<Window> visibleWindows =
+            (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                ?.Windows.Where(window => window != this && window.IsVisible).ToArray()
+            ?? [];
+        foreach (var win in visibleWindows)
         {
+            if (windowsHiddenByUs.Contains(win)) continue;
             _ownershipMap[win] = win.Owner;
             win.Hide();
             windowsHiddenByUs.Add(win);
-        }
-
-        if (App.MyMainWindow is { IsVisible: true } mainWindow)
-        {
-            _ownershipMap[mainWindow] = mainWindow.Owner;
-            mainWindow.Hide();
-            windowsHiddenByUs.Add(mainWindow);
         }
     }
 
     private void RestoreHiddenWindows()
     {
+        if (_selectionSucceeded && !RestoreHiddenWindowsAfterSelection)
+        {
+            _ownershipMap.Clear();
+            windowsHiddenByUs.Clear();
+            return;
+        }
+
         var sortedWindows = TopoSortWindows(windowsHiddenByUs);
         foreach (var win in sortedWindows)
         {

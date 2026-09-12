@@ -151,10 +151,12 @@ bash packaging/macos-dmg.sh Output/SnapX.app Output/SnapX-0.5.0-alpha.5-macOS-ar
 ## First-launch privacy setup and signing identity
 
 The alpha.7 permission work adds native Core Graphics screen authorization and
-AVFoundation microphone authorization requests, a sequential first-launch
-checklist, matching System Settings links, and capture/recording permission
-guards. Both statuses are read from macOS; Finish setup stays disabled until
-both are authorized. A failed permission check routes to setup before capture.
+AVFoundation audio-input authorization requests, a first-launch checklist,
+matching System Settings links, and capture/recording permission guards. Screen
+Recording is required; audio-input access is optional and used only for an
+explicitly selected system-audio loopback device. Statuses are read from macOS;
+Finish setup stays disabled until Screen Recording is authorized. A failed
+permission check routes to setup before capture.
 The installed Native AOT app correctly showed denied screen access and
 undetermined microphone access, with the second request and Finish disabled.
 After the user approved both entries, an installed app capture completed and
@@ -162,6 +164,19 @@ stayed local. The focused permission probe passed seven native status, routing,
 guard, and block-callback checks without changing host permissions. A broader
 fuzz run passed 254,219 checks. The final Native AOT executable also reported a
 denied headless capture without trying to parent a dialog to a missing window.
+
+The alpha.8 follow-up makes screenshots and recordings headless, preserves the
+OCR/QR tool window when it needs a selected image, supports detected macOS
+loopback audio devices in generated FFmpeg commands, and moves live selector
+windows above the menu-bar level with full CoreGraphics display bounds. The
+updated property suite passed 254,228 checks. An ad-hoc arm64 NativeAOT bundle
+exited in 0.19 seconds for a warm AppleEvent Quit and 0.06 seconds for SIGTERM;
+a first-run permission-dialog Quit took 2.52 seconds. Both paths produced no
+new crash report. The packaged app was reduced from 210,723,197 to 185,856,400
+bytes (11.8%) by architecture thinning and symbol stripping. This VM had no
+installed loopback device and did not grant the new ad-hoc identity Screen
+Recording access, so real audio samples and menu-bar hit testing still require
+manual validation on an approved installation.
 
 An installed-upgrade test exposed a separate signing problem: TCC rejected a
 previously stored code requirement after the ad-hoc executable changed. Local

@@ -82,6 +82,7 @@ public partial class App : Application
     private static DesktopNotificationService? DesktopNotifications { get; set; }
     private SingleInstanceManager? _singleInstance;
     private readonly List<IDisposable> _signalRegistrations = [];
+    private readonly List<(Window Window, WindowBase? Owner)> _headlessCaptureWindows = [];
 
     private static string SimpleVersion()
     {
@@ -95,6 +96,11 @@ public partial class App : Application
     public override void Initialize()
     {
         SnapX = new SnapXAvalonia();
+        SnapXL.QuitRequested -= RequestShutdown;
+        SnapXL.QuitRequested += RequestShutdown;
+        CaptureBase.SetHostCaptureVisibilityHandlers(
+            PrepareHeadlessCaptureAsync,
+            CompleteHeadlessCapture);
         // SnapX.setQualifier(" UI");
         AvaloniaXamlLoader.Load(this);
         AppDomain.CurrentDomain.UnhandledException += (Sender, Args) =>
@@ -318,78 +324,176 @@ public partial class App : Application
         };
     }
 
-    private void Shutdown()
+    private async Task PrepareHeadlessCaptureAsync()
     {
-        ShutdownCore();
-        if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            desktop.Shutdown();
-        }
+            if (Volatile.Read(ref _shutdownStarted) != 0 ||
+                ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                return;
+            }
+
+            _headlessCaptureWindows.Clear();
+            foreach (Window window in desktop.Windows.Where(window => window.IsVisible).ToArray())
+            {
+                _headlessCaptureWindows.Add((window, window.Owner));
+                window.Hide();
+            }
+        });
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+        // Let WindowServer present the hide before CoreGraphics reads pixels.
+        await Task.Delay(50);
     }
 
-    private void ShutdownCore()
+    private void CompleteHeadlessCapture(bool succeeded)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (succeeded || Volatile.Read(ref _shutdownStarted) != 0)
+            {
+                _headlessCaptureWindows.Clear();
+                return;
+            }
+
+            foreach ((Window window, WindowBase? owner) in _headlessCaptureWindows
+                         .OrderBy(entry => entry.Owner is null ? 0 : 1))
+            {
+                if (window.IsVisible) continue;
+                if (owner is Window ownerWindow && ownerWindow.IsVisible)
+                    window.Show(ownerWindow);
+                else
+                    window.Show();
+            }
+            _headlessCaptureWindows.Clear();
+        });
+    }
+
+    internal static void HideWindowsForRecording()
+    {
+        void Hide()
+        {
+            MySettingsWindow?.Hide();
+            MyMainWindow?.Hide();
+        }
+
+        if (Dispatcher.UIThread.CheckAccess()) Hide();
+        else Dispatcher.UIThread.Post(Hide);
+    }
+
+    public static void RequestShutdown()
+    {
+        if (Current is not App app)
+        {
+            return;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+            app.BeginShutdown();
+        else
+            Dispatcher.UIThread.Post(app.BeginShutdown);
+    }
+
+    private void BeginShutdown()
     {
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
             return;
 
-        // The recording outline is supplied by small native layer-shell
-        // helper processes. Stop the recording UI before the dispatcher is
-        // torn down so closing SnapX cannot leave a red outline (or a control
-        // popup) behind on the desktop.
+        _ = ShutdownCoreAsync();
+    }
+
+    private async Task ShutdownCoreAsync()
+    {
+        DebugHelper.WriteLine("Starting orderly application shutdown.");
         try
         {
-            // Stop the active encoder before stopping generic worker tasks.
-            // ScreenRecordManager owns child ffmpeg/wf-recorder processes that
-            // do not belong to the Avalonia window lifetime, so this explicit
-            // abort is what guarantees they exit with SnapX.
-            TaskHelpers.AbortScreenRecording();
-            RecordingControlWindow.HideRecording();
-            RecordingRegionOutline.Hide();
+            // The recording outline is supplied by small native layer-shell
+            // helper processes. Stop the recording UI before the dispatcher is
+            // torn down so closing SnapX cannot leave a red outline (or a control
+            // popup) behind on the desktop.
+            try
+            {
+                RecordingControlWindow.HideRecording();
+                RecordingRegionOutline.Hide();
+                // Preserve a playable recording when possible. The manager uses a
+                // bounded force-stop fallback so a stuck child cannot hold the app
+                // open indefinitely.
+                await ScreenRecordManager.StopForShutdownAsync();
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Failed to close recording UI during shutdown");
+            }
+
+            try
+            {
+                if (_coreStarted && SnapX != null)
+                {
+                    _pollingCts?.Cancel();
+                    // Keep Avalonia's dispatcher alive while Core unregisters the
+                    // macOS hotkeys. The backend must marshal that work onto this
+                    // main queue, so synchronously waiting here deadlocks it.
+                    await Task.Run(() => SnapX.shutdown());
+                }
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e);
+                Console.Error.WriteLine("Error shutting down SnapX.Core, continuing shut down.");
+            }
+
+            try
+            {
+                _recordingTrayController?.Dispose();
+                _recordingTrayController = null;
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Failed to dispose the recording tray controller");
+            }
+
+            try
+            {
+                if (DesktopNotifications is not null)
+                {
+                    await DesktopNotifications.DisposeAsync();
+                    DesktopNotifications = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Failed to dispose desktop notifications");
+            }
+
+            _singleInstance?.Dispose();
+            _singleInstance = null;
+            foreach (IDisposable registration in _signalRegistrations)
+            {
+                registration.Dispose();
+            }
+            _signalRegistrations.Clear();
+            StopWaylandClipboardProcess();
+            ReplaceClipboardBitmap(null);
+            _clipboardWindow = null;
+            _headlessCaptureWindows.Clear();
+            CaptureBase.SetHostCaptureVisibilityHandlers(null, null);
+            SnapXL.QuitRequested -= RequestShutdown;
+            MyMainWindow = null;
         }
         catch (Exception ex)
         {
-            DebugHelper.WriteException(ex, "Failed to close recording UI during shutdown");
+            DebugHelper.WriteException(ex, "Unexpected failure during application shutdown");
         }
-
-        try
+        finally
         {
-            if (_coreStarted && SnapX != null)
+            DebugHelper.WriteLine("Orderly application shutdown complete.");
+            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                _pollingCts?.Cancel();
-                var shutdownTask = Task.Run(() => SnapX.shutdown());
-
-                if (!shutdownTask.Wait(TimeSpan.FromSeconds(10)))
-                {
-                    Console.Error.WriteLine(
-                        "SnapX shutdown timed out after 10 seconds, continuing exit."
-                    );
-                }
+                // Shutdown() intentionally bypasses ShutdownRequested. That event
+                // was cancelled while this asynchronous cleanup kept Cocoa alive.
+                desktop.Shutdown();
             }
         }
-        catch (Exception e)
-        {
-            Console.Error.WriteLine(e);
-            Console.Error.WriteLine("Error shutting down SnapX.Core, continuing shut down.");
-        }
-
-        _recordingTrayController?.Dispose();
-        _recordingTrayController = null;
-        if (DesktopNotifications is not null)
-        {
-            _ = DesktopNotifications.DisposeAsync();
-            DesktopNotifications = null;
-        }
-        _singleInstance?.Dispose();
-        _singleInstance = null;
-        foreach (IDisposable registration in _signalRegistrations)
-        {
-            registration.Dispose();
-        }
-        _signalRegistrations.Clear();
-        StopWaylandClipboardProcess();
-        ReplaceClipboardBitmap(null);
-        _clipboardWindow = null;
-        MyMainWindow = null;
     }
 
     /// <summary>
@@ -1071,35 +1175,22 @@ public partial class App : Application
         {
             case IClassicDesktopStyleApplicationLifetime desktop:
                 {
-                    var sigintReceived = false;
                     desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                    desktop.ShutdownRequested += (_, _) =>
+                    desktop.ShutdownRequested += (_, e) =>
                     {
                         DebugHelper.WriteLine("Received Shutdown from Avalonia");
-                        if (sigintReceived)
-                            return;
-                        sigintReceived = true;
-                        ShutdownCore();
-
-                        // desktop.Shutdown();
+                        // Cocoa must not tear down Avalonia while managed/native
+                        // cleanup is still running. The coordinator calls the
+                        // non-cancellable Shutdown() after cleanup completes.
+                        e.Cancel = true;
+                        RequestShutdown();
                     };
 
                     Console.CancelKeyPress += (_, ea) =>
                     {
                         DebugHelper.WriteLine("Received SIGINT (Ctrl+C)");
-                        if (sigintReceived)
-                            return;
                         ea.Cancel = true;
-                        sigintReceived = true;
-                        ShutdownCore();
-                        try
-                        {
-                            desktop.Shutdown();
-                        }
-                        catch
-                        {
-                            // Silence at once
-                        }
+                        RequestShutdown();
                     };
                     // Clean up the GlobalShortcuts portal session and the tray
                     // on SIGTERM/SIGHUP too (systemd, logout, or a direct kill).
@@ -1111,39 +1202,15 @@ public partial class App : Application
                         PosixSignal.SIGTERM, ctx =>
                         {
                             DebugHelper.WriteLine("Received SIGTERM");
-                            if (!sigintReceived)
-                            {
-                                sigintReceived = true;
-                                ShutdownCore();
-                                try
-                                {
-                                    desktop.Shutdown();
-                                }
-                                catch
-                                {
-                                    // Silence at once
-                                }
-                            }
                             ctx.Cancel = true;
+                            RequestShutdown();
                         }));
                     _signalRegistrations.Add(PosixSignalRegistration.Create(
                         PosixSignal.SIGHUP, ctx =>
                         {
                             DebugHelper.WriteLine("Received SIGHUP");
-                            if (!sigintReceived)
-                            {
-                                sigintReceived = true;
-                                ShutdownCore();
-                                try
-                                {
-                                    desktop.Shutdown();
-                                }
-                                catch
-                                {
-                                    // Silence at once
-                                }
-                            }
                             ctx.Cancel = true;
+                            RequestShutdown();
                         }));
                     // AppDomain.CurrentDomain.ProcessExit += (o, _) =>
                     // {
@@ -1767,7 +1834,7 @@ public partial class App : Application
 
     private void NativeMenuItem_Quit_OnClick(object? Sender, EventArgs E)
     {
-        Shutdown();
+        RequestShutdown();
     }
 
     private void NativeMenuItem_SnapX_OnClick(object? Sender, EventArgs E)
