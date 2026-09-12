@@ -43,6 +43,7 @@ public sealed class DesktopNotificationService : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
+        if (!IsAvailable) return 0;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -100,7 +101,7 @@ public sealed class DesktopNotificationService : IAsyncDisposable
     public async Task CloseNotificationAsync(uint id, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (id == 0) return;
+        if (id == 0 || !IsAvailable) return;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

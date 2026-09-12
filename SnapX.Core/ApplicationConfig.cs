@@ -40,6 +40,7 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
     public SupportedLanguage Language { get; set; } = SupportedLanguage.Automatic;
     public bool ShowTray { get; set; } = true;
     public bool SilentRun { get; set; } = false;
+    public bool MacOSLoginPromptDismissed { get; set; }
     public bool TrayIconProgressEnabled { get; set; } = true;
     public bool TaskbarProgressEnabled { get; set; } = true;
     public bool UseWhiteShareXIcon { get; set; } = false;

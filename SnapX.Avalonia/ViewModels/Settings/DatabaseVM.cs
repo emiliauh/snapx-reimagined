@@ -244,6 +244,8 @@ public partial class DatabaseVM(SqliteConnection Connection) : ViewModelBase
             await using var reader = await cmd.ExecuteReaderAsync();
             var newItems = new ObservableConcurrentCollection<DatabaseRow>();
             var uniqueColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < reader.FieldCount; i++)
+                uniqueColumns.Add(reader.GetName(i));
 
             while (await reader.ReadAsync())
             {
@@ -265,6 +267,7 @@ public partial class DatabaseVM(SqliteConnection Connection) : ViewModelBase
             AllColumnNames.Clear();
             foreach (var col in uniqueColumns)
                 AllColumnNames.Add(col);
+            OnPropertyChanged(nameof(AllColumnNames));
 
             if (!string.IsNullOrEmpty(SelectedTable))
             {

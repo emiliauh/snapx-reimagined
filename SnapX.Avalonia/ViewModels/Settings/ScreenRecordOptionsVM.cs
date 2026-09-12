@@ -20,7 +20,8 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
     private string _startDelayText = string.Empty;
     private string _durationText = string.Empty;
 
-    public IReadOnlyList<FFmpegCaptureDevice> VideoSources { get; } =
+    public IReadOnlyList<FFmpegCaptureDevice> VideoSources { get; } = OperatingSystem.IsMacOS()
+        ? [FFmpegCaptureDevice.None, FFmpegCaptureDevice.AVFoundation] :
     [
         FFmpegCaptureDevice.None,
         FFmpegCaptureDevice.X11Grab,
@@ -28,7 +29,8 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
         FFmpegCaptureDevice.DDAGrab,
         FFmpegCaptureDevice.ScreenCaptureRecorder
     ];
-    public IReadOnlyList<FFmpegCaptureDevice> AudioSources { get; } =
+    public IReadOnlyList<FFmpegCaptureDevice> AudioSources { get; } = OperatingSystem.IsMacOS()
+        ? [FFmpegCaptureDevice.None, FFmpegCaptureDevice.DefaultMicrophone] :
     [
         FFmpegCaptureDevice.None,
         FFmpegCaptureDevice.VirtualAudioCapturer
@@ -149,6 +151,7 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
         get => FFmpeg.CustomCommands;
         set { FFmpeg.CustomCommands = value ?? string.Empty; OnPropertyChanged(); }
     }
+    public bool IsMacOS => OperatingSystem.IsMacOS();
     public string RecorderSummary
     {
         get
@@ -161,6 +164,8 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
 
     public ScreenRecordOptionsVM()
     {
+        if (OperatingSystem.IsMacOS() && FFmpeg.VideoSource == FFmpegCaptureDevice.GDIGrab.Value)
+            FFmpeg.VideoSource = FFmpegCaptureDevice.AVFoundation.Value;
         RefreshTextValues();
     }
 

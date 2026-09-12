@@ -61,6 +61,8 @@ public class ImgurImageUploaderService : ImageUploaderService
 [JsonSerializable(typeof(ImgurError))]
 [JsonSerializable(typeof(OAuth2Token))]
 [JsonSerializable(typeof(ImgurImageData))]
+[JsonSerializable(typeof(List<ImgurAlbumData>))]
+[JsonSerializable(typeof(List<ImgurImageData>))]
 [JsonSerializable(typeof(ImgurErrorData))]
 internal partial class ImgurSourceGenerationContext : JsonSerializerContext;
 public sealed class Imgur : ImageUploader, IOAuth2
@@ -171,7 +173,7 @@ public sealed class Imgur : ImageUploader, IOAuth2
         {
             var tempAlbums = GetAlbumsPage(i, perPage);
 
-            if (tempAlbums?.Count == 0)
+            if (tempAlbums == null || tempAlbums.Count == 0)
                 break;
 
             albums.AddRange(tempAlbums);
@@ -224,7 +226,7 @@ public sealed class Imgur : ImageUploader, IOAuth2
 
         if (imgurResponse?.success == true && imgurResponse.status == 200)
         {
-            return JsonSerializer.Deserialize<List<ImgurImageData>>(imgurResponse.data.ToString());
+            return JsonSerializer.Deserialize(imgurResponse.data.ToString(), ImgurSourceGenerationContext.Default.ListImgurImageData);
         }
 
         HandleErrors(imgurResponse);
@@ -238,6 +240,7 @@ public sealed class Imgur : ImageUploader, IOAuth2
 
     private UploadResult InternalUpload(Stream stream, string? fileName, bool refreshTokenOnError)
     {
+        long initialPosition = stream.CanSeek ? stream.Position : 0;
         Dictionary<string, string?> args = [];
         NameValueCollection headers;
 
@@ -266,7 +269,7 @@ public sealed class Imgur : ImageUploader, IOAuth2
         var imgurResponse = JsonSerializer.Deserialize<ImgurResponse>(result.Response, ImgurSourceGenerationContext.Default.ImgurResponse);
 
         if (imgurResponse?.success != true || imgurResponse.status != 200)
-            return HandleUploadError(imgurResponse, stream, fileName, refreshTokenOnError);
+            return HandleUploadError(imgurResponse, stream, fileName, refreshTokenOnError, initialPosition);
         var options = new JsonSerializerOptions()
         {
             TypeInfoResolver = ImgurSourceGenerationContext.Default,
@@ -308,14 +311,20 @@ public sealed class Imgur : ImageUploader, IOAuth2
         return $"https://i.imgur.com/{imageData.id}{thumbnail}.jpg";
     }
 
-    private UploadResult HandleUploadError(ImgurResponse imgurResponse, Stream stream, string? fileName, bool refreshTokenOnError)
+    private UploadResult HandleUploadError(ImgurResponse imgurResponse, Stream stream, string? fileName, bool refreshTokenOnError, long initialPosition)
     {
         var errorData = ParseError(imgurResponse);
 
         if (errorData != null && UploadMethod == AccountType.User && refreshTokenOnError &&
-            ((string)errorData.error).Equals("The access token provided is invalid.", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(errorData.error?.ToString(), "The access token provided is invalid.", StringComparison.OrdinalIgnoreCase) &&
             RefreshAccessToken())
         {
+            if (!stream.CanSeek)
+            {
+                Errors.Add("Imgur token was refreshed, but this input stream cannot be rewound for retry.");
+                return new UploadResult();
+            }
+            stream.Position = initialPosition;
             DebugHelper.WriteLine("Imgur access token refreshed, reuploading image.");
             return InternalUpload(stream, fileName, false);
         }
@@ -337,11 +346,6 @@ public sealed class Imgur : ImageUploader, IOAuth2
     private ImgurErrorData ParseError(ImgurResponse response)
     {
         ImgurErrorData errorData = JsonSerializer.Deserialize<ImgurErrorData>(response.data.ToString(), ImgurSourceGenerationContext.Default.ImgurErrorData);
-
-        if (errorData != null && !(errorData.error is string))
-        {
-            errorData.error = JsonSerializer.Deserialize<ImgurErrorData>(errorData.error.ToString(), ImgurSourceGenerationContext.Default.ImgurErrorData);
-        }
 
         return errorData;
     }

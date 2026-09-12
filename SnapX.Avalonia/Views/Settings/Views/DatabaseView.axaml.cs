@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -120,72 +121,30 @@ public partial class DatabaseView : UserControl
         };
 
     }
-    private CancellationTokenSource? _columnUpdateCts;
+    private bool _columnUpdatePending;
 
     private void ScheduleColumnUpdate()
     {
-        // _columnUpdateCts?.Cancel();
-        // _columnUpdateCts = new CancellationTokenSource();
-        // var token = _columnUpdateCts.Token;
-        //
-        // _ = Task.Delay(100, token).ContinueWith(async t =>
-        // {
-        //     if (!t.IsCanceled)
-        //         await UpdateDataGridColumnsAsync(MainDataGrid);
-        // }, TaskScheduler.Default);
-    }
-
-    private async Task UpdateDataGridColumnsAsync(DataGrid grid)
-    {
-        var allColumns = _vm.AllColumnNames.ToArray();
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        if (_columnUpdatePending) return;
+        _columnUpdatePending = true;
+        Dispatcher.UIThread.Post(() =>
         {
-            var existingHeaders = grid.Columns
-                .Select(c => c.Header?.ToString())
-                .Where(h => h != null)
-                .ToList()!;
-
-            foreach (var col in grid.Columns.OfType<DataGridTextColumn>().ToList())
+            _columnUpdatePending = false;
+            MainDataGrid.Columns.Clear();
+            foreach (string name in _vm.AllColumnNames)
             {
-                var header = col.Header?.ToString();
-                if (header != null && !allColumns.Contains(header, StringComparer.OrdinalIgnoreCase))
+                // A typed template avoids reflection-based binding to dynamic
+                // SQLite columns, which is unreliable in Native AOT builds.
+                MainDataGrid.Columns.Add(new DataGridTemplateColumn
                 {
-                    grid.Columns.Remove(col);
-                }
+                    Header = name,
+                    CellTemplate = new FuncDataTemplate<DatabaseRow>((row, _) => new TextBlock
+                    {
+                        Text = row?[name]?.ToString() ?? string.Empty,
+                        Margin = new Thickness(8, 4)
+                    })
+                });
             }
-
-            foreach (var colName in allColumns)
-            {
-                if (!existingHeaders.Contains(colName, StringComparer.OrdinalIgnoreCase))
-                {
-                    // var binding = new CompiledBindingExtension
-                    // {
-                    //     Path = new PropertyPath($"Columns[{colName}]"),
-                    //     // 3. Provide a strongly-typed function to get the data
-                    //     // This bypasses the need for CompiledBindingPath strings entirely
-                    //     Converter = new FuncValueConverter<DatabaseRow, object>(item =>
-                    //     {
-                    //         if (item != null && item.Columns.TryGetValue(colName, out var value))
-                    //         {
-                    //             return value;
-                    //         }
-                    //         return null;
-                    //     }),
-                    //     Mode = BindingMode.OneWay
-                    // };
-                    // grid.Columns.Add(new DataGridTextColumn
-                    // {
-                    //     Header = colName,
-                    //     Binding = binding
-                    // });
-                }
-            }
-
-            if (!Equals(grid.ItemsSource, _vm.Items))
-                grid.ItemsSource = _vm.Items;
-
-            grid.SelectedItem = _vm.SelectedItem;
         });
     }
 

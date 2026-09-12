@@ -9,7 +9,8 @@ public class FFmpegOptions
     // General
     public bool OverrideCLIPath { get; set; } = false;
     public string? CLIPath { get; set; } = "";
-    public string VideoSource { get; set; } = FFmpegCaptureDevice.GDIGrab.Value;
+    public string VideoSource { get; set; } = OperatingSystem.IsMacOS()
+        ? FFmpegCaptureDevice.AVFoundation.Value : FFmpegCaptureDevice.GDIGrab.Value;
     public string AudioSource { get; set; } = FFmpegCaptureDevice.None.Value;
     public FFmpegVideoCodec VideoCodec { get; set; } = FFmpegVideoCodec.libx264;
     public FFmpegAudioCodec AudioCodec { get; set; } = FFmpegAudioCodec.libvoaacenc;
@@ -77,6 +78,16 @@ public class FFmpegOptions
                     {
                         // Ignore malformed PATH entries.
                     }
+                }
+            }
+
+            // Finder launches do not inherit a shell's Homebrew/MacPorts PATH.
+            if (OperatingSystem.IsMacOS())
+            {
+                foreach (string directory in new[] { "/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/opt/homebrew/opt/ffmpeg@8/bin", "/usr/local/opt/ffmpeg@8/bin" })
+                {
+                    string candidate = Path.Combine(directory, desiredFFmpegFileName);
+                    if (File.Exists(candidate)) return candidate;
                 }
             }
 

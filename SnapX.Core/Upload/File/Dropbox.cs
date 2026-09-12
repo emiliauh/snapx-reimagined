@@ -5,6 +5,7 @@
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using SnapX.Core.Upload.BaseServices;
 using SnapX.Core.Upload.BaseUploaders;
@@ -179,10 +180,9 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
     {
         if (!string.IsNullOrEmpty(path) && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            var json = JsonSerializer.Serialize(new
-            {
-                path = VerifyPath(path)
-            });
+            var json = new JsonObject {
+                ["path"] = VerifyPath(path)
+            }.ToJsonString();
 
             var args = new Dictionary<string, string?>
             {
@@ -204,13 +204,12 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
             return null;
         }
 
-        var json = JsonSerializer.Serialize(new
-        {
-            path = VerifyPath(path, fileName),
-            mode = "overwrite",
-            autorename = false,
-            mute = true
-        });
+        var json = new JsonObject {
+            ["path"] = VerifyPath(path, fileName),
+            ["mode"] = "overwrite",
+            ["autorename"] = false,
+            ["mute"] = true
+        }.ToJsonString();
 
         var args = new Dictionary<string, string?>
         {
@@ -219,7 +218,16 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
 
         var response = SendRequest(HttpMethod.Post, URLUpload, stream, RequestHelpers.ContentTypeOctetStream, args, GetAuthHeaders());
 
-        var ur = new UploadResult(response);
+        var ur = new UploadResult(response)
+        {
+            ResponseInfo = LastResponseInfo,
+            IsSuccess = LastResponseInfo?.IsSuccess == true
+        };
+        if (!ur.IsSuccess)
+        {
+            Errors.Add($"Dropbox upload failed (HTTP {(int?)LastResponseInfo?.StatusCode}).");
+            return ur;
+        }
 
         if (!string.IsNullOrEmpty(ur.Response))
         {
@@ -229,18 +237,24 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
             };
             var metadata = JsonSerializer.Deserialize<DropboxMetadata>(ur.Response, options);
 
-            if (metadata != null)
+            if (metadata != null && !string.IsNullOrEmpty(metadata.path_display))
             {
                 if (createShareableLink)
                 {
                     AllowReportProgress = false;
 
                     ur.URL = CreateShareableLink(metadata.path_display, useDirectLink);
+                    if (string.IsNullOrWhiteSpace(ur.URL)) ur.IsSuccess = false;
                 }
                 else
                 {
                     ur.IsURLExpected = false;
                 }
+            }
+            else
+            {
+                ur.IsSuccess = false;
+                Errors.Add("Dropbox returned no uploaded file metadata.");
             }
         }
 
@@ -254,13 +268,12 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
 
         if (path != null && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            var json = JsonSerializer.Serialize(new
-            {
-                path = VerifyPath(path),
-                include_media_info = false,
-                include_deleted = false,
-                include_has_explicit_shared_members = false
-            });
+            var json = new JsonObject {
+                ["path"] = VerifyPath(path),
+                ["include_media_info"] = false,
+                ["include_deleted"] = false,
+                ["include_has_explicit_shared_members"] = false
+            }.ToJsonString();
 
             var response = SendRequest(HttpMethod.Post, URLGetMetadata, json, RequestHelpers.ContentTypeJSON, null, GetAuthHeaders());
 
@@ -290,14 +303,13 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
     {
         if (!string.IsNullOrEmpty(path) && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            var json = JsonSerializer.Serialize(new
-            {
-                path = VerifyPath(path),
-                settings = new
+            var json = new JsonObject {
+                ["path"] = VerifyPath(path),
+                ["settings"] = new JsonObject
                 {
-                    requested_visibility = "public" // Anyone who has received the link can access it. No login required.
+                    ["requested_visibility"] = "public" // Anyone who has received the link can access it. No login required.
                 }
-            });
+            }.ToJsonString();
 
             var response = SendRequest(HttpMethod.Post, URLCreateSharedLink, json, RequestHelpers.ContentTypeJSON, null, GetAuthHeaders());
 
@@ -344,11 +356,10 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
 
         if (path != null && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            var json = JsonSerializer.Serialize(new
-            {
-                path = VerifyPath(path),
-                direct_only = directOnly
-            });
+            var json = new JsonObject {
+                ["path"] = VerifyPath(path),
+                ["direct_only"] = directOnly
+            }.ToJsonString();
 
             var response = SendRequest(HttpMethod.Post, URLListSharedLinks, json, RequestHelpers.ContentTypeJSON, null, GetAuthHeaders());
 
@@ -372,11 +383,10 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
 
         if (!string.IsNullOrEmpty(fromPath) && !string.IsNullOrEmpty(toPath) && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            string? json = JsonSerializer.Serialize(new
-            {
-                from_path = VerifyPath(fromPath),
-                to_path = VerifyPath(toPath)
-            });
+            string? json = new JsonObject {
+                ["from_path"] = VerifyPath(fromPath),
+                ["to_path"] = VerifyPath(toPath)
+            }.ToJsonString();
 
             string? response = SendRequest(HttpMethod.Post, URLCopy, json, RequestHelpers.ContentTypeJSON, null, GetAuthHeaders());
 
@@ -400,10 +410,9 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
 
         if (!string.IsNullOrEmpty(path) && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            var json = JsonSerializer.Serialize(new
-            {
-                path = VerifyPath(path)
-            });
+            var json = new JsonObject {
+                ["path"] = VerifyPath(path)
+            }.ToJsonString();
 
             var response = SendRequest(HttpMethod.Post, URLCreateFolder, json, RequestHelpers.ContentTypeJSON, null, GetAuthHeaders());
 
@@ -427,10 +436,9 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
 
         if (!string.IsNullOrEmpty(path) && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            var json = JsonSerializer.Serialize(new
-            {
-                path = VerifyPath(path)
-            });
+            var json = new JsonObject {
+                ["path"] = VerifyPath(path)
+            }.ToJsonString();
 
             var response = SendRequest(HttpMethod.Post, URLDelete, json, RequestHelpers.ContentTypeJSON, null, GetAuthHeaders());
 
@@ -454,11 +462,10 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
 
         if (!string.IsNullOrEmpty(fromPath) && !string.IsNullOrEmpty(toPath) && OAuth2Info.CheckOAuth(AuthInfo))
         {
-            var json = JsonSerializer.Serialize(new
-            {
-                from_path = VerifyPath(fromPath),
-                to_path = VerifyPath(toPath)
-            });
+            var json = new JsonObject {
+                ["from_path"] = VerifyPath(fromPath),
+                ["to_path"] = VerifyPath(toPath)
+            }.ToJsonString();
 
             var response = SendRequest(HttpMethod.Post, URLMove, json, RequestHelpers.ContentTypeJSON, null, GetAuthHeaders());
 

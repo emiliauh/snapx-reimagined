@@ -18,6 +18,7 @@
                 <TextBlock FontSize="26" FontWeight="SemiBold" Text="Screen recorder" />
                 <TextBlock Opacity="0.75" Text="Set capture timing, FFmpeg devices, codecs, and command templates." TextWrapping="Wrap" />
                 <TextBlock FontSize="12" Opacity="0.65" Text="{Binding RecorderSummary}" />
+                <TextBlock IsVisible="{Binding IsMacOS}" Text="macOS records a region within one display using FFmpeg AVFoundation. Install FFmpeg or choose its executable below. Allow Screen &amp; System Audio Recording in System Settings; microphone recording also requires microphone permission. Output uses the selected region's desktop dimensions." TextWrapping="Wrap" />
             </StackPanel>
 
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">

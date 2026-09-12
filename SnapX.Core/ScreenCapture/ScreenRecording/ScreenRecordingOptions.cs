@@ -5,6 +5,8 @@
 using System.Globalization;
 using System.Text;
 using SixLabors.ImageSharp;
+using SnapX.Core.Media;
+using SnapX.Core.Utils.Native;
 #if WINDOWS
 using Vortice.DXGI;
 #endif
@@ -67,12 +69,6 @@ public class ScreenRecordingOptions
             return null;
         }
 
-        if (IsRecording && FFmpeg.IsVideoSourceSelected && OperatingSystem.IsMacOS())
-        {
-            throw new PlatformNotSupportedException(
-                "Generated FFmpeg desktop-capture commands are not available on macOS. Configure custom FFmpeg commands that use avfoundation.");
-        }
-
         StringBuilder args = new StringBuilder();
 
         string framerate = isCustom ? "$fps$" : FPS.ToString();
@@ -81,7 +77,18 @@ public class ScreenRecordingOptions
         {
             if (FFmpeg.IsVideoSourceSelected)
             {
-                if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase)
+                if (OperatingSystem.IsMacOS())
+                {
+                    var (screen, crop) = ResolveMacOSCaptureTarget(CaptureArea, MacOSAPI.GetScreens(), FFmpeg.IsEvenSizeRequired);
+                    AppendInputDevice(args, "avfoundation", false);
+                    args.Append($"-framerate {framerate} -capture_cursor {(DrawCursor ? 1 : 0)} ");
+                    string audio = FFmpeg.IsAudioSourceSelected ? FFmpeg.AudioSource : "none";
+                    args.Append($"-i {Core.Utils.Helpers.EscapeCLIText($"Capture screen {screen.Index}:{audio}")} ");
+                    // AVFoundation emits physical pixels on Retina displays; the capture
+                    // selection is in desktop points. Normalize before applying its crop.
+                    args.Append($"-vf \"scale={screen.Bounds.Width}:{screen.Bounds.Height},crop={crop.Width}:{crop.Height}:{crop.X}:{crop.Y}\" ");
+                }
+                else if (FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.GDIGrab.Value, StringComparison.OrdinalIgnoreCase)
                     && !OperatingSystem.IsLinux()
                     && !OperatingSystem.IsMacOS())
                 {
@@ -196,8 +203,16 @@ public class ScreenRecordingOptions
             }
             else if (FFmpeg.IsAudioSourceSelected)
             {
-                AppendInputDevice(args, "dshow", true);
-                args.Append($"-i audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
+                if (OperatingSystem.IsMacOS())
+                {
+                    AppendInputDevice(args, "avfoundation", false);
+                    args.Append($"-i {Core.Utils.Helpers.EscapeCLIText($"none:{FFmpeg.AudioSource}")} ");
+                }
+                else
+                {
+                    AppendInputDevice(args, "dshow", true);
+                    args.Append($"-i audio={Core.Utils.Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
+                }
             }
         }
         else
@@ -330,6 +345,30 @@ public class ScreenRecordingOptions
         args.Append($"\"{output}\"");
 
         return args.ToString();
+    }
+
+    internal static (Screen Screen, Rectangle Crop) ResolveMacOSCaptureTarget(
+        Rectangle requested, IReadOnlyList<Screen> screens, bool evenSize)
+    {
+        if (requested.Width <= 0 || requested.Height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(requested), "Recording area must be non-empty.");
+        Screen? screen = screens.FirstOrDefault(candidate =>
+            candidate.Bounds.Width > 0 && candidate.Bounds.Height > 0 &&
+            requested.X >= candidate.Bounds.X && requested.Y >= candidate.Bounds.Y &&
+            (long)requested.X + requested.Width <= (long)candidate.Bounds.X + candidate.Bounds.Width &&
+            (long)requested.Y + requested.Height <= (long)candidate.Bounds.Y + candidate.Bounds.Height);
+        if (screen is null)
+            throw new InvalidOperationException("Choose a recording region contained within one macOS display. Recording across multiple displays is not supported.");
+        Rectangle crop = new(requested.X - screen.Bounds.X, requested.Y - screen.Bounds.Y,
+            requested.Width, requested.Height);
+        if (evenSize)
+        {
+            crop.Width -= crop.Width & 1;
+            crop.Height -= crop.Height & 1;
+        }
+        if (crop.Width <= 0 || crop.Height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(requested), "Recording area must be at least two pixels wide and high for this codec.");
+        return (screen, crop);
     }
 
     private sealed record DdaOutput(

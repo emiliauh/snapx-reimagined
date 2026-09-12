@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
+using System.Text;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
 using SnapX.Core.Media;
 using uniffi.snapxrust;
 
@@ -10,72 +10,57 @@ namespace SnapX.Core.Utils.Native;
 
 public class MacOSAPI : NativeAPI
 {
-    private static string GenerateFastString(int length)
-    {
-        const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        var random = new System.Random();
-        var result = new char[length];
-        for (var i = 0; i < length; i++)
-            result[i] = chars[random.Next(chars.Length)];
-        return new string(result);
-    }
-
-    public override void CopyImage(Image image)
-    {
-        CopyImage(image, GenerateFastString(8) + ".png");
-    }
+    public override void CopyImage(Image image) => CopyImage(image, null);
 
     public override void CopyImage(Image image, string? fileName)
     {
-        var tempPath = Path.Combine(
-            Path.GetTempPath(),
-            $"{Path.GetFileNameWithoutExtension(fileName)}.jpg"
-        );
-        image.Save(tempPath, new JpegEncoder());
-        var appleScript =
-            $"set the clipboard to (read (POSIX file \"{tempPath}\") as JPEG picture)";
-
-        var process = new Process
+        ArgumentNullException.ThrowIfNull(image);
+        // Use a unique internal filename: callers' names must never become script source.
+        var tempPath = Path.Combine(Path.GetTempPath(), $"snapx-clipboard-{Guid.NewGuid():N}.png");
+        try
         {
-            StartInfo = new ProcessStartInfo
+            image.Save(tempPath, new PngEncoder());
+            var startInfo = new ProcessStartInfo("/usr/bin/osascript")
             {
-                FileName = "osascript",
-                Arguments = $"-e \"{appleScript.Replace("\"", "\\\"")}\"",
-                RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                UseShellExecute = false,
-            },
-        };
-
-        process.Start();
-        process.WaitForExit();
-
-        if (process.ExitCode != 0)
-        {
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add("-e");
+            startInfo.ArgumentList.Add("on run argv\nset the clipboard to (read (POSIX file (item 1 of argv)) as «class PNGf»)\nend run");
+            startInfo.ArgumentList.Add(tempPath);
+            using var process = Process.Start(startInfo)
+                ?? throw new IOException("Unable to start osascript for the clipboard.");
             var error = process.StandardError.ReadToEnd();
-            throw new IOException($"osascript failed: {error}");
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new IOException($"osascript failed: {error}");
         }
-        File.Delete(tempPath);
+        finally
+        {
+            File.Delete(tempPath);
+        }
     }
 
     public override void CopyText(string text)
     {
-        var escapedText = text.Replace("\"", "\"\"");
-
-        escapedText = "\"" + Regex.Replace(escapedText, @"(\\+)$", @"$1$1") + "\"";
-        ;
-
-        var appleScript = $"set the clipboard to \"{escapedText}\"";
-
-        var process = new Process();
-        process.StartInfo.FileName = "osascript";
-        process.StartInfo.Arguments = $"-e \"{appleScript}\"";
-        process.StartInfo.RedirectStandardOutput = true;
-        process.StartInfo.UseShellExecute = false;
-
-        process.Start();
-
+        ArgumentNullException.ThrowIfNull(text);
+        var startInfo = new ProcessStartInfo("/usr/bin/pbcopy")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardError = true,
+            StandardInputEncoding = new UTF8Encoding(false),
+            UseShellExecute = false
+        };
+        // pbcopy selects its input encoding from the locale.
+        startInfo.Environment["LC_CTYPE"] = "UTF-8";
+        using var process = Process.Start(startInfo)
+            ?? throw new IOException("Unable to start pbcopy.");
+        process.StandardInput.Write(text);
+        process.StandardInput.Close();
+        var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new IOException($"pbcopy failed: {error}");
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -94,11 +79,77 @@ public class MacOSAPI : NativeAPI
     [DllImport(CoreGraphicsLib)]
     static extern IntPtr CGEventCreate(IntPtr source);
 
-    [DllImport(CoreGraphicsLib)]
-    static extern IntPtr CFRelease(IntPtr eventRef);
+    [DllImport(CoreFoundationLib)]
+    static extern void CFRelease(IntPtr eventRef);
 
     private const string CoreFoundationLib =
         "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
+
+    [DllImport(CoreGraphicsLib)]
+    private static extern int CGGetActiveDisplayList(uint maxDisplays, [Out] uint[] displays, out uint displayCount);
+    [DllImport(CoreGraphicsLib)]
+    private static extern uint CGMainDisplayID();
+    [DllImport(CoreGraphicsLib)]
+    private static extern CGRect CGDisplayBounds(uint display);
+    [DllImport(CoreGraphicsLib)]
+    private static extern IntPtr CGDisplayCopyDisplayMode(uint display);
+    [DllImport(CoreGraphicsLib)]
+    private static extern nuint CGDisplayModeGetPixelWidth(IntPtr mode);
+    [DllImport(CoreGraphicsLib)]
+    private static extern void CGDisplayModeRelease(IntPtr mode);
+
+    public static List<Screen> GetScreens()
+    {
+        var ids = new uint[32];
+        if (CGGetActiveDisplayList((uint)ids.Length, ids, out var count) != 0)
+            throw new IOException("Unable to enumerate macOS displays.");
+        var primary = CGMainDisplayID();
+        var screens = new List<Screen>();
+        for (int i = 0; i < count; i++)
+        {
+            var bounds = CGDisplayBounds(ids[i]);
+            double scale = 1;
+            var mode = CGDisplayCopyDisplayMode(ids[i]);
+            try
+            {
+                // CGDisplayPixelsWide reports logical width on scaled Retina modes.
+                // The display mode exposes the backing pixel width instead.
+                if (mode != IntPtr.Zero && bounds.Width > 0)
+                    scale = Math.Max(1, (double)CGDisplayModeGetPixelWidth(mode) / bounds.Width);
+            }
+            finally { if (mode != IntPtr.Zero) CGDisplayModeRelease(mode); }
+            string name = ids[i].ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // Preserve the names used by the existing native monitor API where its unsigned
+            // point interface can represent the display center.
+            var centerX = bounds.X + bounds.Width / 2;
+            var centerY = bounds.Y + bounds.Height / 2;
+            if (centerX >= 0 && centerY >= 0)
+            {
+                try { name = SnapxrustMethods.GetMonitor((uint)centerX, (uint)centerY).Name; }
+                catch (Exception ex) { DebugHelper.WriteException(ex, "Unable to read the display name"); }
+            }
+            screens.Add(new Screen
+            {
+                Id = ids[i].ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Name = name,
+                Bounds = new Rectangle((int)bounds.X, (int)bounds.Y, (int)bounds.Width, (int)bounds.Height),
+                IsPrimary = ids[i] == primary,
+                Index = i,
+                ScaleFactor = scale,
+                SessionType = SessionType.macOS
+            });
+        }
+        return screens;
+    }
+
+    public static Rectangle GetDesktopBounds()
+    {
+        var screens = GetScreens();
+        if (screens.Count == 0) throw new InvalidOperationException("No active macOS displays.");
+        return screens.Select(s => s.Bounds).Aggregate(Rectangle.Union);
+    }
+
+    public override Screen? GetScreen(Point pos) => GetScreens().FirstOrDefault(s => s.Bounds.Contains(pos));
 
     // Options for window list
     private const uint kCGWindowListOptionIncludingWindow = 1 << 3;
@@ -107,10 +158,10 @@ public class MacOSAPI : NativeAPI
     private static extern IntPtr CGWindowListCopyWindowInfo(uint option, uint relativeToWindow);
 
     [DllImport(CoreFoundationLib)]
-    private static extern int CFArrayGetCount(IntPtr theArray);
+    private static extern nint CFArrayGetCount(IntPtr theArray);
 
     [DllImport(CoreFoundationLib)]
-    private static extern IntPtr CFArrayGetValueAtIndex(IntPtr theArray, int idx);
+    private static extern IntPtr CFArrayGetValueAtIndex(IntPtr theArray, nint idx);
     [DllImport(CoreFoundationLib)]
     internal static extern IntPtr CFStringCreateWithCString(
         IntPtr alloc,
@@ -142,12 +193,20 @@ public class MacOSAPI : NativeAPI
     public override Point GetCursorPosition()
     {
         var ev = CGEventCreate(IntPtr.Zero);
-        var point = CGEventGetLocation(ev);
-        CFRelease(ev);
-        return new Point((int)point.X, (int)point.Y);
+        if (ev == IntPtr.Zero)
+            throw new InvalidOperationException("Unable to read the macOS cursor position.");
+        try
+        {
+            var point = CGEventGetLocation(ev);
+            return new Point((int)point.X, (int)point.Y);
+        }
+        finally
+        {
+            CFRelease(ev);
+        }
     }
 
-    public void ShowWindow(WindowInfo window)
+    public override void ShowWindow(WindowInfo window)
     {
         if (window.ProcessId == 0)
             return;
@@ -158,18 +217,24 @@ public class MacOSAPI : NativeAPI
         var psi = new ProcessStartInfo
         {
             FileName = "osascript",
-            Arguments = $"-e '{script}'",
+            RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
 
-        using var process = Process.Start(psi);
-        process?.WaitForExit();
+        psi.ArgumentList.Add("-e");
+        psi.ArgumentList.Add(script);
+        using var process = Process.Start(psi)
+            ?? throw new IOException("Unable to start osascript to activate the window.");
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new IOException($"Unable to activate the window: {error}");
     }
     public override Rectangle GetWindowRectangle(WindowInfo window)
     {
-        return base.GetWindowRectangle(window.Handle);
+        return GetWindowRectangle(window.Handle);
     }
     public override Rectangle GetWindowRectangle(IntPtr windowHandle)
     {
@@ -181,7 +246,7 @@ public class MacOSAPI : NativeAPI
 
         try
         {
-            int count = CFArrayGetCount(arrayRef);
+            nint count = CFArrayGetCount(arrayRef);
             if (count == 0)
                 return Rectangle.Empty;
 
@@ -228,6 +293,49 @@ public class MacOSAPI : NativeAPI
         return Rectangle.Empty;
     }
 
+    [DllImport(CoreFoundationLib)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool CFNumberGetValue(IntPtr number, int type, out int value);
+
+    private static bool IsCaptureWindow(ulong handle)
+    {
+        var windows = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, unchecked((uint)handle));
+        if (windows == IntPtr.Zero) return false;
+        var key = CFStringCreateWithCString(IntPtr.Zero, "kCGWindowLayer", kCFStringEncodingUTF8);
+        try
+        {
+            if (CFArrayGetCount(windows) == 0 || key == IntPtr.Zero) return false;
+            var dictionary = CFArrayGetValueAtIndex(windows, 0);
+            var number = CFDictionaryGetValue(dictionary, key);
+            // Normal application windows occupy layer zero. Cursor, menu-bar and
+            // other system overlays must not become window-capture candidates.
+            return number != IntPtr.Zero && CFNumberGetValue(number, 3, out var layer) && layer == 0;
+        }
+        finally
+        {
+            if (key != IntPtr.Zero) CFRelease(key);
+            CFRelease(windows);
+        }
+    }
+
+    private static string GetProcessName(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return process.ProcessName;
+        }
+        catch (ArgumentException)
+        {
+            // A window's owner may exit between native enumeration and this lookup.
+            return string.Empty;
+        }
+        catch (InvalidOperationException)
+        {
+            return string.Empty;
+        }
+    }
+
     public override List<WindowInfo> GetWindowList()
     {
         DebugHelper.WriteLine($"GetWindowList called");
@@ -235,10 +343,11 @@ public class MacOSAPI : NativeAPI
         var rawWindows = SnapxrustMethods.GetWindowList();
 
         var windows = rawWindows
+            .Where(raw => IsCaptureWindow(raw.Hwnd))
             .Select(raw => new WindowInfo
             {
                 ProcessId = (int)raw.ProcessId,
-                ProcessName = Process.GetProcessById((int)raw.ProcessId).ProcessName,
+                ProcessName = GetProcessName((int)raw.ProcessId),
 
                 Title = raw.Title,
                 Rectangle = new Rectangle(raw.X, raw.Y, (int)raw.Width, (int)raw.Height),

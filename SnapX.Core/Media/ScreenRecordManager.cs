@@ -1073,12 +1073,6 @@ public static class ScreenRecordManager
         bool hasCustomCommands = ffmpeg.UseCustomCommands && !string.IsNullOrWhiteSpace(ffmpeg.CustomCommands);
         bool hasFfmpegExecutableOverride = ffmpeg.OverrideCLIPath && !string.IsNullOrWhiteSpace(ffmpeg.CLIPath);
 
-        if (OperatingSystem.IsMacOS() && outputType != ScreenRecordOutput.GIF && !hasCustomCommands)
-        {
-            throw new PlatformNotSupportedException(
-                "Screen recording on macOS requires custom FFmpeg commands that use avfoundation. Generated desktop-capture commands are not supported.");
-        }
-
         if (outputType == ScreenRecordOutput.GIF)
         {
             if (IsWaylandSession() && !hasCustomCommands && !ScreenRecorder.IsWfRecorderAvailable())

@@ -32,9 +32,10 @@ public sealed class SingleInstanceManager : IDisposable
     private const int ForwardRetryDelayMilliseconds = 50;
     private const int SocketDirectoryMode = 0b111000000; // 0o700
     private const int SocketFileMode = 0b110000000; // 0o600
-    private const int MacOSSetLockCommand = 8; // This value is F_SETLK on macOS.
-    private const short MacOSWriteLockType = 3; // This value is F_WRLCK on macOS.
-    private const short SeekFromStart = 0; // This value is SEEK_SET on macOS.
+    private const int LockExclusive = 2; // LOCK_EX
+    private const int LockNonBlocking = 4; // LOCK_NB
+    private const int LockUnlock = 8; // LOCK_UN
+    private const int MacOSWouldBlock = 35; // EWOULDBLOCK
     private readonly Socket? _listener;
     // Keep an advisory file lock for the complete lifetime of the listener.
     // Besides electing the primary, this prevents a stale-socket cleanup from
@@ -86,6 +87,7 @@ public sealed class SingleInstanceManager : IDisposable
                 return true;
             }
 
+            Console.Error.WriteLine("SnapX could not acquire its instance lock or contact an existing instance.");
             DebugHelper.WriteLine("Another SnapX instance is starting, but did not accept forwarded arguments.");
             return true;
         }
@@ -198,17 +200,21 @@ public sealed class SingleInstanceManager : IDisposable
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
                 FileShare.ReadWrite);
-            var fileLock = new MacOSFileLock
-            {
-                Type = MacOSWriteLockType,
-                Whence = SeekFromStart,
-                Start = 0,
-                Length = 1
-            };
             int fileDescriptor = stream.SafeFileHandle.DangerousGetHandle().ToInt32();
-            if (FcntlSetLock(fileDescriptor, MacOSSetLockCommand, ref fileLock) != 0)
+            // flock has a fixed C signature. fcntl is variadic: declaring its
+            // third argument as a fixed P/Invoke parameter uses the wrong ARM64
+            // Apple calling convention and can prevent every launch from owning
+            // the lock. Closing this stream releases the flock automatically.
+            // FileStream may initially take a shared flock. Release that before
+            // competing for exclusive ownership, avoiding two simultaneous
+            // launchers preventing each other from upgrading shared locks.
+            Flock(fileDescriptor, LockUnlock);
+            if (Flock(fileDescriptor, LockExclusive | LockNonBlocking) != 0)
             {
+                int error = Marshal.GetLastPInvokeError();
                 stream.Dispose();
+                if (error != MacOSWouldBlock)
+                    Console.Error.WriteLine($"SnapX could not acquire its instance lock (errno {error}).");
                 return false;
             }
 
@@ -485,18 +491,8 @@ public sealed class SingleInstanceManager : IDisposable
     [DllImport("libc", SetLastError = true)]
     private static extern int chmod(string path, int mode);
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MacOSFileLock
-    {
-        public long Start;
-        public long Length;
-        public int ProcessId;
-        public short Type;
-        public short Whence;
-    }
-
-    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
-    private static extern int FcntlSetLock(int fileDescriptor, int command, ref MacOSFileLock fileLock);
+    [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
+    private static extern int Flock(int fileDescriptor, int operation);
 
     public void Dispose()
     {

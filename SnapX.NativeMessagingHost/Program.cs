@@ -35,18 +35,24 @@ try
 
         using var process = Process.Start(startInfo);
         if (process == null) return;
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+        // Drain both pipes concurrently: a child filling stderr must not block
+        // while the host waits for stdout to close.
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        var output = await outputTask;
+        var error = await errorTask;
         Debug.WriteLine($"Output: {output}");
         if (process.ExitCode == 0) return;
         Console.Error.WriteLine($"Process exited with error code {process.ExitCode}");
         Console.Error.WriteLine($"Error output: {error}");
+        Environment.ExitCode = process.ExitCode;
     }
 }
 catch (Exception e)
 {
     Console.Error.WriteLine($"{e.GetType()}: {e.Message}\n{e.StackTrace}");
+    Environment.ExitCode = 1;
 }
 
 return;
@@ -90,7 +96,7 @@ static string FindSnapX(string? binary = null)
     }
 
     // Return null if no binary is found
-    Console.WriteLine("SnapX NOT found in PATH or BaseDirectory. Weewoo weewoo");
+    Console.Error.WriteLine("SnapX was not found in PATH or BaseDirectory.");
     return string.Empty;
 }
 

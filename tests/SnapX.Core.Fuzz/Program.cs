@@ -18,6 +18,27 @@ using SnapX.Core.Localization;
 using SnapX.Core.Media.Services;
 using SnapX.Core.Utils;
 
+if (args.Contains("--mac-recording-probe", StringComparer.Ordinal))
+    return await MacOSRecordingChecks.Probe();
+
+if (args.Contains("--macos-hotkey-probe", StringComparer.Ordinal))
+{
+    if (!OperatingSystem.IsMacOS()) return 2;
+    using var backend = HotkeyBackendFactory.CreateDefault();
+    var first = new HotkeyRegistration("mac_probe_first", new HotkeyInfo(Keys.Control | Keys.Alt | Keys.F18) { Win = true });
+    var duplicate = new HotkeyRegistration("mac_probe_duplicate", first.HotkeyInfo);
+    var results = backend.RegisterAsync([first, duplicate]).GetAwaiter().GetResult();
+    if (!results[first.Id].IsRegistered || results[duplicate.Id].IsRegistered)
+        throw new InvalidOperationException($"macOS registration/conflict probe failed: {results[first.Id]} / {results[duplicate.Id]}");
+    backend.UnregisterAsync().GetAwaiter().GetResult();
+    results = backend.RegisterAsync([duplicate]).GetAwaiter().GetResult();
+    if (!results[duplicate.Id].IsRegistered)
+        throw new InvalidOperationException("macOS unregister did not release the shortcut.");
+    backend.UnregisterAsync().GetAwaiter().GetResult();
+    Console.WriteLine("macOS native hotkey registration, duplicate rejection, release and re-registration passed.");
+    return 0;
+}
+
 if (args.Contains("--portal-probe", StringComparer.Ordinal))
 {
     return await RunPortalProbe();
@@ -36,18 +57,28 @@ if (args.Contains("--wf-recorder-stop-probe", StringComparer.Ordinal))
     return 0;
 }
 
-const int seed = 0x5A17;
+int seed = 0x5A17;
+string? seedArgument = args.FirstOrDefault(argument => argument.StartsWith("--seed=", StringComparison.Ordinal));
+if (seedArgument is not null && !int.TryParse(seedArgument[7..], NumberStyles.Integer, CultureInfo.InvariantCulture, out seed))
+{
+    Console.Error.WriteLine("Use --seed=<32-bit integer> to replay a fuzz campaign.");
+    return 2;
+}
 var random = new Random(seed);
 var checks = 0;
 
 try
 {
+    VerifyLazySecretStore(ref checks);
+    VerifyPortablePathIsolation(ref checks);
     FuzzRegionNormalization(random, ref checks);
+    MacOSRecordingChecks.Fuzz(random, ref checks);
     checks += await VerifyRegionSelectionLifecycleAsync();
     FuzzHotkeyLifecycle(random, ref checks);
     FuzzPortalAcceleratorFormatting(random, ref checks);
     FuzzUploaderResponseValidation(random, ref checks);
     FuzzCustomUploaderSyntax(random, ref checks);
+    FuzzNestedUploaderSyntax(random, ref checks);
     FuzzHistoryFiltering(random, ref checks);
     VerifyHistoryCommitIdentityAndOrder(ref checks);
     VerifyHistoryMediaPreviewRouting(ref checks);
@@ -57,7 +88,10 @@ try
     FuzzHotkeyParser(random, ref checks);
     FuzzHotkeyRegistrationIdentity(ref checks);
     VerifyOfficialUploaderServices(ref checks);
-    VerifyHyprlandHotkeyBindingManager(ref checks);
+    if (OperatingSystem.IsLinux())
+        VerifyHyprlandHotkeyBindingManager(ref checks);
+    else
+        Console.WriteLine("Skipped Linux-only Hyprland binding integration checks.");
     VerifyWfRecorderStopEscalation(ref checks);
 
     Console.WriteLine($"SnapX fuzz/property checks passed: {checks:N0} (seed {seed}).");
@@ -68,6 +102,49 @@ catch (Exception ex)
     Console.Error.WriteLine($"SnapX fuzz/property check failed after {checks:N0} checks (seed {seed}):");
     Console.Error.WriteLine(ex);
     return 1;
+}
+
+static void VerifyLazySecretStore(ref int checks)
+{
+    int keyRequests = 0;
+    var constructor = typeof(SecurePropertyStore).GetConstructor(BindingFlags.NonPublic | BindingFlags.Instance,
+        binder: null, types: [typeof(Func<byte[]>)], modifiers: null)!;
+    var store = (SecurePropertyStore)constructor.Invoke([(Func<byte[]>)(() => { keyRequests++; return new byte[32]; })]);
+    Check(keyRequests == 0, "Secret-store construction opened the native vault", ref checks);
+    Check(store.Protect("") == "" && store.Unprotect("ordinary setting") == "ordinary setting" && keyRequests == 0,
+        "Unencrypted settings unnecessarily opened the native vault", ref checks);
+    string encrypted = store.Protect("local regression fixture");
+    Check(keyRequests == 1 && encrypted.StartsWith(SecurePropertyStore.Header), "Encryption did not initialize the key once", ref checks);
+    Check(store.Unprotect(encrypted) == "local regression fixture" && keyRequests == 1,
+        "Lazy-key secret did not round-trip with one vault lookup", ref checks);
+}
+
+static void VerifyPortablePathIsolation(ref int checks)
+{
+    PropertyInfo portable = typeof(SnapXL).GetProperty(nameof(SnapXL.Portable))!;
+    PropertyInfo config = typeof(SnapXL).GetProperty("CustomConfigPath", BindingFlags.NonPublic | BindingFlags.Static)!;
+    bool previousPortable = SnapXL.Portable;
+    string previousPersonal = SnapXL.CustomPersonalPath;
+    object? previousConfig = config.GetValue(null);
+    string personal = Path.Combine(Path.GetTempPath(), "snapx-portable-path-regression");
+    try
+    {
+        portable.SetValue(null, true);
+        SnapXL.CustomPersonalPath = personal;
+        config.SetValue(null, null);
+        Check(SnapXL.ConfigFolder == personal, "Portable settings escaped the personal folder", ref checks);
+        Check(SnapXL.CacheFolder == Path.Combine(personal, "Cache"), "Portable cache escaped the personal folder", ref checks);
+        Check(SnapXL.LogsFolder == Path.Combine(personal, "Logs"), "Portable logs escaped the personal folder", ref checks);
+        string explicitConfig = Path.Combine(personal, "ExplicitConfig");
+        config.SetValue(null, explicitConfig);
+        Check(SnapXL.ConfigFolder == explicitConfig, "Portable mode ignored an explicit configuration directory", ref checks);
+    }
+    finally
+    {
+        portable.SetValue(null, previousPortable);
+        SnapXL.CustomPersonalPath = previousPersonal;
+        config.SetValue(null, previousConfig);
+    }
 }
 
 static async Task<int> RunPortalProbe()
@@ -610,6 +687,28 @@ static void FuzzCustomUploaderSyntax(Random random, ref int checks)
     }
 }
 
+static void FuzzNestedUploaderSyntax(Random random, ref int checks)
+{
+    var parser = new EchoSyntaxParser();
+    for (int i = 0; i < 5_000; i++)
+    {
+        string literal = RandomText(random, random.Next(0, 100), includeControls: true);
+        string escaped = literal.Replace("\\", "\\\\").Replace("{", "\\{").Replace("}", "\\}").Replace("|", "\\|");
+        Check(parser.Parse(escaped) == literal, "Escaped template did not round-trip", ref checks);
+        int depth = random.Next(1, 40);
+        string nested = string.Concat(Enumerable.Repeat("{echo:", depth)) + escaped + new string('}', depth);
+        Check(parser.Parse(nested) == literal, "Nested function parameters changed their value", ref checks);
+    }
+
+    foreach (string hostile in new[] { new string('{', 100_000), string.Concat(Enumerable.Repeat("{echo:", 10_000)) })
+    {
+        bool rejected = false;
+        try { parser.Parse(hostile); }
+        catch (FormatException) { rejected = true; }
+        Check(rejected, "Excessively nested template was not rejected safely", ref checks);
+    }
+}
+
 static void FuzzHistoryFiltering(Random random, ref int checks)
 {
     var items = Enumerable.Range(0, 300)
@@ -900,13 +999,27 @@ static void FuzzSimplifiedTechnicalEnglish(Random random, ref int checks)
 
 static void FuzzHotkeyParser(Random random, ref int checks)
 {
-    string[] valid = ["Ctrl+Shift+A", "Alt+PrintScreen", "Win+F12", "Numpad 7", "Enter"];
+    string[] valid = ["Ctrl+Shift+A", "Alt+PrintScreen", "Win+F12", "Numpad 7", "Enter", "Cmd+Option+F8", "Command+Shift+S"];
     foreach (string value in valid)
     {
         Check(HotkeyParser.TryParse(value, out var key, out var win, out _),
             $"Valid shortcut was rejected: {value}", ref checks);
         Check(new HotkeyInfo(key) { Win = win }.IsValidHotkey,
             $"Parsed shortcut was invalid: {value}", ref checks);
+    }
+
+    foreach (string invalid in new[] { "A,B", "65", "١", "A+B", "Ctrl", "LButton" })
+    {
+        Check(!HotkeyParser.TryParse(invalid, out _, out _, out _),
+            $"Invalid shortcut was accepted: {invalid}", ref checks);
+    }
+    foreach (Keys code in Enum.GetValues<Keys>().Distinct())
+    {
+        if ((code & Keys.Modifiers) != 0) continue;
+        var original = new HotkeyInfo(code | Keys.Control) { Win = true };
+        if (!original.IsValidHotkey) continue;
+        Check(HotkeyParser.TryParse(original.ToString(), out Keys parsed, out bool win, out _) &&
+            parsed == original.Hotkey && win, $"Shortcut did not round-trip: {original}", ref checks);
     }
 
     for (int i = 0; i < 5_000; i++)
@@ -963,4 +1076,10 @@ static void Check(bool condition, string message, ref int checks)
 {
     if (!condition) throw new InvalidOperationException(message);
     checks++;
+}
+
+sealed class EchoSyntaxParser : ShareXSyntaxParser
+{
+    protected override string? CallFunction(string functionName, string?[] parameters = null) =>
+        parameters?.FirstOrDefault() ?? functionName;
 }

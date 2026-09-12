@@ -89,9 +89,7 @@ public static class HotkeyBackendFactory
 
         if (OperatingSystem.IsMacOS())
         {
-            return new UnavailableHotkeyBackend(
-                "Global hotkey registration is not implemented for macOS.",
-                "macOS (unsupported)");
+            return new MacOSHotkeyBackend();
         }
 
         return new UnavailableHotkeyBackend(

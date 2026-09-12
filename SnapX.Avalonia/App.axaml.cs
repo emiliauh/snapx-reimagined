@@ -697,7 +697,8 @@ public partial class App : Application
                 _ => null
             };
 
-            SendDesktopNotification(@event.Title, @event.Message);
+            if (!OperatingSystem.IsMacOS())
+                SendDesktopNotification(@event.Title, @event.Message);
             if (!nativeWayland)
             {
                 ToastNotificationWindow.ShowToast(thumbnail, @event.Title, @event.Message, onClick);
@@ -707,10 +708,17 @@ public partial class App : Application
 
     internal static void SendDesktopNotification(string title, string message)
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            ToastNotificationWindow.ShowToast(null, title, message, null);
+            return;
+        }
+
         // Fire-and-forget the freedesktop notification. The D-Bus call is
         // isolated so a busy or missing notification daemon never blocks the
         // capture workflow or surfaces an error to the user.
-        if (DesktopNotifications is null)
+        var notifications = DesktopNotifications;
+        if (notifications is not { IsAvailable: true })
         {
             return;
         }
@@ -719,7 +727,7 @@ public partial class App : Application
         {
             try
             {
-                await DesktopNotifications.NotifyAsync(title, message);
+                await notifications.NotifyAsync(title, message);
             }
             catch (Exception ex)
             {
@@ -1331,6 +1339,35 @@ public partial class App : Application
                         {
                             try
                             {
+                                if (OperatingSystem.IsMacOS())
+                                {
+                                    // Use the same display identities and logical bounds as capture,
+                                    // including displays positioned left of or above the primary one.
+                                    menu.Items.Clear();
+                                    foreach (var screen in MacOSAPI.GetScreens())
+                                    {
+                                        var item = new NativeMenuItem($"{screen.Index}: {screen.Name} {screen.Resolution} (X: {screen.Bounds.X}, Y: {screen.Bounds.Y})");
+                                        item.Click += (_, _) =>
+                                        {
+                                            Task.Run(async () =>
+                                            {
+                                                try
+                                                {
+                                                    var capturedImage = await Methods.CaptureRectangle(screen.Bounds).ConfigureAwait(false);
+                                                    if (capturedImage != null)
+                                                        UploadManager.RunImageTask(capturedImage, TaskSettings.GetDefaultTaskSettings());
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    DebugHelper.WriteException(ex, "Monitor capture failed");
+                                                }
+                                            });
+                                        };
+                                        menu.Items.Add(item);
+                                    }
+                                    return;
+                                }
+
                                 var currentScreens = screens?.Select((s, idx) => (s, idx)).ToList() ?? [];
                                 var screensByName = currentScreens.ToDictionary(pair => pair.s.Name, pair => pair);
 
@@ -1577,6 +1614,7 @@ public partial class App : Application
 
                     MyMainWindow = Window;
                     desktop.MainWindow = Window;
+                    Dispatcher.UIThread.Post(() => _ = MacOSStartupPrompt.OfferOnceAsync(Window));
                     // MyMainWindow.Closed += (_, _) =>
                     // {
                     //     MyMainWindow = null;

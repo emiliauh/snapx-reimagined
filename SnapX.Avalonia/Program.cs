@@ -126,9 +126,9 @@ internal static class Program
             // speaks X11 XDND, which cannot hand a file URI to a native Wayland
             // drop target (file manager, browser upload control, etc.). Fall back
             // to X11 when no Wayland session is present so X11 desktops keep working.
-            bool isWaylandSession =
+            bool isWaylandSession = OperatingSystem.IsLinux() && (
                 string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland", StringComparison.OrdinalIgnoreCase)
-                || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
+                || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
 
             if (isWaylandSession)
             {

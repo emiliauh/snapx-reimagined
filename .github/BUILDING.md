@@ -65,6 +65,43 @@ git --version # If prompted to install Git, do it.
 exec $SHELL -l
 ```
 
+After publishing with `./build.sh --configuration Release`, create a locally
+signed app bundle and launch it with Finder/Launch Services:
+
+```zsh
+bash packaging/macos-bundle.sh Output/snapx-ui SnapX.app
+open SnapX.app
+```
+
+The bundle script requires a new output path and preserves all published native
+libraries. Its ad-hoc signature is suitable for local testing; distribution to
+other Macs requires Developer ID signing and notarization. Screen capture may
+require enabling SnapX in System Settings → Privacy & Security → Screen &
+System Audio Recording and restarting the app.
+
+On macOS, screen recording uses FFmpeg's AVFoundation input. Select a region
+contained within one display; recordings spanning multiple displays are not
+supported. Retina input is normalized to desktop dimensions before cropping.
+The recorder settings offer screen capture and an optional default microphone.
+Grant microphone access when recording audio. Finder launches also search the
+standard Homebrew and MacPorts executable locations, or you can enable the
+FFmpeg path override in Settings → Screen recorder.
+
+Native macOS checks can be run from the repository after building:
+
+```zsh
+dotnet run --project tests/SnapX.MacOS.Smoke
+dotnet run --project tests/SnapX.Core.Fuzz -- --macos-hotkey-probe
+SNAPX_TEST_FFMPEG=/absolute/path/to/ffmpeg \
+  dotnet run --project tests/SnapX.Core.Fuzz -- --mac-recording-probe
+dotnet run --project tests/SnapX.Core.Fuzz -- --seed=23063
+```
+
+Run native checks in an interactive macOS session with capture permissions.
+The recording probe captures a small region on each display, verifies that the
+resulting MP4 files decode, and checks manual stopping. It writes recordings to
+a new temporary folder and prints their paths.
+
 > [!TIP]
 > If you're using MacPorts, run this instead of `brew install`:
 >

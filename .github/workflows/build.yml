@@ -359,6 +359,12 @@ jobs:
       - name: Run fuzz and property checks (Linux x64)
         if: runner.os == 'Linux' && runner.arch == 'X64' && matrix.configuration == 'Release'
         run: dotnet run --project tests/SnapX.Core.Fuzz --configuration Release --no-restore
+      - name: Run native messaging framing checks
+        if: matrix.configuration == 'Release'
+        run: dotnet run --project tests/SnapX.NativeMessaging.Fuzz --configuration Release --no-restore
+      - name: Run startup consent checks
+        if: matrix.configuration == 'Release'
+        run: dotnet run --project tests/SnapX.MacOS.LoginItems --configuration Release --no-restore
       - name: Install Build Linux Deps
         if: runner.os == 'Linux'
         run: "sudo add-apt-repository -y ppa:kisak/kisak-mesa && sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg8 && sudo apt update && sudo apt install -y clang zlib1g-dev patchelf xorg ffmpeg mesa-utils pciutils dmidecode xvfb libwayland-dev wayland-protocols"
@@ -456,44 +462,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          published_dir="Output/snapx-ui"
           bundle="SnapX.app"
-          executable="$published_dir/snapx-ui"
-
-          if [ ! -x "$executable" ]; then
-            echo "FAIL: Published macOS executable is missing or not executable: $executable"
-            exit 1
-          fi
-
-          mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
-          cp -R "$published_dir/." "$bundle/Contents/MacOS/"
-
-          /usr/libexec/PlistBuddy -c 'Clear dict' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string com.emiliauh.snapx' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleName string SnapX' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string SnapX' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string snapx-ui' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 1' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :CFBundleShortVersionString string 1.0' "$bundle/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Add :LSUIElement bool false' "$bundle/Contents/Info.plist"
-
-          icon_path=$(find packaging -type f -name '*.icns' -print -quit)
-          if [ -n "$icon_path" ]; then
-            cp "$icon_path" "$bundle/Contents/Resources/SnapX.icns"
-            /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string SnapX.icns' "$bundle/Contents/Info.plist"
-            echo "Bundled icon: $icon_path"
-          else
-            echo "No packaging/*.icns icon found; continuing without CFBundleIconFile."
-          fi
-
-          chmod +x "$bundle/Contents/MacOS/snapx-ui"
-          codesign --force --deep -s - "$bundle"
-          codesign --verify --deep --strict --verbose=2 "$bundle"
+          bash packaging/macos-bundle.sh Output/snapx-ui "$bundle"
 
           archive="SnapX-UI-${{ matrix.configuration }}-macOS-${{ runner.arch }}.app.zip"
           ditto -c -k --sequesterRsrc --keepParent "$bundle" "$archive"
           echo "PASS: Created and ad-hoc signed $archive"
+
+          if [[ "${{ matrix.configuration }}" == "Release" ]]; then
+            dmg="SnapX-UI-Release-macOS-${{ runner.arch }}.dmg"
+            bash packaging/macos-dmg.sh "$bundle" "$dmg"
+            shasum -a 256 "$dmg" > "$dmg.sha256"
+            echo "PASS: Created and checksummed $dmg"
+          fi
       - name: macOS launch and SIPC smoke test
         if: runner.os == 'macOS'
         shell: bash
@@ -534,13 +515,6 @@ jobs:
               fi
               echo "Primary process exited during startup (exit $primary_rc)."
               sed -n '1,200p' "$primary_log"
-              if [ "$primary_rc" -eq 0 ]; then
-                # A clean exit-0 without a log means the process decided it had
-                # no interactive surface (headless/windowless runner) and shut
-                # down politely. Treat this as an honest environment skip.
-                echo "SKIP: Primary exited cleanly with no output; runner provides no usable GUI session."
-                exit 0
-              fi
               if grep -Eqi 'WindowServer|CGS.*connection|could not connect to.*(WindowServer|display)|no (screens|window server)|NSApplication.*(initialize|failed)|Failed to initialize.*(Cocoa|Avalonia)' "$primary_log"; then
                 echo "SKIP: macOS runner has no usable WindowServer for GUI application launch."
                 exit 0

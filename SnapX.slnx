@@ -15,4 +15,8 @@
     <Configuration Solution="Release|*" Project="*|*|NoBuild" />
   </Project>
   <Project Path="tests\SnapX.Core.Fuzz\SnapX.Core.Fuzz.csproj" />
+  <Project Path="tests\SnapX.MacOS.LoginItems\SnapX.MacOS.LoginItems.csproj" />
+  <Project Path="tests\SnapX.NativeMessaging.Fuzz\SnapX.NativeMessaging.Fuzz.csproj" />
+  <Project Path="tests\SnapX.MacOS.Smoke\SnapX.MacOS.Smoke.csproj" />
+  <Project Path="tests\SnapX.Upload.Probe\SnapX.Upload.Probe.csproj" />
 </Solution>

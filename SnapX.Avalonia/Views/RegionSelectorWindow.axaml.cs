@@ -42,6 +42,7 @@ public partial class RegionSelectorWindow : Window
     private bool _ownsSelector;
     private int _selectorGateReleased;
     private int _cancellationRequested;
+    private nint _liveWindowId;
 
     private readonly Rectangle _selectionRect;
     private readonly TextBox _infoBox;
@@ -62,6 +63,7 @@ public partial class RegionSelectorWindow : Window
     private bool IsSilentMode { get; set; } = false;
 
     private bool TakeScreenshot { get; set; } = true;
+    private static bool UseLiveOverlay => OperatingSystem.IsMacOS();
 
     [ModuleInitializer]
     internal static void RegisterCoreRegionSelector()
@@ -440,6 +442,7 @@ public partial class RegionSelectorWindow : Window
         await Task.WhenAny(selector._resultRect.Task, closedTask.Task);
         if (!selector._resultRect.Task.IsCompletedSuccessfully || selector._resultRect.Task.Result == null)
         {
+            if (selector._liveSession != null) await closedTask.Task;
             return null;
         }
 
@@ -455,8 +458,8 @@ public partial class RegionSelectorWindow : Window
         if (request.CaptureImage && image is null)
             return null;
 
-        WindowInfo? windowInfo = null;
-        if (request.Options.DetectWindows)
+        WindowInfo? windowInfo = selector._liveSession?.SelectedWindow;
+        if (request.Options.DetectWindows && windowInfo is null)
         {
             try
             {
@@ -475,7 +478,7 @@ public partial class RegionSelectorWindow : Window
         return new RegionCaptureSelection
         {
             Rectangle = selector._resultRect.Task.Result.Value,
-            CaptureBounds = new SixLabors.ImageSharp.Rectangle(
+            CaptureBounds = selector._liveSession?.DesktopBounds ?? new SixLabors.ImageSharp.Rectangle(
                 selector._screenBounds.X,
                 selector._screenBounds.Y,
                 selector._screenBounds.Width,
@@ -857,6 +860,11 @@ public partial class RegionSelectorWindow : Window
         IsSilentMode = IsSilent;
         TakeScreenshot = takeScreenshot;
         InitializeComponent();
+        if (UseLiveOverlay)
+        {
+            TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+            Background = Brushes.Transparent;
+        }
 
         _selectionRect = this.FindControl<Rectangle>("SelectionRect");
         _infoBox = this.FindControl<TextBox>("InfoBox");
@@ -869,6 +877,11 @@ public partial class RegionSelectorWindow : Window
     protected override async void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        if (_liveSession is { } session)
+        {
+            await session.OverlayOpenedAsync(this);
+            return;
+        }
         if (!_ownsSelector)
         {
             Close();
@@ -885,7 +898,24 @@ public partial class RegionSelectorWindow : Window
             return;
         }
 
-        try { await SetupWindowBoundsAsync(); }
+        try
+        {
+            // The live selector fixes its display before Show so pointer movement
+            // during mapping cannot switch the coordinate space underneath it.
+            if (!UseLiveOverlay) await SetupWindowBoundsAsync();
+            else
+            {
+                // AppKit can constrain a borderless window to the work area.
+                // Wait until mapping/layout finishes before trusting its client geometry.
+                IsVisible = true;
+                Activate();
+                Focus();
+                await Task.Yield();
+                await SynchronizeLiveWindowBoundsAsync();
+                if (IsCancellationRequested) return;
+                _captureReady = true;
+            }
+        }
         catch (Exception ex)
         {
             DebugHelper.WriteException(ex, "Region selector could not determine its display bounds");
@@ -969,7 +999,17 @@ public partial class RegionSelectorWindow : Window
 
             var cursorPos = Methods.GetCursorPosition();
             var screen = Screens.ScreenFromPoint(new PixelPoint(cursorPos.X, cursorPos.Y));
-            if (screen != null)
+            if (OperatingSystem.IsMacOS())
+            {
+                // CoreGraphics capture regions and pointer/window coordinates
+                // use logical points. A Retina screen's physical pixel bounds
+                // must not become the overlay's logical Width/Height.
+                var nativeScreen = Methods.GetScreen(cursorPos)
+                    ?? throw new InvalidOperationException("No display contains the pointer.");
+                var rect = nativeScreen.Bounds;
+                bounds = new PixelRect(rect.X, rect.Y, rect.Width, rect.Height);
+            }
+            else if (screen != null)
             {
                 bounds = screen.Bounds;
             }
@@ -999,7 +1039,7 @@ public partial class RegionSelectorWindow : Window
             _canvas.Width = bounds.Width;
             _canvas.Height = bounds.Height;
             _imageBounds = new Rect(0, 0, bounds.Width, bounds.Height);
-            WindowState = OperatingSystem.IsMacOS() ? WindowState.Maximized : WindowState.Normal;
+            WindowState = WindowState.Normal;
 
             if (_canvas.Parent is Viewbox viewBox)
             {
@@ -1010,15 +1050,103 @@ public partial class RegionSelectorWindow : Window
             DebugHelper.WriteLine($"Selector Ready: {bounds.Width}x{bounds.Height} at {bounds.X},{bounds.Y}");
         });
     }
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "sel_registerName")]
+    private static extern IntPtr GetObjectiveCSelector(string name);
+
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+    private static extern nint GetObjectiveCInteger(IntPtr instance, IntPtr selector);
+
+    private SixLabors.ImageSharp.Rectangle ReadLiveWindowBounds()
+    {
+        if (_liveWindowId == 0)
+        {
+            var handle = TryGetPlatformHandle();
+            if (handle is { HandleDescriptor: "NSWindow" } && handle.Handle != IntPtr.Zero)
+            {
+                // Query this window directly: the on-screen list can lag Opened,
+                // and topmost overlay windows are excluded from capture candidates.
+                var number = GetObjectiveCInteger(handle.Handle, GetObjectiveCSelector("windowNumber"));
+                if (number > 0) _liveWindowId = number;
+            }
+            if (_liveWindowId == 0)
+            {
+                var window = uniffi.snapxrust.SnapxrustMethods.GetWindowList()
+                    .FirstOrDefault(w => w.ProcessId == (uint)Environment.ProcessId && w.Title == Title &&
+                        _screenBounds.Contains(new PixelPoint(w.X + (int)w.Width / 2, w.Y + (int)w.Height / 2)));
+                if (window != null) _liveWindowId = (nint)window.Hwnd;
+            }
+        }
+        if (_liveWindowId == 0)
+            throw new InvalidOperationException("The live selector's native window is not mapped yet.");
+        var bounds = new MacOSAPI().GetWindowRectangle(_liveWindowId);
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            throw new InvalidOperationException("The live selector's native window bounds are not available yet.");
+        return bounds;
+    }
+
+    private async Task SynchronizeLiveWindowBoundsAsync()
+    {
+        // AppKit may publish the final frame after Opened. This bounded startup
+        // wait does not add latency to the later completion capture.
+        for (int attempt = 0; ; attempt++)
+        {
+            if (IsCancellationRequested) return;
+            try
+            {
+                SynchronizeLiveWindowBounds();
+                return;
+            }
+            catch (InvalidOperationException) when (attempt < 14)
+            {
+                await Task.Delay(20);
+            }
+        }
+    }
+
+    private void SynchronizeLiveWindowBounds()
+    {
+        var bounds = ReadLiveWindowBounds();
+        if (bounds.Width <= 0 || bounds.Height <= 0 || ClientSize.Width <= 0 || ClientSize.Height <= 0)
+            throw new InvalidOperationException("The live selector has no usable client area.");
+        _screenBounds = new PixelRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        _imageBounds = new Rect(0, 0, ClientSize.Width, ClientSize.Height);
+        _canvas.Width = ClientSize.Width;
+        _canvas.Height = ClientSize.Height;
+        if (_canvas.Parent is Viewbox viewBox)
+        {
+            viewBox.Width = ClientSize.Width;
+            viewBox.Height = ClientSize.Height;
+        }
+        DebugHelper.WriteLine($"Live selector actual bounds: {bounds}; client={ClientSize}");
+    }
+
+    private SixLabors.ImageSharp.Rectangle MapLiveSelectionToDesktop(Rect selection)
+    {
+        var nativeBounds = ReadLiveWindowBounds();
+        var topLeft = _canvas.TranslatePoint(selection.TopLeft, this)
+            ?? throw new InvalidOperationException("Cannot map the selection to its window.");
+        var bottomRight = _canvas.TranslatePoint(selection.BottomRight, this)
+            ?? throw new InvalidOperationException("Cannot map the selection to its window.");
+        double scaleX = nativeBounds.Width / ClientSize.Width;
+        double scaleY = nativeBounds.Height / ClientSize.Height;
+        int left = nativeBounds.X + (int)Math.Floor(topLeft.X * scaleX);
+        int top = nativeBounds.Y + (int)Math.Floor(topLeft.Y * scaleY);
+        int right = nativeBounds.X + (int)Math.Ceiling(bottomRight.X * scaleX);
+        int bottom = nativeBounds.Y + (int)Math.Ceiling(bottomRight.Y * scaleY);
+        return SixLabors.ImageSharp.Rectangle.Intersect(
+            new SixLabors.ImageSharp.Rectangle(left, top, right - left, bottom - top), nativeBounds);
+    }
+
     public RegionSelectorWindow() : this(new RegionSelectorViewModel()) { }
     public RegionSelectorWindow(bool IsSilent, bool takeScreenShot = true) : this(new RegionSelectorViewModel(), IsSilent, takeScreenShot) { }
     private void OnPointerPressed(object? Sender, PointerPressedEventArgs E)
     {
+        if (_liveSession is { } session) { session.PointerPressed(this, E); return; }
         if (_selectionCompleted || !_captureReady)
         {
             if (!_captureReady)
             {
-                DebugHelper.WriteLine("The region selector is still preparing its screenshot; ignoring pointer input.");
+                DebugHelper.WriteLine("The region selector is still preparing; ignoring pointer input.");
             }
             return;
         }
@@ -1140,6 +1268,7 @@ public partial class RegionSelectorWindow : Window
     }
     private async void OnPointerReleased(object? Sender, PointerReleasedEventArgs? E)
     {
+        if (_liveSession is { } session) { await session.PointerReleasedAsync(E); return; }
         if (_selectionCompleted || !_isSelecting)
         {
             return;
@@ -1211,6 +1340,16 @@ public partial class RegionSelectorWindow : Window
             _screenBounds.Y + localRect.Y,
             localRect.Width,
             localRect.Height);
+        if (UseLiveOverlay)
+        {
+            try { screenRect = MapLiveSelectionToDesktop(selectedRegion); }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "The live selection could not be mapped to desktop coordinates");
+                await CancelSelection();
+                return;
+            }
+        }
         _selectionCompleted = true;
         _resultRect.TrySetResult(screenRect);
         DebugHelper.WriteLine($"RegionSelectorWindow.OnPointerReleased: Region: {selectedRegion}");
@@ -1221,7 +1360,42 @@ public partial class RegionSelectorWindow : Window
         }
         try
         {
-            await Task.Run(() =>
+            if (UseLiveOverlay)
+            {
+                // Remove the transparent window and all selection adornments before
+                // acquiring pixels. Nothing is captured while the user is choosing.
+                Hide();
+                await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+                await Task.Delay(16); // One nominal compositor frame for WindowServer to present the hide.
+                if (IsCancellationRequested)
+                {
+                    _resultImg.TrySetResult(null);
+                    Close();
+                    return;
+                }
+                var image = await Methods.CaptureRectangle(screenRect);
+                if (IsCancellationRequested)
+                {
+                    image?.Dispose();
+                    _resultImg.TrySetResult(null);
+                    Close();
+                    return;
+                }
+                if (image is null)
+                    throw new InvalidOperationException("The selected region could not be captured.");
+                _image = image;
+                if (!_resultImg.TrySetResult(image))
+                {
+                    image.Dispose();
+                    _image = null;
+                }
+                else if (!IsSilentMode)
+                {
+                    UploadManager.RunImageTask(image, TaskSettings.GetDefaultTaskSettings());
+                }
+                DebugHelper.WriteLine($"Live region captured after selection: {screenRect}");
+            }
+            else await Task.Run(() =>
             {
                 if (_image is null)
                 {
@@ -1258,6 +1432,7 @@ public partial class RegionSelectorWindow : Window
     }
     private Task CancelSelection()
     {
+        if (_liveSession is { } session) { session.Cancel(); return Task.CompletedTask; }
         if (_selectionCompleted)
         {
             return Task.CompletedTask;
@@ -1344,6 +1519,7 @@ public partial class RegionSelectorWindow : Window
 
     private async void OnPointerMoved(object? Sender, PointerEventArgs E)
     {
+        if (_liveSession is { } session) { session.PointerMoved(E); return; }
         if (!_isSelecting)
         {
             if (_captureOptions.WindowPickerMode ||
@@ -1380,6 +1556,7 @@ public partial class RegionSelectorWindow : Window
     }
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        if (_liveSession is { } session) { session.KeyDown(e); return; }
         DebugHelper.WriteLine($"{sender}.OnKeyDown: Key: {e.Key}");
         switch (e.Key)
         {
@@ -1398,6 +1575,7 @@ public partial class RegionSelectorWindow : Window
 
     private async Task<bool> PrepareAndShowAsync(CancellationToken cancellationToken = default)
     {
+        if (UseLiveOverlay) return await PrepareLiveDisplaysAsync(cancellationToken);
         // Every supported native-Wayland caller is routed through slurp above.
         // Keep this guard here as well so a future direct construction cannot
         // silently reintroduce this full-screen Avalonia WSI surface.
@@ -1485,6 +1663,32 @@ public partial class RegionSelectorWindow : Window
             {
                 RestoreHiddenWindows();
                 return false;
+            }
+
+            if (UseLiveOverlay)
+            {
+                await SetupWindowBoundsAsync();
+                if (IsCancellationRequested)
+                {
+                    RestoreHiddenWindows();
+                    return false;
+                }
+                if (_captureOptions.WindowPickerMode || _captureOptions.WindowOrRegionPickerMode)
+                {
+                    var screenRect = new SixLabors.ImageSharp.Rectangle(
+                        _screenBounds.X, _screenBounds.Y, _screenBounds.Width, _screenBounds.Height);
+                    _pickableWindows = Methods.GetWindowList()
+                        .Where(window => window.IsVisible && !window.Rectangle.IsEmpty && window.Rectangle.IntersectsWith(screenRect))
+                        .OrderBy(window => window.Rectangle.Width * (long)window.Rectangle.Height)
+                        .ToList();
+                }
+                Background = Brushes.Transparent;
+                _preparedForDisplay = true;
+                _captureReady = true;
+                Opacity = 1;
+                _captureReady = false; // Input starts after AppKit's final client geometry is known.
+                DebugHelper.WriteLine("Live macOS selector ready; no screenshot taken before selection.");
+                return true;
             }
 
             // Hiding a window is asynchronous from the compositor's point of
@@ -1795,6 +1999,7 @@ public partial class RegionSelectorWindow : Window
     }
     private void OnClosed(object? Sender, EventArgs E)
     {
+        if (_liveSession is { } session) { session.OverlayClosed(this); return; }
         _isSelecting = false;
         _captureReady = false;
         _resultRect.TrySetResult(null);
@@ -1812,6 +2017,7 @@ public partial class RegionSelectorWindow : Window
 
     private void RequestCancellation()
     {
+        if (_liveSession is { } session) { session.Cancel(); return; }
         Interlocked.Exchange(ref _cancellationRequested, 1);
         _isSelecting = false;
         _selectionCompleted = true;

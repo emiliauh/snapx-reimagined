@@ -155,18 +155,22 @@ public sealed class EncryptionTypeInspector(ITypeInspector innerInspector, Secur
     }
 }
 
-public sealed class SecurePropertyStore(byte[] masterKey)
+public sealed class SecurePropertyStore
 {
     public const string Header = "v1.z85:";
     private const int NonceSize = 12;
     private const int TagSize = 16;
 
-    [MinLength(32)]
-    [MaxLength(32)]
-    private readonly byte[] _key = masterKey.Length == 32
-        ? masterKey
-        : throw new ArgumentException("Key must be 256-bit (32 bytes).");
+    private readonly Lazy<byte[]> _key;
 
+    public SecurePropertyStore(byte[] masterKey)
+    {
+        ArgumentNullException.ThrowIfNull(masterKey);
+        if (masterKey.Length != 32) throw new ArgumentException("Key must be 256-bit (32 bytes).", nameof(masterKey));
+        _key = new Lazy<byte[]>(() => masterKey);
+    }
+
+    private SecurePropertyStore(Func<byte[]> keyProvider) => _key = new Lazy<byte[]>(keyProvider);
 
     public string Protect(string plainText)
     {
@@ -176,7 +180,7 @@ public sealed class SecurePropertyStore(byte[] masterKey)
         var nonce = RandomNumberGenerator.GetBytes(NonceSize);
 
         var cipher = new GcmBlockCipher(new AesEngine());
-        var parameters = new AeadParameters(new KeyParameter(_key), TagSize * 8, nonce, Encoding.UTF8.GetBytes(Header));
+        var parameters = new AeadParameters(new KeyParameter(_key.Value), TagSize * 8, nonce, Encoding.UTF8.GetBytes(Header));
         cipher.Init(true, parameters);
 
         var outSize = cipher.GetOutputSize(input.Length);
@@ -220,7 +224,7 @@ public sealed class SecurePropertyStore(byte[] masterKey)
 
         var cipher = new GcmBlockCipher(new AesEngine());
         var parameters = new AeadParameters(
-            new KeyParameter(_key),
+            new KeyParameter(_key.Value),
             TagSize * 8,
             nonce,
             Encoding.UTF8.GetBytes(Header)
@@ -258,7 +262,7 @@ public sealed class SecurePropertyStore(byte[] masterKey)
 
         return paddedData.AsSpan(4, originalLength).ToArray();
     }
-    private static Lazy<SecurePropertyStore>? _instance = new Lazy<SecurePropertyStore>(() => new SecurePropertyStore(MasterKeyManager.GetOrGenerateKey()));
+    private static Lazy<SecurePropertyStore>? _instance = new Lazy<SecurePropertyStore>(() => new SecurePropertyStore(MasterKeyManager.GetOrGenerateKey));
 
     public static SecurePropertyStore Instance => _instance?.Value
                                                   ?? throw new InvalidOperationException("SecurePropertyStore must be initialized with a key before use.");

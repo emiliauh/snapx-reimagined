@@ -21,11 +21,18 @@ public abstract class ShareXSyntaxParser
             return "";
         }
 
-        return Parse(text, false, 0, out _);
+        return Parse(text, false, 0, 0, out _);
     }
 
-    private string? Parse(string? text, bool isFunction, int startPosition, out int endPosition)
+    private string? Parse(string text, bool isFunction, int startPosition, int depth, out int endPosition)
     {
+        // Imported uploader templates are untrusted. Bound recursion so a malformed
+        // template produces a recoverable error instead of terminating the process.
+        if (depth > 128)
+        {
+            throw new FormatException("Custom uploader syntax exceeds the maximum nesting depth.");
+        }
+
         var sbOutput = new StringBuilder();
         bool escape = false;
         int i;
@@ -38,7 +45,7 @@ public abstract class ShareXSyntaxParser
             {
                 if (c == SyntaxStart)
                 {
-                    string? parsed = Parse(text, true, i + 1, out i);
+                    string? parsed = Parse(text, true, i + 1, depth + 1, out i);
                     sbOutput.Append(parsed);
                     continue;
                 }
@@ -57,7 +64,7 @@ public abstract class ShareXSyntaxParser
 
                     do
                     {
-                        string? parsed = Parse(text, false, i + 1, out i);
+                        string? parsed = Parse(text, false, i + 1, depth + 1, out i);
                         parameters.Add(parsed);
                     } while (i < text.Length && text[i] == SyntaxParameterDelimiter);
 

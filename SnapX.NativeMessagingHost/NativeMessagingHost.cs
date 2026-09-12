@@ -1,27 +1,29 @@
-﻿using System.Text;
+using System.Text;
+using System.Buffers.Binary;
 
 namespace SnapX.NativeMessagingHost;
 
 public class NativeMessagingHost
 {
-    public string Read()
+    public const int MaximumInputBytes = 64 * 1024 * 1024;
+
+    public string? Read() => Read(Console.OpenStandardInput());
+
+    public string? Read(Stream inputStream)
     {
-        string input = null;
+        Span<byte> bytesLength = stackalloc byte[4];
+        int first = inputStream.ReadByte();
+        if (first < 0) return null;
+        bytesLength[0] = (byte)first;
+        inputStream.ReadExactly(bytesLength[1..]);
+        int inputLength = BinaryPrimitives.ReadInt32LittleEndian(bytesLength);
+        if (inputLength <= 0 || inputLength > MaximumInputBytes)
+            throw new InvalidDataException("Native message length must be between 1 byte and 64 MiB.");
 
-        Stream inputStream = Console.OpenStandardInput();
-
-        byte[] bytesLength = new byte[4];
-        inputStream.ReadExactly(bytesLength);
-        int inputLength = BitConverter.ToInt32(bytesLength, 0);
-
-        if (inputLength > 0)
-        {
-            byte[] bytesInput = new byte[inputLength];
-            inputStream.ReadExactly(bytesInput);
-            input = Encoding.UTF8.GetString(bytesInput);
-        }
-
-        return input;
+        // Validate the browser's untrusted length before allocating memory.
+        byte[] bytesInput = new byte[inputLength];
+        inputStream.ReadExactly(bytesInput);
+        return new UTF8Encoding(false, true).GetString(bytesInput);
     }
 
     public void Write(string data)

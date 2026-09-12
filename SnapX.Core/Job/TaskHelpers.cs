@@ -1140,12 +1140,13 @@ public static class TaskHelpers
         imageConfig.ImageFormatsManager.SetDecoder(AVIFFormat.Instance, AVIFDecoder.Instance);
         imageConfig.ImageFormatsManager.AddImageFormatDetector(new PatchedAVIFImageFormatDetector());
 
+        bool ownsSourceImage = filePath is not null && image is null;
         try
         {
-            if (filePath is not null && image is null)
+            if (ownsSourceImage)
             {
         progress?.Report(new(10, "Reading the image from disk."));
-                image = await Image.LoadAsync(filePath, cts);
+                image = await Image.LoadAsync(filePath!, cts);
             }
         }
         catch (Exception ex)
@@ -1157,10 +1158,11 @@ public static class TaskHelpers
         }
 
         if (image is null) return new OcrResponse { FullText = "SNAPX ERROR: PASSED NULL IMAGE AND NULL FILEPATH." };
+        using Image? ownedSourceImage = ownsSourceImage ? image : null;
 
         var modelDir = Path.Combine(BaseDirectory.CacheHome, SnapXL.AppName, "PaddleOCRModels");
         var model = await GetModelForLanguage(languageCode ?? "eng");
-        var ocrEngine = new RapidOcr();
+        using var ocrEngine = new RapidOcr();
 
         var progressValue = 15;
         var fileUrls = new ConcurrentDictionary<string, int>();
@@ -1254,7 +1256,7 @@ public static class TaskHelpers
         string? languageCode = null,
         IProgress<OCRProgress>? progress = null)
     {
-        var result = await OCRImageDetailed(image, filePath, taskSettings, languageCode, progress);
+        using var result = await OCRImageDetailed(image, filePath, taskSettings, languageCode, progress);
         return result.FullText;
     }
 
@@ -1742,49 +1744,52 @@ public static class TaskHelpers
 
     public static async Task PlaySound(Stream stream)
     {
-        DebugHelper.WriteLine(
-            $"PlaySound {stream.Length} bytes {stream.Position} {stream.CanSeek} {stream.CanRead}"
-        );
-        var tempFilePath = Path.GetTempFileName();
-        stream.Seek(0, SeekOrigin.Begin);
-        stream.WriteToFile(tempFilePath);
-        var psi = new ProcessStartInfo
-        {
-            FileName = "ffplay", // Even on Windows, we expect ffplay to be in the $PATH. https://winstall.app/apps/Gyan.FFmpeg
-            Arguments = $"-nodisp -autoexit -hide_banner -loglevel warning \"{tempFilePath}\"",
-            UseShellExecute = false,
-            RedirectStandardOutput = false,
-            RedirectStandardError = false,
-            CreateNoWindow = true,
-        };
-
+        ArgumentNullException.ThrowIfNull(stream);
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"snapx-sound-{Guid.NewGuid():N}.audio");
+        var player = OperatingSystem.IsMacOS() ? "/usr/bin/afplay" : "ffplay";
         try
         {
-            using var process = Process.Start(psi);
-            if (process is not null)
-                await process.WaitForExitAsync();
+            if (stream.CanSeek) stream.Seek(0, SeekOrigin.Begin);
+            await using (var file = File.Create(tempFilePath))
+            {
+                await stream.CopyToAsync(file).ConfigureAwait(false);
+            }
+            var psi = new ProcessStartInfo(player)
+            {
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            if (!OperatingSystem.IsMacOS())
+            {
+                foreach (var argument in new[] { "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "warning" })
+                    psi.ArgumentList.Add(argument);
+            }
+            // Core Audio detects the embedded FLAC format from its header.
+            psi.ArgumentList.Add(tempFilePath);
+            using var process = Process.Start(psi) ?? throw new IOException($"Unable to start {player}.");
+            var error = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            var message = await error.ConfigureAwait(false);
+            if (process.ExitCode != 0)
+                throw new IOException($"{player} exited {process.ExitCode}: {message}");
         }
         catch (Exception e)
         {
-            DebugHelper.Logger?.Warning(
-                "Failed to play sound using ffplay. Did you install FFmpeg? Error: " + e.Message
-            );
+            DebugHelper.Logger?.Warning($"Failed to play notification sound using {player}: {e.Message}");
         }
         finally
         {
-            try
-            {
-                File.Delete(tempFilePath);
-            }
-            catch
-            {
-                /* ignore */
-            }
+            try { File.Delete(tempFilePath); }
+            catch (IOException) { /* Notification cleanup must not interrupt a capture. */ }
         }
     }
 
-    private static async Task PlaySound(string filePath) =>
-        await PlaySound(File.OpenRead(filePath));
+    private static async Task PlaySound(string filePath)
+    {
+        await using var stream = File.OpenRead(filePath);
+        await PlaySound(stream).ConfigureAwait(false);
+    }
 
     // Coding nerds, please, forgive me for this mortal sin.
     // The code here is instance dependent thus cannot be called from static stuff yada yada yada.

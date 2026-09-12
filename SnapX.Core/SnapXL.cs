@@ -181,19 +181,21 @@ public class SnapXL
             ? FileHelpers.ExpandFolderVariables(CustomPersonalPath)
             : DefaultPersonalFolder;
     public static string ConfigFolder => string.IsNullOrEmpty(CustomConfigPath)
-        ? Path.Combine(
+        ? Portable ? PersonalFolder : Path.Combine(
             OperatingSystem.IsWindows()
                 ? UserDirectory.DocumentsDir
                 : BaseDirectory.ConfigHome,
             AppName)
         : CustomConfigPath;
-    public static string CacheFolder => Path.Combine(BaseDirectory.CacheHome, AppName);
+    public static string CacheFolder => Portable
+        ? Path.Combine(PersonalFolder, "Cache")
+        : Path.Combine(BaseDirectory.CacheHome, AppName);
 
     public static string LockDirectory => Path.Combine(BaseDirectory.RuntimeDir, AppName);
     public const string LogsFolderName = "Logs";
     // On Linux, strictly adhere to XDG BaseDirectory spec.
     // On macOS, most of these XDG directories resolve to $HOME/Library/Application Support	anyway so it doesn't really matter.
-    public static string LogsFolder => OperatingSystem.IsLinux() ? Path.Combine(BaseDirectory.StateHome, AppName, LogsFolderName) : Path.Combine(PersonalFolder, LogsFolderName);
+    public static string LogsFolder => OperatingSystem.IsLinux() && !Portable ? Path.Combine(BaseDirectory.StateHome, AppName, LogsFolderName) : Path.Combine(PersonalFolder, LogsFolderName);
 
     public static string LogsFilePath
     {
@@ -740,7 +742,7 @@ public class SnapXL
             CustomPersonalPath = PortablePersonalFolder;
             PersonalPathDetectionMethod = "Portable CLI flag";
         }
-        if (File.Exists(PortableCheckFilePath))
+        else if (File.Exists(PortableCheckFilePath))
         {
             Portable = true;
             CustomPersonalPath = PortablePersonalFolder;

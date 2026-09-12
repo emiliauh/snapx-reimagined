@@ -98,7 +98,12 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
     public string SessionDescription => IsWaylandSession
         ? "Wayland session detected. SnapX uses desktop portals where available. On Hyprland, shortcuts from the settings page are also kept in a SnapX-managed section of your user bindings file; no administrator access is needed."
         : "Wayland is not active. SnapX uses the platform capture and shortcut path.";
-    public string HotkeyPlatformHelp => IsWaylandSession
+    public bool AreGlobalHotkeysSupported => true;
+    public string HotkeyPlatformHelp => OperatingSystem.IsMacOS()
+        ? "macOS registers global shortcuts when you select Apply. Cmd or Win means Command; Option or Alt means Option. Shortcuts use physical ANSI key positions. Print Screen has no Mac equivalent; choose a letter or function key."
+        : OperatingSystem.IsWindows()
+        ? "Windows registers global shortcuts when you select Apply. Clear releases the shortcut."
+        : IsWaylandSession
         ? "On Hyprland, Apply also writes a clearly marked user binding in ~/.config/hypr/bindings.lua and reloads it. Clear removes only SnapX's managed entry. No administrator access is needed. Other Wayland desktops use the portal."
         : "X11 shortcuts are registered directly with the active X server. Apply grabs the key and Clear releases it.";
     public string ElevationStatus { get; private set; } =

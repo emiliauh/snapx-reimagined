@@ -9,7 +9,6 @@ using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SnapX.Core.Utils;
 using SnapX.Core.Utils.Miscellaneous;
-using Xdg.Directories;
 
 namespace SnapX.Core.Media.Services;
 
@@ -28,7 +27,7 @@ public static class ThumbnailService
         imageConfig.ImageFormatsManager.AddImageFormatDetector(new PatchedAVIFImageFormatDetector());
     }
     private static readonly ConcurrentDictionary<string, string> _pathCache = new();
-    private static readonly string CacheFolder = Path.Combine(BaseDirectory.CacheHome, SnapXL.AppName, "Thumbnails");
+    private static string CacheFolder => Path.Combine(SnapXL.CacheFolder, "Thumbnails");
     private static readonly HttpClient _httpClient = HttpClientFactory.Get();
     private static readonly SemaphoreSlim _processingSemaphore = new(3, 3);
 

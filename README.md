@@ -28,6 +28,7 @@ Install FFmpeg for X11 recording. Install `wf-recorder` for Wayland recording.
 Clone this repository. Run these commands from its root directory:
 
 ```sh
+export DisableGitVersionTask=true
 dotnet build SnapX.slnx --no-incremental -m:1
 dotnet run --project build --no-restore -- build --no-color
 ```
@@ -55,11 +56,20 @@ Run SnapX:
 .\Output\snapx-ui\snapx-ui.exe
 ```
 
+## Install on macOS
+
+Download the Apple Silicon DMG from [GitHub Releases](https://github.com/emiliauh/snapx-reimagined/releases), then drag SnapX into Applications. Requires macOS 14 or later. The published DMG includes FFmpeg. This prerelease is ad-hoc signed and is not notarized.
+
+On first installed launch, choose **Enable launch at login** or **Not now**. macOS manages any required approval. You can disable startup in SnapX's Application settings or in **System Settings > General > Login Items & Extensions > Open at Login**.
+
+See [packaging instructions](packaging/MACOS.md) and [validation results](MACOS-VALIDATION.md).
+
 ## Build on macOS
 
-Install the .NET 10 SDK and Xcode. Run these commands from the repository root:
+Install the .NET 10 SDK and Xcode. Run these commands from the repository root (the explicit fallback avoids a GitVersion mainline-history error):
 
 ```sh
+export DisableGitVersionTask=true
 dotnet build SnapX.slnx --no-incremental -m:1
 dotnet run --project build --no-restore -- build --no-color
 ```
@@ -71,6 +81,17 @@ Run the local output:
 ```sh
 ./Output/snapx-ui/snapx-ui
 ```
+
+To launch as a macOS application:
+
+```sh
+bash packaging/macos-bundle.sh Output/snapx-ui SnapX.app
+open SnapX.app
+```
+
+Install FFmpeg for screen recording and allow capture in macOS Privacy &
+Security settings. See the [build guide](.github/BUILDING.md) for native tests
+and recording setup.
 
 ## Use SnapX
 
@@ -104,7 +125,7 @@ Ctrl+E  snapx-ui -ScreenRecorder
 | Linux Wayland with Hyprland | Built by GitHub CI. | The combined picker, recording outline, recording controls, and single-instance forwarding are runtime verified. `wf-recorder` records video. Other Wayland compositors need runtime tests. |
 | Linux X11 | Built by GitHub CI. | The combined picker and X11 hotkey backend are present. FFmpeg uses `x11grab`. CI tests launch and single-instance forwarding with Xvfb. Interactive picker and recording tests are still required. |
 | Windows | Built by GitHub CI. | Capture, the combined picker, recording, overlays, hotkeys, and single-instance forwarding are present. Runtime tests on Windows are still required. |
-| macOS | Built by GitHub CI. | Still capture, the combined picker, and single-instance forwarding are present. CI tests launch and forwarding. Video recording is not supported without custom commands. Interactive capture tests are still required. |
+| macOS | Builds locally and in GitHub CI; app bundles can be ad-hoc signed. | Still capture, the combined picker, single-instance forwarding, and Carbon global hotkeys are implemented. FFmpeg AVFoundation records regions within one display, including Retina and rotated displays. Local native probes verify capture, hotkey registration, and recording; see the [macOS build and test instructions](.github/BUILDING.md). |
 
 The recording outline and controls use native Wayland helpers on supported Wayland sessions.
 

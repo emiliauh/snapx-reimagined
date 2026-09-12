@@ -38,14 +38,17 @@ public static class HotkeyParser
                 key |= Keys.Shift;
                 continue;
             }
-            if (part.Equals("ALT", StringComparison.OrdinalIgnoreCase))
+            if (part.Equals("ALT", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("OPTION", StringComparison.OrdinalIgnoreCase))
             {
                 key |= Keys.Alt;
                 continue;
             }
             if (part.Equals("WIN", StringComparison.OrdinalIgnoreCase) ||
                 part.Equals("META", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("SUPER", StringComparison.OrdinalIgnoreCase))
+                part.Equals("SUPER", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("CMD", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("COMMAND", StringComparison.OrdinalIgnoreCase))
             {
                 win = true;
                 continue;
@@ -93,7 +96,8 @@ public static class HotkeyParser
 
     private static bool TryParseKey(string text, out Keys key)
     {
-        if (text.Length == 1 && char.IsDigit(text[0]))
+        key = Keys.None;
+        if (text.Length == 1 && text[0] is >= '0' and <= '9')
         {
             key = (Keys)((int)Keys.D0 + (text[0] - '0'));
             return true;
@@ -110,6 +114,7 @@ public static class HotkeyParser
             "BACKSPACE" => nameof(Keys.Back),
             "ENTER" => nameof(Keys.Return),
             "CAPSLOCK" => nameof(Keys.CapsLock),
+            "SCROLLLOCK" => nameof(Keys.Scroll),
             "PAGEDOWN" => nameof(Keys.PageDown),
             "PAGEUP" => nameof(Keys.PageUp),
             "PRINTSCREEN" => nameof(Keys.PrintScreen),
@@ -128,7 +133,10 @@ public static class HotkeyParser
             _ => text
         };
 
-        return Enum.TryParse(normalized, true, out key) &&
+        // Enum.TryParse also accepts numbers and comma-separated flags. Neither
+        // is a single named key ("A,B" otherwise silently becomes "C").
+        return Enum.GetNames<Keys>().Contains(normalized, StringComparer.OrdinalIgnoreCase) &&
+            Enum.TryParse(normalized, true, out key) &&
             (key & Keys.Modifiers) == Keys.None;
     }
 }

@@ -138,12 +138,11 @@
         </Border>
         <Grid Grid.Row="1">
             <DataGrid
-                AutoGenerateColumns="True"
+                AutoGenerateColumns="False"
                 GridLinesVisibility="None"
-                IsEnabled="False"
+                IsReadOnly="True"
                 ItemsSource="{Binding Items}"
                 SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                ToolTip.Tip="The database table is not available in this build."
                 x:Name="MainDataGrid" />
 
             <StackPanel
@@ -158,8 +157,8 @@
                     Width="48">
                     <Button.Flyout>
                         <Flyout Placement="TopEdgeAlignedRight">
-                            <Border Padding="4" Width="500">
-                                <Grid ColumnDefinitions="*, Auto">
+                            <Border Padding="4" Width="400">
+                                <Grid RowDefinitions="Auto, Auto">
                                     <TextBox
                                         AcceptsReturn="True"
                                         FontFamily="Cascadia Code,Consolas,Monospace"
@@ -168,10 +167,11 @@
                                         Watermark="Enter an SQL query" />
                                     <Button
                                         Command="{Binding ExecuteRawSqlCommand}"
-                                        Grid.Column="1"
-                                        Margin="10,0,0,0"
-                                        VerticalAlignment="Stretch">
-                                        <StackPanel Spacing="4">
+                                        CommandParameter="{Binding RawSqlQuery}"
+                                        Grid.Row="1"
+                                        Margin="0,8,0,0"
+                                        HorizontalAlignment="Right">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
                                             <fluent:SymbolIcon Symbol="Play" />
                                             <TextBlock Text="Run" />
                                         </StackPanel>

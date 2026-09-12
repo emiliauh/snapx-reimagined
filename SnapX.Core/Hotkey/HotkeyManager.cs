@@ -364,7 +364,16 @@ public sealed class HotkeyManager : IDisposable
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
-    public static List<HotkeySettings> GetDefaultHotkeyList() =>
+    public static List<HotkeySettings> GetDefaultHotkeyList() => OperatingSystem.IsMacOS()
+        ?
+        [
+            MacDefault(HotkeyType.RectangleRegion, Keys.D1),
+            MacDefault(HotkeyType.PrintScreen, Keys.D2),
+            MacDefault(HotkeyType.ActiveWindow, Keys.D3),
+            MacDefault(HotkeyType.ScreenRecorder, Keys.D4),
+            MacDefault(HotkeyType.ScreenRecorderGIF, Keys.D5)
+        ]
+        :
     [
         new(HotkeyType.RectangleRegion, Keys.Control | Keys.PrintScreen),
         new(HotkeyType.PrintScreen, Keys.PrintScreen),
@@ -372,4 +381,9 @@ public sealed class HotkeyManager : IDisposable
         new(HotkeyType.ScreenRecorder, Keys.Shift | Keys.PrintScreen),
         new(HotkeyType.ScreenRecorderGIF, Keys.Control | Keys.Shift | Keys.PrintScreen)
     ];
+
+    private static HotkeySettings MacDefault(HotkeyType job, Keys key) => new(job, Keys.Control | Keys.Shift | key)
+    {
+        HotkeyInfo = new HotkeyInfo(Keys.Control | Keys.Shift | key) { Win = true }
+    };
 }
