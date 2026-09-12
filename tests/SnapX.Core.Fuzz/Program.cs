@@ -19,6 +19,14 @@ using SnapX.Core.Localization;
 using SnapX.Core.Media.Services;
 using SnapX.Core.Utils;
 
+if (args.Contains("--frozen-composition-probe", StringComparer.Ordinal))
+{
+    int probeChecks = 0;
+    VerifyFrozenRegionComposition(ref probeChecks);
+    Console.WriteLine($"Frozen display composition passed: {probeChecks:N0} checks.");
+    return 0;
+}
+
 if (args.Contains("--mac-recording-probe", StringComparer.Ordinal))
     return await MacOSRecordingChecks.Probe();
 
@@ -38,6 +46,21 @@ if (args.Contains("--configuration-binding-probe", StringComparer.Ordinal))
     int probeChecks = 0;
     VerifyConfigurationBinding(ref probeChecks);
     Console.WriteLine($"Configuration binding probe passed: {probeChecks:N0} checks.");
+    return 0;
+}
+
+if (args.Contains("--annotation-probe", StringComparer.Ordinal))
+{
+    int probeChecks = await VerifyAnnotationLifecycleAsync();
+    Console.WriteLine($"Annotation lifecycle and rendering probe passed: {probeChecks:N0} checks.");
+    return 0;
+}
+
+if (args.Contains("--frozen-composer-probe", StringComparer.Ordinal))
+{
+    int probeChecks = 0;
+    VerifyFrozenRegionComposition(ref probeChecks);
+    Console.WriteLine($"Frozen display composition probe passed: {probeChecks:N0} checks.");
     return 0;
 }
 
@@ -94,8 +117,10 @@ try
     VerifyPortablePathIsolation(ref checks);
     VerifyLegacyAutomaticUploadMigration(ref checks);
     FuzzRegionNormalization(random, ref checks);
+    VerifyFrozenRegionComposition(ref checks);
     MacOSRecordingChecks.Fuzz(random, ref checks);
     checks += await VerifyRegionSelectionLifecycleAsync();
+    checks += await VerifyAnnotationLifecycleAsync();
     FuzzHotkeyLifecycle(random, ref checks);
     FuzzPortalAcceleratorFormatting(random, ref checks);
     FuzzUploaderResponseValidation(random, ref checks);
@@ -414,6 +439,47 @@ static void FuzzRegionNormalization(Random random, ref int checks)
     Check(extreme == new Rectangle(-100, -100, 99, 99), "Extreme coordinates were not safely clamped", ref checks);
 }
 
+static void VerifyFrozenRegionComposition(ref int checks)
+{
+    using var retina = new Image<Rgba32>(200, 200, Color.Red);
+    using var standard = new Image<Rgba32>(100, 100, Color.Blue);
+    FrozenDisplaySource[] mixedScaleFrames =
+    [
+        new(new Rectangle(-100, 0, 100, 100), retina),
+        new(new Rectangle(0, 0, 100, 100), standard)
+    ];
+
+    using Image mixedScale = FrozenRegionComposer.Compose(
+        mixedScaleFrames,
+        new Rectangle(-50, 25, 100, 50));
+    using Image<Rgba32> mixedScalePixels = mixedScale.CloneAs<Rgba32>();
+    Check(mixedScale.Size == new Size(200, 100),
+        "Mixed-DPI frozen selection did not preserve the highest backing scale", ref checks);
+    Check(mixedScalePixels[25, 50] == new Rgba32(255, 0, 0, 255),
+        "Frozen selection mapped the Retina display to the wrong output area", ref checks);
+    Check(mixedScalePixels[175, 50] == new Rgba32(0, 0, 255, 255),
+        "Frozen selection mapped the standard-DPI display to the wrong output area", ref checks);
+
+    using Image singleDisplay = FrozenRegionComposer.Compose(
+        [mixedScaleFrames[0]],
+        new Rectangle(-75, 10, 25, 30));
+    Check(singleDisplay.Size == new Size(50, 60),
+        "Single-display frozen selection did not retain native backing pixels", ref checks);
+    Check(retina[0, 0] == new Rgba32(255, 0, 0, 255),
+        "Frozen composition mutated its caller-owned display frame", ref checks);
+
+    using var separated = new Image<Rgba32>(100, 100, Color.Green);
+    FrozenDisplaySource[] gappedFrames =
+    [
+        new(new Rectangle(-100, 0, 100, 100), standard),
+        new(new Rectangle(20, 0, 100, 100), separated)
+    ];
+    using Image gapped = FrozenRegionComposer.Compose(gappedFrames, new Rectangle(-10, 0, 40, 20));
+    using Image<Rgba32> gappedPixels = gapped.CloneAs<Rgba32>();
+    Check(gappedPixels[15, 10].A == 0,
+        "A desktop gap between frozen display frames was not transparent", ref checks);
+}
+
 static async Task<int> VerifyRegionSelectionLifecycleAsync()
 {
     int checks = 0;
@@ -439,6 +505,8 @@ static async Task<int> VerifyRegionSelectionLifecycleAsync()
         Check(selection is not null, "A valid selector result was discarded", ref checks);
         Check(validRequest is { RestoreHiddenWindowsAfterSelection: false },
             "A successful screenshot requested that application windows reopen over its result", ref checks);
+        Check(validRequest is { CaptureImage: true, AnnotateImage: true },
+            "A screenshot selection did not request inline annotation", ref checks);
         Check(selection!.Rectangle == expected, "A valid selector rectangle was changed", ref checks);
         Check(ReferenceEquals(selection.Image, returnedImage), "The successful selector image ownership changed", ref checks);
         Check(RegionCaptureTasks.TryGetLastRegion(out Rectangle last, out _ ) && last == expected,
@@ -498,6 +566,370 @@ static async Task<int> VerifyRegionSelectionLifecycleAsync()
     finally
     {
         RegionCaptureTasks.SetRegionSelector(null);
+    }
+
+    return checks;
+}
+
+static async Task<int> VerifyAnnotationLifecycleAsync()
+{
+    int checks = 0;
+    VerifyRegionAnnotationPipeline(ref checks);
+    var settings = new TaskSettings
+    {
+        UseDefaultAfterCaptureJob = false,
+        AfterCaptureJob = AfterCaptureTasks.AnnotateImage
+    };
+
+    using var source = new Image<Rgba32>(160, 90, Color.White);
+    try
+    {
+        AnnotationTasks.SetEditor(null);
+        bool missingHostRejected = false;
+        try
+        {
+            await AnnotationTasks.EditAsync(source, settings);
+        }
+        catch (InvalidOperationException)
+        {
+            missingHostRejected = true;
+        }
+        Check(missingHostRejected, "Requested annotation silently continued without an editor host", ref checks);
+
+        AnnotationTasks.SetEditor((request, _) =>
+        {
+            Check(ReferenceEquals(request.SourceImage, source), "Annotation host did not receive the capture image", ref checks);
+            Check(ReferenceEquals(request.TaskSettings, settings), "Annotation host did not receive task settings", ref checks);
+            return Task.FromResult(ImageAnnotationResult.Cancelled);
+        });
+        ImageAnnotationResult cancelled = await AnnotationTasks.EditAsync(source, settings);
+        Check(!cancelled.Accepted && cancelled.Image is null, "Annotation cancel was converted into an accepted result", ref checks);
+        Check(source.Width == 160, "Annotation cancel disposed the worker-owned source image", ref checks);
+
+        var replacement = new Image<Rgba32>(160, 90, Color.Blue);
+        AnnotationTasks.SetEditor((_, _) => Task.FromResult(ImageAnnotationResult.Accept(replacement)));
+        ImageAnnotationResult accepted = await AnnotationTasks.EditAsync(source, settings);
+        Check(accepted.Accepted && ReferenceEquals(accepted.Image, replacement), "Accepted annotation image was replaced", ref checks);
+        Check(source.Width == 160, "Accepted annotation disposed source image before ownership transfer", ref checks);
+        replacement.Dispose();
+
+        var illegalCancelledImage = new Image<Rgba32>(8, 8);
+        AnnotationTasks.SetEditor((_, _) => Task.FromResult(new ImageAnnotationResult
+        {
+            Accepted = false,
+            Image = illegalCancelledImage
+        }));
+        bool illegalResultRejected = false;
+        try
+        {
+            await AnnotationTasks.EditAsync(source, settings);
+        }
+        catch (InvalidOperationException)
+        {
+            illegalResultRejected = true;
+        }
+        Check(illegalResultRejected, "Cancelled annotation result carrying an image was accepted", ref checks);
+        bool illegalImageDisposed = false;
+        try { _ = illegalCancelledImage[0, 0]; }
+        catch (ObjectDisposedException) { illegalImageDisposed = true; }
+        Check(illegalImageDisposed, "Invalid cancelled annotation result leaked its image", ref checks);
+
+        using var cancellation = new CancellationTokenSource();
+        AnnotationTasks.SetEditor(async (_, token) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return ImageAnnotationResult.Cancelled;
+        });
+        Task<ImageAnnotationResult> pending = AnnotationTasks.EditAsync(source, settings, cancellation.Token);
+        cancellation.Cancel();
+        bool cancellationPropagated = false;
+        try { await pending; }
+        catch (OperationCanceledException) { cancellationPropagated = true; }
+        Check(cancellationPropagated, "Annotation cancellation did not reach the registered editor", ref checks);
+
+        var document = new AnnotationDocument();
+        document.Add(new AnnotationElement
+        {
+            Tool = AnnotationTool.Rectangle,
+            Bounds = new RectangleF(10, 10, 50, 30),
+            Color = new Rgba32(255, 0, 0),
+            StrokeWidth = 4
+        });
+        Check(document.HitTest(new PointF(12, 12), 4) == 0, "Annotation selection hit testing missed a rectangle", ref checks);
+        foreach (AnnotationResizeHandle handle in Enum.GetValues<AnnotationResizeHandle>().Where(value => value != AnnotationResizeHandle.None))
+        {
+            document.SelectedIndex = 0;
+            document.Elements[0].Bounds = new RectangleF(10, 10, 50, 30);
+            PointF target = handle switch
+            {
+                AnnotationResizeHandle.TopLeft => new PointF(5, 5),
+                AnnotationResizeHandle.Top => new PointF(30, 5),
+                AnnotationResizeHandle.TopRight => new PointF(70, 5),
+                AnnotationResizeHandle.Right => new PointF(70, 20),
+                AnnotationResizeHandle.BottomRight => new PointF(70, 50),
+                AnnotationResizeHandle.Bottom => new PointF(30, 50),
+                AnnotationResizeHandle.BottomLeft => new PointF(5, 50),
+                AnnotationResizeHandle.Left => new PointF(5, 20),
+                _ => default
+            };
+            document.ResizeSelected(handle, target);
+            RectangleF resized = AnnotationDocument.Normalize(document.Elements[0].Bounds);
+            Check(resized.Width >= 2 && resized.Height >= 2, $"{handle} resize produced invalid bounds", ref checks);
+        }
+
+        document.Checkpoint();
+        document.MoveSelected(7, 9);
+        RectangleF moved = document.Selected!.Bounds;
+        document.Undo();
+        Check(document.Selected!.Bounds != moved, "Annotation undo did not restore the prior geometry", ref checks);
+        document.Redo();
+        Check(document.Selected!.Bounds == moved, "Annotation redo did not restore moved geometry", ref checks);
+
+        var horizontalArrow = new AnnotationElement
+        {
+            Tool = AnnotationTool.Arrow,
+            Points = [new PointF(10, 20), new PointF(70, 20)],
+            Bounds = new RectangleF(10, 20, 60, 0)
+        };
+        document.Add(horizontalArrow);
+        document.ResizeSelected(AnnotationResizeHandle.BottomRight, new PointF(90, 50));
+        Check(horizontalArrow.Points[0] == new PointF(10, 20) &&
+              horizontalArrow.Points[1] == new PointF(90, 50),
+            "Horizontal arrow corner resize did not anchor its start and move its rendered end", ref checks);
+
+        var verticalArrow = new AnnotationElement
+        {
+            Tool = AnnotationTool.Arrow,
+            Points = [new PointF(40, 10), new PointF(40, 70)],
+            Bounds = new RectangleF(40, 10, 0, 60)
+        };
+        document.Add(verticalArrow);
+        document.ResizeSelected(AnnotationResizeHandle.TopLeft, new PointF(20, 0));
+        Check(verticalArrow.Points[0] == new PointF(20, 0) &&
+              verticalArrow.Points[1] == new PointF(40, 70),
+            "Vertical arrow corner resize did not move its rendered start and anchor its end", ref checks);
+
+        var straightStroke = new AnnotationElement
+        {
+            Tool = AnnotationTool.Freehand,
+            Points = [new PointF(15, 45), new PointF(45, 45), new PointF(75, 45)],
+            Bounds = new RectangleF(15, 45, 60, 0)
+        };
+        document.Add(straightStroke);
+        document.ResizeSelected(AnnotationResizeHandle.Top, new PointF(45, 30));
+        Check(straightStroke.Points.All(point => point.Y == 30),
+            "Straight freehand resize changed only its bounds, not its rendered points", ref checks);
+
+        if (AnnotationDocument.TextFontFamilyName is not null)
+        {
+            var fittedText = new AnnotationElement
+            {
+                Tool = AnnotationTool.Text,
+                Text = "Short",
+                Bounds = new RectangleF(12, 14, 1, 1),
+                FontSize = 24
+            };
+            AnnotationDocument.FitTextBoundsToContent(fittedText);
+            float shortWidth = fittedText.Bounds.Width;
+            fittedText.Text = "A substantially longer label";
+            AnnotationDocument.FitTextBoundsToContent(fittedText);
+            Check(fittedText.Bounds.X == 12 && fittedText.Bounds.Y == 14 && fittedText.FontSize == 24,
+                "Editing text changed its position or font size while fitting selection bounds", ref checks);
+            Check(fittedText.Bounds.Width > shortWidth && fittedText.Bounds.Height > 1,
+                "Editing text did not expand selection and hit-test bounds to cover its content", ref checks);
+        }
+
+        var textResizeTargets = new Dictionary<AnnotationResizeHandle, PointF>
+        {
+            [AnnotationResizeHandle.TopLeft] = new PointF(-30, 0),
+            [AnnotationResizeHandle.Top] = new PointF(70, 0),
+            [AnnotationResizeHandle.TopRight] = new PointF(170, 0),
+            [AnnotationResizeHandle.Right] = new PointF(170, 40),
+            [AnnotationResizeHandle.BottomRight] = new PointF(170, 80),
+            [AnnotationResizeHandle.Bottom] = new PointF(70, 80),
+            [AnnotationResizeHandle.BottomLeft] = new PointF(-30, 80),
+            [AnnotationResizeHandle.Left] = new PointF(-30, 40)
+        };
+        foreach ((AnnotationResizeHandle handle, PointF target) in textResizeTargets)
+        {
+            var textDocument = new AnnotationDocument();
+            textDocument.Add(new AnnotationElement
+            {
+                Tool = AnnotationTool.Text,
+                Text = "Resize",
+                Bounds = new RectangleF(20, 20, 100, 40),
+                FontSize = 30
+            });
+            textDocument.ResizeSelected(handle, target);
+            AnnotationElement resizedText = textDocument.Selected!;
+            RectangleF resizedBounds = AnnotationDocument.Normalize(resizedText.Bounds);
+            Check(Math.Abs(resizedBounds.Width - 150) < .01f &&
+                  Math.Abs(resizedBounds.Height - 60) < .01f,
+                $"{handle} did not uniformly resize text bounds", ref checks);
+            Check(Math.Abs(resizedText.FontSize - 45) < .01f &&
+                  AnnotationDocument.GetEffectiveTextFontSize(resizedText) == resizedText.FontSize,
+                $"{handle} did not resize preview/export text size with its bounds", ref checks);
+        }
+
+        var incompleteArrowDocument = new AnnotationDocument();
+        incompleteArrowDocument.Add(new AnnotationElement
+        {
+            Tool = AnnotationTool.Arrow,
+            Bounds = new RectangleF(12, 12, 1, 1),
+            Points = [new PointF(12, 12)],
+            Color = new Rgba32(0, 0, 0),
+            StrokeWidth = 4
+        });
+        using (Image<Rgba32> incompleteArrow = incompleteArrowDocument.Render(source))
+        {
+            bool renderedIncompleteArrow = false;
+            incompleteArrow.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < accessor.Height && !renderedIncompleteArrow; y++)
+                    renderedIncompleteArrow = accessor.GetRowSpan(y).ContainsAnyExcept(new Rgba32(255, 255, 255));
+            });
+            Check(!renderedIncompleteArrow,
+                "An incomplete one-point arrow rendered differently from its preview", ref checks);
+        }
+
+        document.Add(new AnnotationElement
+        {
+            Tool = AnnotationTool.Freehand,
+            Points = [new PointF(5, 70), new PointF(40, 60), new PointF(80, 75)],
+            Bounds = new RectangleF(5, 60, 75, 15),
+            Color = new Rgba32(0, 120, 255),
+            StrokeWidth = 3
+        });
+        document.Add(new AnnotationElement
+        {
+            Tool = AnnotationTool.Ellipse,
+            Bounds = new RectangleF(90, 10, 50, 35),
+            Color = new Rgba32(0, 160, 70),
+            StrokeWidth = 3
+        });
+        document.Add(new AnnotationElement
+        {
+            Tool = AnnotationTool.Arrow,
+            Bounds = new RectangleF(90, 60, 50, 20),
+            Points = [new PointF(90, 80), new PointF(140, 60)],
+            Color = new Rgba32(0, 0, 0),
+            StrokeWidth = 3
+        });
+
+        var desktopDocument = new AnnotationDocument();
+        desktopDocument.Elements.Add(new AnnotationElement
+        {
+            Tool = AnnotationTool.Arrow,
+            Bounds = new RectangleF(120, 80, 200, 100),
+            Points = [new PointF(120, 80), new PointF(320, 180)],
+            Color = new Rgba32(255, 0, 0),
+            StrokeWidth = 6,
+            FontSize = 30
+        });
+        AnnotationDocument cropDocument = desktopDocument.Transform(
+            new RectangleF(200, 100, 400, 200), 800, 400);
+        AnnotationElement transformedArrow = cropDocument.Elements.Single();
+        Check(transformedArrow.Points[0] == new PointF(-160, -40) &&
+              transformedArrow.Points[1] == new PointF(240, 160),
+            "Annotation crop export did not translate and scale point geometry", ref checks);
+        Check(transformedArrow.Bounds == new RectangleF(-160, -40, 400, 200) &&
+              transformedArrow.StrokeWidth == 12 && transformedArrow.FontSize == 60,
+            "Annotation crop export did not scale bounds, stroke, and text metrics", ref checks);
+        Check(desktopDocument.Elements[0].Points[0] == new PointF(120, 80) &&
+              desktopDocument.Elements[0].StrokeWidth == 6,
+            "Annotation crop export mutated the live document or its geometry", ref checks);
+        using (var croppedAnnotation = new Image<Rgba32>(800, 400, Color.White))
+        using (Image<Rgba32> croppedRendered = cropDocument.Render(croppedAnnotation))
+        {
+            Check(croppedRendered[0, 40] != new Rgba32(255, 255, 255),
+                "An annotation crossing the capture boundary was not clipped into the export", ref checks);
+        }
+
+        using Image<Rgba32> rendered = document.Render(source);
+        Check(rendered.Width == source.Width && rendered.Height == source.Height,
+            "Annotation export changed source pixel dimensions", ref checks);
+        bool containsAnnotationPixels = false;
+        rendered.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height && !containsAnnotationPixels; y++)
+            {
+                Span<Rgba32> row = accessor.GetRowSpan(y);
+                containsAnnotationPixels = row.ContainsAnyExcept(new Rgba32(255, 255, 255));
+            }
+        });
+        Check(containsAnnotationPixels, "Annotation export rendered no elements", ref checks);
+        var ellipseDocument = new AnnotationDocument();
+        ellipseDocument.Add(new AnnotationElement
+        {
+            Tool = AnnotationTool.Ellipse,
+            Bounds = new RectangleF(10, 10, 100, 40),
+            Color = new Rgba32(0, 0, 0),
+            StrokeWidth = 3
+        });
+        using Image<Rgba32> ellipseImage = ellipseDocument.Render(source);
+        foreach (var edge in new[] { new Point(10, 30), new Point(110, 30), new Point(60, 10), new Point(60, 50) })
+            Check(ellipseImage[edge.X, edge.Y] != new Rgba32(255, 255, 255),
+                "Ellipse export does not reach its selected bounds", ref checks);
+    }
+    finally
+    {
+        AnnotationTasks.SetEditor(null);
+    }
+
+    checks += await VerifyWorkerAnnotationStopAsync();
+    return checks;
+}
+
+static async Task<int> VerifyWorkerAnnotationStopAsync()
+{
+    int checks = 0;
+    MethodInfo afterCapture = typeof(WorkerTask).GetMethod(
+        "DoAfterCaptureJobs",
+        BindingFlags.Instance | BindingFlags.NonPublic)!;
+    PropertyInfo status = typeof(WorkerTask).GetProperty(nameof(WorkerTask.Status))!;
+    var source = new Image<Rgba32>(24, 16, Color.White);
+    var metadata = new TaskMetadata(source) { RequiresAnnotation = true };
+    var settings = new TaskSettings { UseDefaultAfterCaptureJob = false, AfterCaptureJob = 0 };
+    WorkerTask worker = WorkerTask.CreateImageUploaderTask(metadata, settings, "annotation-stop-probe");
+    status.SetValue(worker, SnapX.Core.TaskStatus.Working);
+
+    var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var tokenCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var acceptedAfterStop = new Image<Rgba32>(24, 16, Color.Blue);
+    AnnotationTasks.SetEditor(async (_, token) =>
+    {
+        using CancellationTokenRegistration registration = token.Register(() => tokenCancelled.TrySetResult());
+        entered.TrySetResult();
+        // Deliberately ignore cancellation until the test releases us. The
+        // worker must still reject and dispose a late accepted editor result.
+        await release.Task.ConfigureAwait(false);
+        return ImageAnnotationResult.Accept(acceptedAfterStop);
+    });
+
+    try
+    {
+        Task<bool> pending = Task.Run(() => (bool)afterCapture.Invoke(worker, null)!);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        worker.Stop();
+        await tokenCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        release.TrySetResult();
+
+        Check(!await pending.WaitAsync(TimeSpan.FromSeconds(5)),
+            "A stopped annotation worker continued to after-capture side effects", ref checks);
+        Check(worker.StopRequested, "The annotation worker cleared a concurrent stop request", ref checks);
+        bool lateResultDisposed = false;
+        try { _ = acceptedAfterStop[0, 0]; }
+        catch (ObjectDisposedException) { lateResultDisposed = true; }
+        Check(lateResultDisposed, "A late accepted annotation result leaked after worker cancellation", ref checks);
+        Check(source[0, 0] == new Rgba32(255, 255, 255, 255),
+            "Stopping annotation disposed or replaced the worker-owned source prematurely", ref checks);
+    }
+    finally
+    {
+        release.TrySetResult();
+        AnnotationTasks.SetEditor(null);
+        worker.Dispose();
     }
 
     return checks;
@@ -1176,6 +1608,107 @@ static void Check(bool condition, string message, ref int checks)
 {
     if (!condition) throw new InvalidOperationException(message);
     checks++;
+}
+
+static void VerifyRegionAnnotationPipeline(ref int checks)
+{
+    MethodInfo afterCapture = typeof(WorkerTask).GetMethod("DoAfterCaptureJobs", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    int editorCalls = 0;
+    AnnotationTasks.SetEditor((_, _) =>
+    {
+        editorCalls++;
+        return Task.FromResult(ImageAnnotationResult.Cancelled);
+    });
+    try
+    {
+        RegionCaptureTasks.SetRegionSelector((request, _) => Task.FromResult<RegionCaptureSelection?>(new()
+        {
+            Rectangle = new Rectangle(0, 0, 16, 16),
+            CaptureBounds = new Rectangle(0, 0, 100, 100),
+            Image = request.CaptureImage ? new Image<Rgba32>(16, 16) : null
+        }));
+
+        foreach (RegionCaptureType captureType in new[] { RegionCaptureType.Default, RegionCaptureType.Light, RegionCaptureType.Transparent })
+        {
+            var taskSettings = new TaskSettings { UseDefaultAfterCaptureJob = false, AfterCaptureJob = 0 };
+            using TaskMetadata metadata = new RegionCaptureProbe(captureType).ExecuteForTest(taskSettings)!;
+            Check(metadata.RequiresAnnotation, "A region screenshot without inline editing lost its annotation fallback", ref checks);
+            Check(taskSettings.AfterCaptureJob == 0, "Region annotation changed the user's after-capture settings", ref checks);
+            int callsBefore = editorCalls;
+            WorkerTask worker = WorkerTask.CreateImageUploaderTask(metadata, taskSettings, "region-annotation-probe");
+            bool continued = (bool)afterCapture.Invoke(worker, null)!;
+            Check(editorCalls - callsBefore == 1, "Region image worker skipped its annotation fallback", ref checks);
+            Check(!continued, "Cancelled region annotation did not stop after-capture processing", ref checks);
+        }
+
+        RegionCaptureTasks.SetRegionSelector((request, _) => Task.FromResult<RegionCaptureSelection?>(new()
+        {
+            Rectangle = new Rectangle(0, 0, 16, 16),
+            CaptureBounds = new Rectangle(0, 0, 100, 100),
+            Image = request.CaptureImage ? new Image<Rgba32>(16, 16) : null,
+            AnnotationCompleted = request.AnnotateImage
+        }));
+        var inlineSettings = new TaskSettings
+        {
+            UseDefaultAfterCaptureJob = false,
+            AfterCaptureJob = AfterCaptureTasks.AnnotateImage
+        };
+        using (TaskMetadata inlineMetadata = new RegionCaptureProbe(RegionCaptureType.Default).ExecuteForTest(inlineSettings)!)
+        {
+            Check(inlineMetadata.AnnotationCompleted && !inlineMetadata.RequiresAnnotation,
+                "Inline annotation completion was not propagated into task metadata", ref checks);
+            int callsBefore = editorCalls;
+            WorkerTask inlineWorker = WorkerTask.CreateImageUploaderTask(
+                inlineMetadata, inlineSettings, "inline-region-annotation-probe");
+            Check((bool)afterCapture.Invoke(inlineWorker, null)!,
+                "An already annotated region did not continue after-capture processing", ref checks);
+            Check(editorCalls == callsBefore,
+                "An already annotated region opened a duplicate editor", ref checks);
+        }
+
+        // Fullscreen/window/monitor captures use ordinary image metadata: only
+        // their explicit after-capture setting should request an editor.
+        using (var metadata = new TaskMetadata(new Image<Rgba32>(16, 16)) { RequiresAnnotation = true })
+        {
+            var taskSettings = new TaskSettings { UseDefaultAfterCaptureJob = false, AfterCaptureJob = AfterCaptureTasks.AnnotateImage };
+            int callsBefore = editorCalls;
+            WorkerTask worker = WorkerTask.CreateImageUploaderTask(metadata, taskSettings, "region-explicit-annotation-probe");
+            Check(!(bool)afterCapture.Invoke(worker, null)!, "Region with explicit annotation ignored editor cancellation", ref checks);
+            Check(editorCalls - callsBefore == 1, "Region with explicit annotation opened the editor more than once", ref checks);
+        }
+        foreach (bool requested in new[] { false, true })
+        {
+            using var metadata = new TaskMetadata(new Image<Rgba32>(16, 16));
+            var taskSettings = new TaskSettings
+            {
+                UseDefaultAfterCaptureJob = false,
+                AfterCaptureJob = requested ? AfterCaptureTasks.AnnotateImage | AfterCaptureTasks.PinToScreen : 0
+            };
+            int callsBefore = editorCalls;
+            WorkerTask worker = WorkerTask.CreateImageUploaderTask(metadata, taskSettings, "non-region-annotation-probe");
+            Check((bool)afterCapture.Invoke(worker, null)! == !requested, "Non-region annotation cancellation policy changed", ref checks);
+            Check(editorCalls - callsBefore == (requested ? 1 : 0), "Non-region capture ignored its explicit annotation setting", ref checks);
+        }
+
+        int callsBeforeGeometry = editorCalls;
+        RegionCaptureSelection? geometry = RegionCaptureTasks.SelectRegionAsync(captureImage: false).GetAwaiter().GetResult();
+        Check(geometry is { Image: null }, "Recording selection unexpectedly produced an image", ref checks);
+        Check(editorCalls == callsBeforeGeometry, "Recording geometry entered the annotation editor", ref checks);
+
+        RegionCaptureTasks.SetRegionSelector((_, _) => Task.FromResult<RegionCaptureSelection?>(null));
+        Check(new RegionCaptureProbe(RegionCaptureType.Default).ExecuteForTest(new TaskSettings()) is null,
+            "Cancelled region selection created an annotation image task", ref checks);
+    }
+    finally
+    {
+        RegionCaptureTasks.SetRegionSelector(null);
+        AnnotationTasks.SetEditor(null);
+    }
+}
+
+sealed class RegionCaptureProbe(RegionCaptureType captureType) : SnapX.Core.Capture.CaptureRegion(captureType)
+{
+    public TaskMetadata? ExecuteForTest(TaskSettings settings) => Execute(settings);
 }
 
 sealed class EchoSyntaxParser : ShareXSyntaxParser

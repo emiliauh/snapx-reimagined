@@ -16,6 +16,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SnapX.Avalonia.ViewModels;
+using SnapX.Avalonia.Views.Controls;
 using SnapX.Core;
 using SnapX.Core.Job;
 using SnapX.Core.Media;
@@ -40,6 +41,15 @@ public partial class RegionSelectorWindow : Window
     private bool _isSelecting;
     private bool _selectionCompleted;
     private bool _selectionSucceeded;
+    private bool _annotationCompleted;
+    private bool _annotationRequested;
+    private bool _imageOwnershipTransferred;
+    private bool _inlineAnnotationPreparing;
+    private AnnotationCanvas? _inlineAnnotationCanvas;
+    private RegionAnnotationToolbar? _inlineAnnotationToolbar;
+    private SixLabors.ImageSharp.Rectangle _inlineAnnotationRectangle;
+    private Rect _inlineAnnotationRegion;
+    private bool _inlineRegionSelectionMode = true;
     private bool _captureReady;
     private bool _ownsSelector;
     private int _selectorGateReleased;
@@ -429,6 +439,7 @@ public partial class RegionSelectorWindow : Window
         var selector = new RegionSelectorWindow(true, request.CaptureImage)
         {
             _captureOptions = request.Options,
+            _annotationRequested = request.AnnotateImage,
             RestoreHiddenWindowsAfterSelection = request.RestoreHiddenWindowsAfterSelection
         };
         // Do not return a completed selection until its window has completely
@@ -489,7 +500,8 @@ public partial class RegionSelectorWindow : Window
                 selector._screenBounds.Width,
                 selector._screenBounds.Height),
             Image = image,
-            WindowInfo = windowInfo
+            WindowInfo = windowInfo,
+            AnnotationCompleted = selector._annotationCompleted
         };
     }
 
@@ -867,8 +879,14 @@ public partial class RegionSelectorWindow : Window
         InitializeComponent();
         if (UseLiveOverlay)
         {
-            TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
-            Background = Brushes.Transparent;
+            // A screenshot selector displays pixels captured before it was
+            // mapped, so make that AppKit surface genuinely opaque. Geometry-
+            // only selection (used by recording) remains a live transparent
+            // overlay and does not require a screenshot permission roundtrip.
+            TransparencyLevelHint = TakeScreenshot
+                ? [WindowTransparencyLevel.None]
+                : [WindowTransparencyLevel.Transparent];
+            Background = TakeScreenshot ? Brushes.Black : Brushes.Transparent;
         }
 
         _selectionRect = this.FindControl<Rectangle>("SelectionRect");
@@ -907,7 +925,14 @@ public partial class RegionSelectorWindow : Window
         {
             // The live selector fixes its display before Show so pointer movement
             // during mapping cannot switch the coordinate space underneath it.
-            if (!UseLiveOverlay) await SetupWindowBoundsAsync();
+            if (!UseLiveOverlay)
+            {
+                _captureReady = false;
+                await SetupWindowBoundsAsync();
+                if (TakeScreenshot && _annotationRequested && !IsCancellationRequested)
+                    BeginGenericInlineAnnotation();
+                _captureReady = !IsCancellationRequested;
+            }
             else
             {
                 // AppKit can constrain a borderless window to the work area.
@@ -938,6 +963,7 @@ public partial class RegionSelectorWindow : Window
             return (await SelectRegionForCoreAsync(new RegionCaptureRequest
             {
                 CaptureImage = true,
+                AnnotateImage = false,
                 RestoreHiddenWindowsAfterSelection = true
             }, CancellationToken.None))?.Image;
         }
@@ -1093,17 +1119,17 @@ public partial class RegionSelectorWindow : Window
             }
         }
         if (_liveWindowId == 0)
-            throw new InvalidOperationException("The live selector's native window is not mapped yet.");
+            throw new InvalidOperationException("The macOS selector's native window is not mapped yet.");
         var bounds = new MacOSAPI().GetWindowRectangle(_liveWindowId);
         if (bounds.Width <= 0 || bounds.Height <= 0)
-            throw new InvalidOperationException("The live selector's native window bounds are not available yet.");
+            throw new InvalidOperationException("The macOS selector's native window bounds are not available yet.");
         return bounds;
     }
 
     private async Task SynchronizeLiveWindowBoundsAsync()
     {
         // AppKit may publish the final frame after Opened. This bounded startup
-        // wait does not add latency to the later completion capture.
+        // wait does not add latency to later selection completion.
         for (int attempt = 0; ; attempt++)
         {
             if (IsCancellationRequested) return;
@@ -1123,7 +1149,7 @@ public partial class RegionSelectorWindow : Window
     {
         var bounds = ReadLiveWindowBounds();
         if (bounds.Width <= 0 || bounds.Height <= 0 || ClientSize.Width <= 0 || ClientSize.Height <= 0)
-            throw new InvalidOperationException("The live selector has no usable client area.");
+            throw new InvalidOperationException("The macOS selector has no usable client area.");
         if (_requestedScreenBounds.Width > 0 && _requestedScreenBounds.Height > 0 &&
             (Math.Abs(bounds.X - _requestedScreenBounds.X) > 1 ||
              Math.Abs(bounds.Y - _requestedScreenBounds.Y) > 1 ||
@@ -1131,7 +1157,7 @@ public partial class RegionSelectorWindow : Window
              Math.Abs(bounds.Height - _requestedScreenBounds.Height) > 1))
         {
             throw new InvalidOperationException(
-                $"The live selector was constrained to {bounds} instead of full display {_requestedScreenBounds}.");
+                $"The macOS selector was constrained to {bounds} instead of full display {_requestedScreenBounds}.");
         }
         _screenBounds = new PixelRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
         _imageBounds = new Rect(0, 0, ClientSize.Width, ClientSize.Height);
@@ -1142,7 +1168,7 @@ public partial class RegionSelectorWindow : Window
             viewBox.Width = ClientSize.Width;
             viewBox.Height = ClientSize.Height;
         }
-        DebugHelper.WriteLine($"Live selector actual bounds: {bounds}; client={ClientSize}");
+        DebugHelper.WriteLine($"macOS selector actual bounds: {bounds}; client={ClientSize}");
     }
 
     private SixLabors.ImageSharp.Rectangle MapLiveSelectionToDesktop(Rect selection)
@@ -1167,6 +1193,18 @@ public partial class RegionSelectorWindow : Window
     private void OnPointerPressed(object? Sender, PointerPressedEventArgs E)
     {
         if (_liveSession is { } session) { session.PointerPressed(this, E); return; }
+        if ((_inlineAnnotationCanvas is not null && !_inlineRegionSelectionMode) || _inlineAnnotationPreparing) return;
+        if (_inlineAnnotationCanvas is not null)
+        {
+            var properties = E.GetCurrentPoint(_canvas).Properties;
+            if (properties.IsRightButtonPressed)
+            {
+                _ = CancelSelection();
+                E.Handled = true;
+                return;
+            }
+            if (!properties.IsLeftButtonPressed) return;
+        }
         if (_selectionCompleted || !_captureReady)
         {
             if (!_captureReady)
@@ -1178,6 +1216,8 @@ public partial class RegionSelectorWindow : Window
 
         if (_captureOptions.WindowPickerMode)
         {
+            if (_inlineAnnotationCanvas is not null)
+                UpdateWindowHover(E.GetPosition(_canvas));
             // Nothing under the cursor is pickable at this point; ignore the
             // click rather than falling back to an unrelated drag-selection.
             if (_hoveredWindow is { } window)
@@ -1201,6 +1241,8 @@ public partial class RegionSelectorWindow : Window
 
         _selectionRect.Width = 0;
         _selectionRect.Height = 0;
+        _selectionRect.IsVisible = true;
+        _inlineAnnotationToolbar?.SetCanAccept(false);
         _selectionRect.Margin = new Thickness(_startPoint.X, _startPoint.Y, 0, 0);
 
         _infoBox.IsVisible = _captureOptions.ShowInfo;
@@ -1294,7 +1336,7 @@ public partial class RegionSelectorWindow : Window
     private async void OnPointerReleased(object? Sender, PointerReleasedEventArgs? E)
     {
         if (_liveSession is { } session) { await session.PointerReleasedAsync(E); return; }
-        if (_selectionCompleted || !_isSelecting)
+        if (_selectionCompleted || _inlineAnnotationPreparing || !_isSelecting)
         {
             return;
         }
@@ -1335,6 +1377,7 @@ public partial class RegionSelectorWindow : Window
         _infoBox.IsVisible = false;
         if (drawnRect.Width <= 0 || drawnRect.Height <= 0)
         {
+            if (_inlineAnnotationCanvas is not null) { RestoreGenericInlineSelection(); return; }
             await CancelSelection();
             return;
         }
@@ -1344,6 +1387,7 @@ public partial class RegionSelectorWindow : Window
         if (selectedRegion.Width <= 0 || selectedRegion.Height <= 0 ||
             selectedRegion.Width > _imageBounds.Width || selectedRegion.Height > _imageBounds.Height)
         {
+            if (_inlineAnnotationCanvas is not null) { RestoreGenericInlineSelection(); return; }
             await CancelSelection();
             return;
         }
@@ -1351,6 +1395,7 @@ public partial class RegionSelectorWindow : Window
         if (selectedRegion.Width < Math.Max(1, _captureOptions.MinimumSize) ||
             selectedRegion.Height < Math.Max(1, _captureOptions.MinimumSize))
         {
+            if (_inlineAnnotationCanvas is not null) { RestoreGenericInlineSelection(); return; }
             await CancelSelection();
             return;
         }
@@ -1374,6 +1419,14 @@ public partial class RegionSelectorWindow : Window
                 await CancelSelection();
                 return;
             }
+        }
+        if (_inlineAnnotationCanvas is not null)
+        {
+            _inlineAnnotationRectangle = screenRect;
+            _inlineAnnotationRegion = selectedRegion;
+            RestoreGenericInlineSelection();
+            _inlineAnnotationToolbar?.SetCanAccept(true);
+            return;
         }
         _selectionCompleted = true;
         _resultRect.TrySetResult(screenRect);
@@ -1415,48 +1468,195 @@ public partial class RegionSelectorWindow : Window
                     image.Dispose();
                     _image = null;
                 }
-                else if (!IsSilentMode)
+                else
                 {
-                    UploadManager.RunImageTask(image, TaskSettings.GetDefaultTaskSettings());
+                    _imageOwnershipTransferred = true;
+                    if (!IsSilentMode)
+                        UploadManager.RunImageTask(image, TaskSettings.GetDefaultTaskSettings());
                 }
                 DebugHelper.WriteLine($"Live region captured after selection: {screenRect}");
             }
-            else await Task.Run(() =>
+            else
             {
-                if (_image is null)
+                // Cancellation closes the selector and normally disposes its
+                // frozen source image. Keep the window alive until the worker
+                // has finished reading that image, then honor cancellation on
+                // the UI thread below.
+                _inlineAnnotationPreparing = true;
+                Image croppedImage = await Task.Run(() =>
                 {
-                    throw new InvalidOperationException("The selector screenshot is unavailable.");
+                    if (_image is null)
+                        throw new InvalidOperationException("The selector screenshot is unavailable.");
+
+                    double scaleX = _image.Width / _imageBounds.Width;
+                    double scaleY = _image.Height / _imageBounds.Height;
+                    var imageRect = new SixLabors.ImageSharp.Rectangle(
+                        (int)Math.Floor(localRect.X * scaleX),
+                        (int)Math.Floor(localRect.Y * scaleY),
+                        Math.Min(_image.Width, (int)Math.Ceiling(localRect.Width * scaleX)),
+                        Math.Min(_image.Height, (int)Math.Ceiling(localRect.Height * scaleY)));
+                    imageRect = SixLabors.ImageSharp.Rectangle.Intersect(imageRect, _image.Bounds);
+                    if (imageRect.IsEmpty)
+                        throw new InvalidOperationException("The selected region does not intersect the captured image.");
+
+                    return _image.Clone(context => context.Crop(imageRect));
+                });
+
+                if (IsCancellationRequested)
+                {
+                    croppedImage.Dispose();
+                    if (IsVisible) Close();
+                    return;
                 }
 
-                double scaleX = _image.Width / _imageBounds.Width;
-                double scaleY = _image.Height / _imageBounds.Height;
-                var imageRect = new SixLabors.ImageSharp.Rectangle(
-                    (int)Math.Floor(localRect.X * scaleX),
-                    (int)Math.Floor(localRect.Y * scaleY),
-                    Math.Min(_image.Width, (int)Math.Ceiling(localRect.Width * scaleX)),
-                    Math.Min(_image.Height, (int)Math.Ceiling(localRect.Height * scaleY)));
-                imageRect = SixLabors.ImageSharp.Rectangle.Intersect(imageRect, _image.Bounds);
-                if (imageRect.IsEmpty)
-                {
-                    throw new InvalidOperationException("The selected region does not intersect the captured image.");
-                }
+                _image?.Dispose();
+                _image = croppedImage;
 
-                _image.Mutate(Context => Context.Crop(imageRect));
-                _resultImg.TrySetResult(_image);
-                if (IsSilentMode) return;
-                DebugHelper.WriteLine("Running image task");
-                UploadManager.RunImageTask(_image, TaskSettings.GetDefaultTaskSettings());
-            });
+                if (!_resultImg.TrySetResult(croppedImage))
+                {
+                    croppedImage.Dispose();
+                    _image = null;
+                    if (IsVisible) Close();
+                    return;
+                }
+                _imageOwnershipTransferred = true;
+                if (!IsSilentMode)
+                {
+                    DebugHelper.WriteLine("Running image task");
+                    UploadManager.RunImageTask(_image, TaskSettings.GetDefaultTaskSettings());
+                }
+            }
         }
         catch (Exception ex)
         {
             _resultImg.TrySetException(ex);
             ShowErrorDialog(ex);
         }
+        finally
+        {
+            _inlineAnnotationPreparing = false;
+        }
         _selectionSucceeded = _resultImg.Task.IsCompletedSuccessfully &&
             _resultImg.Task.Result is not null;
         Close();
     }
+
+    private void BeginGenericInlineAnnotation()
+    {
+        if (_inlineAnnotationCanvas is not null) return;
+        if (_image is null)
+            throw new InvalidOperationException("The selected screenshot is unavailable for annotation.");
+
+        _selectionRect.IsVisible = false;
+        _selectionRect.SetValue(Panel.ZIndexProperty, 30);
+        _infoBox.IsVisible = false;
+
+        _inlineAnnotationCanvas = new AnnotationCanvas(_image)
+        {
+            Width = _imageBounds.Width,
+            Height = _imageBounds.Height,
+            DrawBackground = false,
+            ImageViewport = _imageBounds,
+            IsHitTestVisible = false
+        };
+        _inlineAnnotationCanvas.SetValue(Panel.ZIndexProperty, 20);
+        Canvas.SetLeft(_inlineAnnotationCanvas, 0);
+        Canvas.SetTop(_inlineAnnotationCanvas, 0);
+        _canvas.Children.Add(_inlineAnnotationCanvas);
+
+        _inlineAnnotationToolbar = new RegionAnnotationToolbar([_inlineAnnotationCanvas], enableRegionSelection: true);
+        _inlineAnnotationToolbar.RegionSelectionRequested += (_, _) => SetGenericInlineRegionMode(true);
+        _inlineAnnotationToolbar.AnnotationToolSelected += (_, _) => SetGenericInlineRegionMode(false);
+        _inlineAnnotationToolbar.Accepted += (_, _) => AcceptGenericInlineAnnotation();
+        _inlineAnnotationToolbar.Cancelled += (_, _) => _ = CancelSelection();
+        _inlineAnnotationToolbar.Width = Math.Min(900, Math.Max(1, _imageBounds.Width - 24));
+        Canvas.SetLeft(_inlineAnnotationToolbar,
+            Math.Max(0, (_imageBounds.Width - _inlineAnnotationToolbar.Width) / 2));
+        Canvas.SetTop(_inlineAnnotationToolbar, 12);
+        _inlineAnnotationToolbar.SetValue(Panel.ZIndexProperty, 100);
+        _inlineAnnotationToolbar.Moved += (_, movement) =>
+        {
+            if (_inlineAnnotationToolbar is null) return;
+            double width = _inlineAnnotationToolbar.Bounds.Width > 0
+                ? _inlineAnnotationToolbar.Bounds.Width
+                : _inlineAnnotationToolbar.Width;
+            double height = _inlineAnnotationToolbar.Bounds.Height > 0
+                ? _inlineAnnotationToolbar.Bounds.Height
+                : 50;
+            Canvas.SetLeft(_inlineAnnotationToolbar, Math.Clamp(
+                Canvas.GetLeft(_inlineAnnotationToolbar) + movement.DeltaX,
+                0,
+                Math.Max(0, _imageBounds.Width - width)));
+            Canvas.SetTop(_inlineAnnotationToolbar, Math.Clamp(
+                Canvas.GetTop(_inlineAnnotationToolbar) + movement.DeltaY,
+                0,
+                Math.Max(0, _imageBounds.Height - height)));
+        };
+        _canvas.Children.Add(_inlineAnnotationToolbar);
+        SetGenericInlineRegionMode(true);
+        Focus();
+        DebugHelper.WriteLine("Frozen selector ready for full-screen annotations and region selection.");
+    }
+
+    private void SetGenericInlineRegionMode(bool selectingRegion)
+    {
+        _inlineRegionSelectionMode = selectingRegion;
+        if (_inlineAnnotationCanvas is not null)
+            _inlineAnnotationCanvas.IsHitTestVisible = !selectingRegion;
+        Cursor = selectingRegion ? new Cursor(StandardCursorType.Cross) : Cursor.Default;
+        _infoBox.IsVisible = false;
+    }
+
+    private void RestoreGenericInlineSelection()
+    {
+        _selectionRect.IsVisible = _inlineAnnotationRegion.Width > 0 && _inlineAnnotationRegion.Height > 0;
+        _inlineAnnotationToolbar?.SetCanAccept(_selectionRect.IsVisible);
+        if (!_selectionRect.IsVisible) return;
+        _selectionRect.Margin = new Thickness(_inlineAnnotationRegion.X, _inlineAnnotationRegion.Y, 0, 0);
+        _selectionRect.Width = _inlineAnnotationRegion.Width;
+        _selectionRect.Height = _inlineAnnotationRegion.Height;
+    }
+
+    private void AcceptGenericInlineAnnotation()
+    {
+        if (_selectionCompleted || _isSelecting || _inlineAnnotationCanvas is null || _image is null ||
+            _inlineAnnotationRegion.Width <= 0 || _inlineAnnotationRegion.Height <= 0) return;
+        try
+        {
+            double scaleX = _image.Width / _imageBounds.Width;
+            double scaleY = _image.Height / _imageBounds.Height;
+            int left = (int)Math.Floor(_inlineAnnotationRegion.Left * scaleX);
+            int top = (int)Math.Floor(_inlineAnnotationRegion.Top * scaleY);
+            int right = (int)Math.Ceiling(_inlineAnnotationRegion.Right * scaleX);
+            int bottom = (int)Math.Ceiling(_inlineAnnotationRegion.Bottom * scaleY);
+            var crop = SixLabors.ImageSharp.Rectangle.Intersect(
+                new SixLabors.ImageSharp.Rectangle(left, top, right - left, bottom - top), _image.Bounds);
+            if (crop.IsEmpty) throw new InvalidOperationException("The selected region does not intersect the frozen image.");
+            using Image frozenRegion = _image.Clone(context => context.Crop(crop));
+            Image output = _inlineAnnotationCanvas.Document.Transform(
+                new SixLabors.ImageSharp.RectangleF(crop.X, crop.Y, crop.Width, crop.Height),
+                crop.Width, crop.Height).Render(frozenRegion);
+            _image.Dispose();
+            _image = output;
+            _selectionCompleted = true;
+            _selectionSucceeded = true;
+            _annotationCompleted = true;
+            _resultRect.TrySetResult(_inlineAnnotationRectangle);
+            _resultImg.TrySetResult(_image);
+            _imageOwnershipTransferred = true;
+            if (!IsSilentMode)
+                UploadManager.RunImageTask(_image, TaskSettings.GetDefaultTaskSettings());
+            Close();
+        }
+        catch (Exception ex)
+        {
+            _resultRect.TrySetResult(null);
+            _resultImg.TrySetException(ex);
+            ShowErrorDialog(ex);
+            Close();
+        }
+    }
+
     private Task CancelSelection()
     {
         if (_liveSession is { } session) { session.Cancel(); return Task.CompletedTask; }
@@ -1465,11 +1665,12 @@ public partial class RegionSelectorWindow : Window
             return Task.CompletedTask;
         }
 
+        Interlocked.Exchange(ref _cancellationRequested, 1);
         _selectionCompleted = true;
         _isSelecting = false;
         _resultRect.TrySetResult(null);
         _resultImg.TrySetResult(null);
-        Close();
+        if (!_inlineAnnotationPreparing) Close();
         return Task.CompletedTask;
     }
     private void UpdateWindowHover(Point canvasPoint)
@@ -1546,8 +1747,10 @@ public partial class RegionSelectorWindow : Window
     private async void OnPointerMoved(object? Sender, PointerEventArgs E)
     {
         if (_liveSession is { } session) { session.PointerMoved(E); return; }
+        if ((_inlineAnnotationCanvas is not null && !_inlineRegionSelectionMode) || _inlineAnnotationPreparing) return;
         if (!_isSelecting)
         {
+            if (_inlineAnnotationCanvas is not null && _inlineAnnotationRegion.Width > 0) return;
             if (_captureOptions.WindowPickerMode ||
                 _captureOptions.WindowOrRegionPickerMode)
             {
@@ -1583,6 +1786,17 @@ public partial class RegionSelectorWindow : Window
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         if (_liveSession is { } session) { session.KeyDown(e); return; }
+        if (_inlineAnnotationToolbar is not null)
+        {
+            if (e.Key == Key.Enter && _isSelecting)
+            {
+                OnPointerReleased(this, null);
+                e.Handled = true;
+                return;
+            }
+            _inlineAnnotationToolbar.HandleKeyDown(e);
+            return;
+        }
         DebugHelper.WriteLine($"{sender}.OnKeyDown: Key: {e.Key}");
         switch (e.Key)
         {
@@ -1713,7 +1927,7 @@ public partial class RegionSelectorWindow : Window
                 _captureReady = true;
                 Opacity = 1;
                 _captureReady = false; // Input starts after AppKit's final client geometry is known.
-                DebugHelper.WriteLine("Live macOS selector ready; no screenshot taken before selection.");
+                DebugHelper.WriteLine("Live macOS geometry selector ready; no screenshot was requested.");
                 return true;
             }
 
@@ -2037,6 +2251,13 @@ public partial class RegionSelectorWindow : Window
         _resultImg.TrySetResult(null);
         _imageStream?.Dispose();
         _imageStream = null;
+        _inlineAnnotationCanvas?.Dispose();
+        _inlineAnnotationCanvas = null;
+        if (!_imageOwnershipTransferred)
+        {
+            _image?.Dispose();
+            _image = null;
+        }
         RestoreHiddenWindows();
 
         ReleaseSelectorGate();
@@ -2055,7 +2276,7 @@ public partial class RegionSelectorWindow : Window
         _resultRect.TrySetResult(null);
         _resultImg.TrySetResult(null);
 
-        if (IsVisible)
+        if (IsVisible && !_inlineAnnotationPreparing)
         {
             Close();
         }

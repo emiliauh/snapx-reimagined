@@ -1,4 +1,6 @@
-﻿using Avalonia.Controls;
+﻿using System.ComponentModel;
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -25,10 +27,24 @@ public partial class MainView : UserControl
     private string? selectedAction;
     private TimeSpan? delay;
     private bool _isVideoMode;
+    private MainViewModel? _responsiveViewModel;
+    private bool _mainPaneSuppressedForSettings;
+    private bool _mainPaneWasOpen = true;
+    private bool _mainPaneWasVisible = true;
+    private bool _isAttachedToVisualTree;
 
     public MainView()
     {
         InitializeComponent();
+        DataContextChanged += (_, _) =>
+        {
+            if (!_isAttachedToVisualTree)
+                return;
+
+            AttachResponsiveViewModel();
+            ApplyResponsiveNavigation();
+        };
+        SizeChanged += (_, _) => ApplyResponsiveNavigation();
         var _flyout = CaptureSplitButton;
         if (_flyout != null)
         {
@@ -45,6 +61,23 @@ public partial class MainView : UserControl
                 }
             }
         }
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _isAttachedToVisualTree = true;
+        AttachResponsiveViewModel();
+        ApplyResponsiveNavigation();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _isAttachedToVisualTree = false;
+        if (_responsiveViewModel is not null)
+            _responsiveViewModel.PropertyChanged -= ResponsiveViewModel_OnPropertyChanged;
+        _responsiveViewModel = null;
+        base.OnDetachedFromVisualTree(e);
     }
 
     [RelayCommand]
@@ -303,7 +336,69 @@ public partial class MainView : UserControl
     private void SettingsItem_Pressed(object? Sender, PointerPressedEventArgs E)
     {
         if (DataContext is MainViewModel mainViewModel)
+        {
             mainViewModel.CurrentPage = Ioc.Default.GetRequiredService<InAppSettingsHostVM>();
+            ApplyResponsiveNavigation();
+        }
+    }
+
+    private void AttachResponsiveViewModel()
+    {
+        if (ReferenceEquals(_responsiveViewModel, DataContext))
+            return;
+
+        if (_responsiveViewModel is not null)
+            _responsiveViewModel.PropertyChanged -= ResponsiveViewModel_OnPropertyChanged;
+
+        _responsiveViewModel = DataContext as MainViewModel;
+        if (_responsiveViewModel is not null)
+            _responsiveViewModel.PropertyChanged += ResponsiveViewModel_OnPropertyChanged;
+    }
+
+    private void ResponsiveViewModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.CurrentPage))
+            ApplyResponsiveNavigation();
+    }
+
+    /// <summary>
+    /// Avoids presenting two unrelated navigation hierarchies side by side. The
+    /// embedded settings host has its own Back affordance, so it owns the full
+    /// viewport until the user returns to the capture surface.
+    /// </summary>
+    private void ApplyResponsiveNavigation()
+    {
+        if (!_isAttachedToVisualTree)
+            return;
+
+        if (!ReferenceEquals(_responsiveViewModel, DataContext))
+            AttachResponsiveViewModel();
+
+        if (_responsiveViewModel is null || Bounds.Width <= 0)
+            return;
+
+        bool suppressMainPane = _responsiveViewModel.CurrentPage is InAppSettingsHostVM;
+
+        if (suppressMainPane)
+        {
+            if (!_mainPaneSuppressedForSettings)
+            {
+                _mainPaneWasOpen = _responsiveViewModel.IsPaneOpen;
+                _mainPaneWasVisible = MainNavView.IsPaneVisible;
+                _mainPaneSuppressedForSettings = true;
+            }
+
+            MainNavView.IsPaneVisible = false;
+            _responsiveViewModel.IsPaneOpen = false;
+            return;
+        }
+
+        if (!_mainPaneSuppressedForSettings)
+            return;
+
+        _mainPaneSuppressedForSettings = false;
+        MainNavView.IsPaneVisible = _mainPaneWasVisible;
+        _responsiveViewModel.IsPaneOpen = _mainPaneWasOpen;
     }
 
     private void FindURLOnDescendant(ILogical control)

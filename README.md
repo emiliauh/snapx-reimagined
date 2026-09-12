@@ -10,6 +10,10 @@ The application ID is `io.emiliauh.SnapXL.SnapX`. The executable name is `snapx-
 
 - Capture a screen, a window, or a region.
 - Click a window or drag a region in the same picker.
+- Annotate anywhere on the frozen desktop before capture with a toolbar that is
+  visible from the start; choose or revise the saved region independently, then
+  confirm it. Tools include pen, shapes, arrows, text, colors, eyedropper
+  sampling, move/resize handles, and undo/redo.
 - Record a screen or a selected region on supported systems.
 - Show an outline around the recorded region.
 - Show pause, stop, and abort controls during a recording.
@@ -128,10 +132,10 @@ Ctrl+E  snapx-ui -ScreenRecorder
 
 | Platform | Build status | Current support |
 | --- | --- | --- |
-| Linux Wayland with Hyprland | Built by GitHub CI. | The combined picker, recording outline, recording controls, and single-instance forwarding are runtime verified. `wf-recorder` records video. Other Wayland compositors need runtime tests. |
+| Linux Wayland with Hyprland | Built by GitHub CI. | The compositor-native picker must exit before SnapX receives pixels, so annotation opens immediately after selection in the editor fallback instead of inside the picker. Recording outline, recording controls, and single-instance forwarding are runtime verified. `wf-recorder` records video. Other Wayland compositors need runtime tests. |
 | Linux X11 | Built by GitHub CI. | The combined picker and X11 hotkey backend are present. FFmpeg uses `x11grab`. CI tests launch and single-instance forwarding with Xvfb. Interactive picker and recording tests are still required. |
 | Windows | Built by GitHub CI. | Capture, the combined picker, recording, overlays, hotkeys, and single-instance forwarding are present. Runtime tests on Windows are still required. |
-| macOS | Builds locally and in GitHub CI; app bundles can be ad-hoc signed. | Still capture, the combined picker, single-instance forwarding, and Carbon global hotkeys are implemented. FFmpeg AVFoundation records regions within one display, including Retina and rotated displays. Local native probes verify capture, hotkey registration, and recording; see the [macOS build and test instructions](.github/BUILDING.md). |
+| macOS | Builds locally and in GitHub CI; app bundles can be ad-hoc signed. | Still capture uses an opaque frozen-frame picker over complete display bounds, including the menu bar, with mixed-DPI cross-display composition. Its top toolbar is available immediately, annotations update live anywhere on the frozen desktop, and region selection is an independent tool before confirmation. Recording-region selection stays live and geometry-only. Single-instance forwarding and Carbon global hotkeys are implemented; recording supports Retina and rotated displays. See the [macOS build and test instructions](.github/BUILDING.md). |
 
 The recording outline and controls use native Wayland helpers on supported Wayland sessions.
 

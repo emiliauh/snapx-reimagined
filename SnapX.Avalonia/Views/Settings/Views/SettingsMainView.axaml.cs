@@ -17,12 +17,18 @@ namespace SnapX.Avalonia.Views.Settings.Views;
 
 public partial class SettingsMainView : UserControl
 {
+    private const double ExpandedSettingsNavigationWidth = 840;
+    private const double CompactSettingsNavigationWidth = 600;
+    private const double SettingsPaneWidth = 328;
+
     private readonly SettingsMainViewVM? _vm;
+    private FANavigationViewPaneDisplayMode? _lastResponsiveMode;
 
     /// <summary>
     /// When true (in-app embedded host), hides the FANavigationView's own back
-    /// button, pane-toggle ("hamburger") and empty search box, the decorative
-    /// "Control Panel" header, and auto-selects the Application category.
+    /// button, empty search box and decorative "Control Panel" header, and
+    /// auto-selects the Application category. The pane toggle remains available
+    /// when the responsive layout enters compact or minimal mode.
     /// The standalone SettingsWindow keeps the default (false) look.
     /// </summary>
     public bool IsEmbedded
@@ -34,6 +40,7 @@ public partial class SettingsMainView : UserControl
             if (!value) return;
             ApplyEmbeddedChrome();
             SelectApplicationCategory();
+            ApplyResponsiveLayout();
         }
     }
     private bool _isEmbedded;
@@ -41,8 +48,7 @@ public partial class SettingsMainView : UserControl
     private void ApplyEmbeddedChrome()
     {
         SettingsNavigationView.IsBackButtonVisible = false;
-        SettingsNavigationView.IsPaneToggleButtonVisible = false;
-        SettingsNavigationView.OpenPaneLength = 200;
+        SettingsNavigationView.OpenPaneLength = SettingsPaneWidth;
         NavViewSearchBox.IsVisible = false;
         ControlPanelHeader.IsVisible = false;
     }
@@ -62,6 +68,36 @@ public partial class SettingsMainView : UserControl
         DataContext = viewModel;
         _vm = viewModel;
         InitializeComponent();
+        SizeChanged += (_, _) => ApplyResponsiveLayout();
+    }
+
+    /// <summary>
+    /// Keeps settings content readable on compact windows. Expanded layouts keep
+    /// the full hierarchy beside the page; compact and minimal layouts reserve at
+    /// most an icon rail and open the 328 px hierarchy over the content on demand.
+    /// </summary>
+    private void ApplyResponsiveLayout()
+    {
+        if (Bounds.Width <= 0)
+            return;
+
+        FANavigationViewPaneDisplayMode mode = Bounds.Width switch
+        {
+            >= ExpandedSettingsNavigationWidth => FANavigationViewPaneDisplayMode.Left,
+            >= CompactSettingsNavigationWidth => FANavigationViewPaneDisplayMode.LeftCompact,
+            _ => FANavigationViewPaneDisplayMode.LeftMinimal
+        };
+
+        SettingsNavigationView.OpenPaneLength = Math.Min(SettingsPaneWidth, Bounds.Width);
+        SettingsNavigationView.PaneDisplayMode = mode;
+        SettingsNavigationView.IsPaneToggleButtonVisible = !_isEmbedded || mode != FANavigationViewPaneDisplayMode.Left;
+
+        if (_lastResponsiveMode == mode)
+            return;
+
+        _lastResponsiveMode = mode;
+        if (_vm is not null)
+            _vm.IsPaneOpen = mode == FANavigationViewPaneDisplayMode.Left;
     }
 
     private void FindURLOnDescendant(ILogical control)
@@ -505,7 +541,7 @@ public partial class SettingsMainView : UserControl
     }
     private void StyledElement_OnInitialized(object? Sender, EventArgs E)
     {
-
+        ApplyResponsiveLayout();
     }
     private bool _isDismissingViaBackground;
     private void SettingsMainViewPressed(object? Sender, PointerPressedEventArgs E)

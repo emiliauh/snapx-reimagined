@@ -79,7 +79,15 @@ public class CaptureRegion : CaptureBase
             return null;
         }
 
-        var metadata = new TaskMetadata(selection.Image);
+        var metadata = new TaskMetadata(selection.Image)
+        {
+            // Every region screenshot includes annotation. Hosts with an
+            // inline editor mark the stage complete; other platforms retain
+            // the existing editor fallback. Recording is geometry-only and
+            // never enters this image path.
+            RequiresAnnotation = !selection.AnnotationCompleted,
+            AnnotationCompleted = selection.AnnotationCompleted
+        };
         metadata.UpdateInfo(selection.WindowInfo);
         lastRegionCaptureType = captureType;
         return metadata;

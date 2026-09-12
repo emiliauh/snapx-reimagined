@@ -35,7 +35,11 @@ public class CaptureWindowPicker : CaptureBase
             return null;
         }
 
-        var metadata = new TaskMetadata(selection.Image);
+        var metadata = new TaskMetadata(selection.Image)
+        {
+            RequiresAnnotation = !selection.AnnotationCompleted,
+            AnnotationCompleted = selection.AnnotationCompleted
+        };
         metadata.UpdateInfo(selection.WindowInfo);
         return metadata;
     }

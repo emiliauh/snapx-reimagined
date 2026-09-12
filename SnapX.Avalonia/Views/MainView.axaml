@@ -20,12 +20,14 @@
     <controls:FANavigationView
         Background="{DynamicResource SolidBackgroundFillColorBase}"
         ClipToBounds="True"
+        CompactModeThresholdWidth="760"
         CompactPaneLength="64"
+        ExpandedModeThresholdWidth="1120"
         IsPaneOpen="{Binding IsPaneOpen}"
         IsSettingsVisible="False"
         Name="MainNavView"
         OpenPaneLength="220"
-        PaneDisplayMode="Left"
+        PaneDisplayMode="Auto"
         PaneTitle="SnapX"
         UseLayoutRounding="True">
 
@@ -158,6 +160,7 @@
                             ShowMode="Transient">
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!CopyImageToClipboard" Text="Copy Image to Clipboard" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!SaveImageToFile" Text="Save to File" />
+                            <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!AnnotateImage" Text="Annotate screenshot" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!SaveThumbnailImageToFile" Text="Save thumbnail image to file" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!PerformActions" Text="Perform actions" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!CopyFileToClipboard" Text="Copy file to clipboard" />

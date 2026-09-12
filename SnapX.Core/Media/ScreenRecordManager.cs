@@ -65,6 +65,29 @@ public static class ScreenRecordManager
         }
     }
 
+    /// <summary>
+    /// True while a recording has started and the user-facing stop control can
+    /// still finalize it. Startup, shutdown, and encoding states deliberately
+    /// do not expose a stop affordance.
+    /// </summary>
+    public static bool CanStopInteractively
+    {
+        get
+        {
+            lock (StateLock)
+            {
+                return IsUserControllableState(state);
+            }
+        }
+    }
+
+    public static bool IsUserControllableState(RecordingManagerState currentState)
+    {
+        return currentState is RecordingManagerState.Recording
+            or RecordingManagerState.Pausing
+            or RecordingManagerState.Paused;
+    }
+
     public static Exception? LastError { get; private set; }
     public static string? LastOutputPath { get; private set; }
     public static Rectangle CurrentCaptureRectangle

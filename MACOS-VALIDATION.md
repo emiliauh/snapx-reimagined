@@ -26,16 +26,22 @@ predates the follow-up uploader/OCR fixes.
 - Replaced a Retina/multiple-display Rust capture panic with macOS native screen
   capture. Added missing monitor/window overloads, signed desktop coordinates,
   native ABI/lifetime corrections, and capturable-window filtering.
-- Made the macOS picker a live transparent overlay. It does not capture a
-  background image when opened. After selection it hides, waits one nominal
-  compositor frame, and captures the selected area. This is not frame-exact
-  synchronization with a video player's decoder.
-- Corrected live selection coordinates against the actual native window bounds,
+- Made the macOS screenshot picker an opaque frozen-frame overlay. It captures
+  every display before mapping any selector surface and composes the selection
+  from those retained pixels, so desktop content cannot change between selection
+  and output. Recording-region selection remains a live geometry-only overlay.
+- The annotation toolbar now appears when that frozen overlay becomes ready.
+  Pen, shape, arrow, text, color, and editing tools operate live across the full
+  frozen desktop before or after choosing a region; region mouse-up only commits
+  the crop, and Enter or the checkmark performs the final clipped export.
+- Corrected native selection coordinates against the actual window bounds,
   including macOS work-area offsets and displays above the primary display.
-- Added one coordinated live overlay per detected monitor. Window/monitor click
+- Added one coordinated overlay per detected monitor. Window/monitor click
   selection and region dragging use global desktop coordinates; screenshot regions
-  can cross display boundaries. All overlays hide before capture and close together.
-  Retina scale detection now reads the display mode's backing pixel width.
+  can cross display boundaries. Mixed-DPI output is composed at the highest backing
+  scale among intersected displays. The AppKit windows use complete display bounds
+  above the menu-bar level and explicitly accept pointer input, including over the
+  Apple menu area.
 - Implemented FFmpeg AVFoundation recording and removed the obsolete rejection
   in `ScreenRecordManager.ValidateStart`. Recording supports a region contained
   within one display, with Retina geometry and negative monitor coordinates.
@@ -64,8 +70,8 @@ predates the follow-up uploader/OCR fixes.
 | Native publish | GUI, CLI and browser messaging host publish successfully for `osx-arm64`. |
 | Packaged native GUI | Opens, loads saved settings, shows history, and runs capture and recording without the SDK. |
 | Native still capture | Full desktop 7280×5114; primary display 3456×2234; 32×24 logical Retina region yields 64×48 pixels; named monitor and real window capture pass. |
-| Live region capture | Native GUI captures on selection completion, saves PNG, generates thumbnail and adds history. Clock test captured the completion time, 53 seconds after picker opening. A native RGBA probe verified 99.95% transparent overlay pixels. Escape cancels without another capture. |
-| Multiple-monitor selector | Three displays detected (Retina 2×, two external 1×); all three native overlays cover their displays with at least 99.49% transparent pixels. User confirmed cross-monitor dragging and subsequent cancellation/reopening/window-selection checks work. Log records rectangle (-333,-1092,705,190) spanning the left and upper displays. No overlays remain after completion/cancellation. Native seam captures pass for every touching display pair. |
+| Frozen region capture | Screenshot mode captures display frames before mapping opaque overlays, then crops/composes from those retained frames. Recording-region mode remains transparent and geometry-only. Deterministic composition coverage checks Retina/standard-DPI boundaries and transparent desktop gaps. |
+| Multiple-monitor selector | One native overlay is created with each display's complete CoreGraphics bounds, including the menu bar. Cross-display output uses measured source-image backing scales. The native opacity probe supports both frozen screenshot and live recording-region modes. |
 | Recording | All three displays produce decodable MP4s. Manager region start → pause → resume → stop → concatenated output passes. Final packaged GUI also starts/stops recording with bundled FFmpeg and produces a decodable MP4. |
 | Hotkeys | Native registration, duplicate rejection, unregister/re-register, and GUI Apply pass. Follow-up: user physically pressed Control+Shift+Command+1, confirmed the region overlay opened, then cancelled with Escape; application log confirms dispatch and Escape. |
 | Clipboard | Follow-up: 128 seeded Unicode/escaping text round-trips and PNG pixel/transparency round-trip pass. Original clipboard representations restored. |
@@ -94,8 +100,8 @@ Porkpaste upload service.
 - Screen Recording permission depends on the launching application and macOS
   privacy settings. Finder launch after relocation, permission-denial/regrant
   scenarios, and other macOS versions still need testing.
-- macOS constrains the current live picker to the display work area; use full
-  screen capture to include the menu bar.
+- Protected/DRM surfaces may be absent or black in the frozen frame because macOS
+  intentionally excludes them from Screen Recording capture.
 - AOT/trimming warnings remain, especially in third-party and uploader code.
 
 ## Reproduce

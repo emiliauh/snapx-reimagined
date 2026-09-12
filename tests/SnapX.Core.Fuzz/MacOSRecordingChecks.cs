@@ -12,6 +12,17 @@ internal static class MacOSRecordingChecks
 {
     public static void Fuzz(Random random, ref int checks)
     {
+        foreach (ScreenRecordManager.RecordingManagerState state in
+                 Enum.GetValues<ScreenRecordManager.RecordingManagerState>())
+        {
+            bool expected = state is ScreenRecordManager.RecordingManagerState.Recording
+                or ScreenRecordManager.RecordingManagerState.Pausing
+                or ScreenRecordManager.RecordingManagerState.Paused;
+            if (ScreenRecordManager.IsUserControllableState(state) != expected)
+                throw new InvalidOperationException($"Recording tray click policy is incorrect for {state}.");
+            checks++;
+        }
+
         VerifySystemAudioRouting(ref checks);
         var method = typeof(ScreenRecordingOptions).GetMethod("ResolveMacOSCaptureTarget", BindingFlags.Static | BindingFlags.NonPublic)!;
         for (int i = 0; i < 2000; i++)

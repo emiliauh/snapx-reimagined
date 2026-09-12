@@ -18,6 +18,11 @@ public sealed class RegionCaptureSelection
     public Rectangle CaptureBounds { get; init; }
     public Image? Image { get; init; }
     public WindowInfo? WindowInfo { get; init; }
+    /// <summary>
+    /// The selector already presented and committed its inline annotation
+    /// stage. Downstream capture processing must not open a second editor.
+    /// </summary>
+    public bool AnnotationCompleted { get; init; }
 }
 
 /// <summary>
@@ -29,6 +34,7 @@ public sealed class RegionCaptureRequest
     public RegionCaptureOptions Options { get; init; } = new();
     public RegionCaptureType CaptureType { get; init; }
     public bool CaptureImage { get; init; }
+    public bool AnnotateImage { get; init; }
     public bool RestoreHiddenWindowsAfterSelection { get; init; }
 }
 
@@ -51,7 +57,8 @@ public static class RegionCaptureTasks
         RegionCaptureOptions? options = null,
         RegionCaptureType captureType = RegionCaptureType.Default,
         bool captureImage = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool annotateImage = true)
     {
         var selector = Volatile.Read(ref regionSelector);
         if (selector is null)
@@ -64,7 +71,8 @@ public static class RegionCaptureTasks
         {
             Options = GetRegionCaptureOptions(options),
             CaptureType = captureType,
-            CaptureImage = captureImage
+            CaptureImage = captureImage,
+            AnnotateImage = captureImage && annotateImage
         };
 
         RegionCaptureSelection? selection = await selector(request, cancellationToken).ConfigureAwait(false);
@@ -118,7 +126,8 @@ public static class RegionCaptureTasks
                 Rectangle = normalized,
                 CaptureBounds = captureBounds,
                 Image = selection.Image,
-                WindowInfo = selection.WindowInfo
+                WindowInfo = selection.WindowInfo,
+                AnnotationCompleted = selection.AnnotationCompleted
             };
         }
         catch

@@ -25,6 +25,7 @@ public sealed class RecordingTrayController : IDisposable
     private readonly Bitmap? _normalIcon;
     private readonly Bitmap? _recordingIcon;
     private bool _recordingUiVisible;
+    private readonly bool _macOSClickBridgeInitialized;
     private bool _disposed;
 
     public RecordingTrayController(TrayIcon? trayIcon = null)
@@ -35,6 +36,7 @@ public sealed class RecordingTrayController : IDisposable
             _normalIcon = new Bitmap(
                 AssetLoader.Open(new Uri("avares://snapx-ui/SnapX_Logo.png")));
             _recordingIcon = CreateRecordingIcon();
+            _macOSClickBridgeInitialized = MacOSTrayClickService.Initialize();
         }
 
         ScreenRecordManager.StateChanged += OnStateChanged;
@@ -55,6 +57,8 @@ public sealed class RecordingTrayController : IDisposable
         ScreenRecordManager.RecordingFailed -= OnRecordingFailed;
         RecordingRegionOutline.Hide();
         RecordingControlWindow.HideRecording();
+        if (_macOSClickBridgeInitialized)
+            MacOSTrayClickService.Dispose();
         _recordingIcon?.Dispose();
         _normalIcon?.Dispose();
     }
@@ -98,7 +102,7 @@ public sealed class RecordingTrayController : IDisposable
             return;
         }
 
-        bool isRecording = IsActiveRecordingState(state);
+        bool isRecording = ScreenRecordManager.IsUserControllableState(state);
         Dispatcher.UIThread.Post(() =>
         {
             // A state change can be queued right before Dispose. Recheck so a
@@ -125,19 +129,14 @@ public sealed class RecordingTrayController : IDisposable
         });
     }
 
-    private static bool IsActiveRecordingState(ScreenRecordManager.RecordingManagerState state)
-    {
-        return state is ScreenRecordManager.RecordingManagerState.Recording
-            or ScreenRecordManager.RecordingManagerState.Pausing
-            or ScreenRecordManager.RecordingManagerState.Paused;
-    }
-
     private void ShowRecordingUi()
     {
         if (_trayIcon is not null && _recordingIcon is not null)
         {
             _trayIcon.Icon = new WindowIcon(_recordingIcon);
-            _trayIcon.ToolTipText = "SnapX is recording";
+            _trayIcon.ToolTipText = "Click to stop recording; right-click for the SnapX menu";
+            if (_macOSClickBridgeInitialized)
+                MacOSTrayClickService.SetRecordingClickEnabled(true);
         }
         var captureRectangle = ScreenRecordManager.CurrentCaptureRectangle;
         RecordingRegionOutline.Show(captureRectangle);
@@ -151,6 +150,8 @@ public sealed class RecordingTrayController : IDisposable
         {
             _trayIcon.Icon = new WindowIcon(_normalIcon);
             _trayIcon.ToolTipText = Core.SnapXL.AppName;
+            if (_macOSClickBridgeInitialized)
+                MacOSTrayClickService.SetRecordingClickEnabled(false);
         }
         RecordingRegionOutline.Hide();
         RecordingControlWindow.HideRecording();
@@ -191,6 +192,12 @@ public sealed class RecordingTrayController : IDisposable
                     {
                         // Bright red ring.
                         b = 20; g = 40; r = 235; a = 255;
+                    }
+                    else if (x >= 10 && x <= 21 && y >= 10 && y <= 21)
+                    {
+                        // A visible stop glyph makes the primary-click action
+                        // unambiguous while a recording is active.
+                        b = g = r = a = 255;
                     }
                     else
                     {

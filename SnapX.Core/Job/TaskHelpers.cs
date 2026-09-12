@@ -1297,7 +1297,8 @@ public static class TaskHelpers
         {
             RegionCaptureSelection? selection = await RegionCaptureTasks.SelectRegionAsync(
                 taskSettings.CaptureSettings.SurfaceOptions,
-                captureImage: true);
+                captureImage: true,
+                annotateImage: false);
 
             if (selection?.Image is not null)
             {

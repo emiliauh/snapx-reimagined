@@ -101,6 +101,7 @@ public partial class App : Application
         CaptureBase.SetHostCaptureVisibilityHandlers(
             PrepareHeadlessCaptureAsync,
             CompleteHeadlessCapture);
+        AnnotationTasks.SetEditor(EditImageWithHostAsync);
         // SnapX.setQualifier(" UI");
         AvaloniaXamlLoader.Load(this);
         AppDomain.CurrentDomain.UnhandledException += (Sender, Args) =>
@@ -477,6 +478,7 @@ public partial class App : Application
             _clipboardWindow = null;
             _headlessCaptureWindows.Clear();
             CaptureBase.SetHostCaptureVisibilityHandlers(null, null);
+            AnnotationTasks.SetEditor(null);
             SnapXL.QuitRequested -= RequestShutdown;
             MyMainWindow = null;
         }
@@ -494,6 +496,17 @@ public partial class App : Application
                 desktop.Shutdown();
             }
         }
+    }
+
+    private static async Task<ImageAnnotationResult> EditImageWithHostAsync(
+        ImageAnnotationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+            return await ImageAnnotationWindow.EditAsync(request.SourceImage, cancellationToken);
+
+        return await Dispatcher.UIThread.InvokeAsync(
+            () => ImageAnnotationWindow.EditAsync(request.SourceImage, cancellationToken));
     }
 
     /// <summary>
@@ -1323,11 +1336,16 @@ public partial class App : Application
                         };
                         trayIcon.Clicked += async (_, _) =>
                         {
-                            if (ScreenRecordManager.IsRecording)
+                            if (ScreenRecordManager.CanStopInteractively)
                             {
                                 TaskHelpers.StopScreenRecording();
                                 return;
                             }
+
+                            // A second click while a recording is starting,
+                            // stopping, aborting, or encoding must not begin a
+                            // new capture.
+                            if (ScreenRecordManager.IsRecording) return;
 
                             await TaskHelpers.ExecuteJob(HotkeyType.RectangleRegion);
                         };

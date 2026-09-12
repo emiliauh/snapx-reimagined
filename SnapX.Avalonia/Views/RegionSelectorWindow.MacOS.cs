@@ -2,13 +2,16 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using System.Runtime.InteropServices;
 using SnapX.Core;
 using SnapX.Core.Job;
 using SnapX.Core.Media;
+using SnapX.Core.ScreenCapture;
 using SnapX.Core.Upload;
 using SnapX.Core.Utils.Native;
+using SnapX.Avalonia.Views.Controls;
 using DesktopPoint = SixLabors.ImageSharp.Point;
 using DesktopRectangle = SixLabors.ImageSharp.Rectangle;
 using CapturedImage = SixLabors.ImageSharp.Image;
@@ -21,7 +24,7 @@ public partial class RegionSelectorWindow
     private const string CoreGraphicsFramework =
         "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
     private const string ObjectiveCLibrary = "/usr/lib/libobjc.A.dylib";
-    private const int MainMenuWindowLevelKey = 8;
+    private const int ScreenSaverWindowLevelKey = 13;
     private const nuint CanJoinAllSpaces = 1 << 0;
     private const nuint FullScreenAuxiliary = 1 << 8;
 
@@ -51,6 +54,9 @@ public partial class RegionSelectorWindow
 
     [DllImport(ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
     private static extern void SendObjectiveCInteger(IntPtr receiver, IntPtr selector, nint value);
+
+    [DllImport(ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
+    private static extern void SendObjectiveCBool(IntPtr receiver, IntPtr selector, byte value);
 
     [DllImport(ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
     private static extern void SendObjectiveCRect(
@@ -93,8 +99,10 @@ public partial class RegionSelectorWindow
     }
 
     /// <summary>
-    /// One result and one selector gate, with a transparent input surface on each
-    /// display. Selection geometry always stays in CoreGraphics desktop points.
+    /// One result and one selector gate, with an input surface on each display.
+    /// Screenshot selection presents frames captured before the surfaces are
+    /// mapped; recording geometry selection stays live and transparent.
+    /// Selection geometry always stays in CoreGraphics desktop points.
     /// </summary>
     private sealed class MacOSLiveSelectionSession
     {
@@ -102,6 +110,7 @@ public partial class RegionSelectorWindow
         private readonly List<Screen> _screens;
         private readonly List<RegionSelectorWindow> _overlays = [];
         private readonly Dictionary<RegionSelectorWindow, TaskCompletionSource<bool>> _opened = [];
+        private readonly Dictionary<RegionSelectorWindow, FrozenDisplayFrame> _frozenFrames = [];
         private List<WindowInfo> _windows = [];
         private DesktopPoint _start;
         private DesktopRectangle _selection;
@@ -109,15 +118,34 @@ public partial class RegionSelectorWindow
         private WindowInfo? _hoveredWindow;
         private bool _ready;
         private bool _dragging;
+        private bool _annotating;
+        private bool _regionSelectionMode;
         private bool _completed;
         private bool _cancelled;
         private bool _closing;
+        private DesktopRectangle _committedSelection;
+        private CapturedImage? _annotationSource;
+        private readonly List<AnnotationCanvas> _annotationCanvases = [];
+        private RegionAnnotationToolbar? _annotationToolbar;
 
         public DesktopRectangle DesktopBounds { get; }
         public WindowInfo? SelectedWindow { get; private set; }
         private bool CanPickWindows => _owner._captureOptions.WindowPickerMode ||
             _owner._captureOptions.WindowOrRegionPickerMode ||
             (_owner._captureOptions.DetectWindows && !_owner._captureOptions.IsFixedSize && !_owner._captureOptions.MonitorPickerMode);
+
+        private sealed class FrozenDisplayFrame(Screen screen, CapturedImage source, Bitmap preview) : IDisposable
+        {
+            public Screen Screen { get; } = screen;
+            public CapturedImage Source { get; } = source;
+            public Bitmap Preview { get; } = preview;
+
+            public void Dispose()
+            {
+                Preview.Dispose();
+                Source.Dispose();
+            }
+        }
 
         public MacOSLiveSelectionSession(RegionSelectorWindow owner, List<Screen> screens)
         {
@@ -149,7 +177,7 @@ public partial class RegionSelectorWindow
                     viewbox.Height = bounds.Height;
                 }
                 overlay.WindowState = global::Avalonia.Controls.WindowState.Normal;
-                overlay.Background = Brushes.Transparent;
+                overlay.Background = owner.TakeScreenshot ? Brushes.Black : Brushes.Transparent;
                 overlay._selectionRect.IsVisible = false;
                 overlay._infoBox.IsVisible = false;
                 overlay._preparedForDisplay = true;
@@ -163,12 +191,23 @@ public partial class RegionSelectorWindow
         public async Task<bool> ShowAsync(CancellationToken cancellationToken)
         {
             _owner.HideSnapXWindows();
+            // AppKit commits Hide asynchronously. Wait one compositor frame so
+            // SnapX itself is absent from every frozen display frame.
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+            await Task.Delay(32);
+            if (_cancelled || cancellationToken.IsCancellationRequested) { Cancel(); return false; }
+
             // Enumerate before mapping any sibling so no overlay can be picked.
             if (CanPickWindows)
             {
                 _windows = Methods.GetWindowList()
                     .Where(window => window.ProcessId != Environment.ProcessId && window.IsVisible && !window.Rectangle.IsEmpty)
                     .ToList(); // CoreGraphics returns front-to-back stacking order.
+            }
+            if (_owner.TakeScreenshot && !await CaptureFrozenDisplaysAsync(cancellationToken))
+            {
+                Cancel();
+                return false;
             }
             foreach (var overlay in _overlays)
             {
@@ -181,11 +220,84 @@ public partial class RegionSelectorWindow
                 Cancel();
                 return false;
             }
+            if (_owner.TakeScreenshot && _owner._annotationRequested)
+                InitializeLiveAnnotation();
+            if (_cancelled) return false;
             _ready = true;
             _owner.Activate();
             _owner.Focus();
-            DebugHelper.WriteLine($"Live macOS selector ready across {_overlays.Count} displays; no screenshot taken before selection.");
+            DebugHelper.WriteLine(_owner.TakeScreenshot
+                ? $"Frozen macOS selector ready across {_overlays.Count} displays; all frames were captured before overlays were mapped."
+                : $"Live macOS geometry selector ready across {_overlays.Count} displays; no screenshot was requested.");
             return true;
+        }
+
+        private async Task<bool> CaptureFrozenDisplaysAsync(CancellationToken cancellationToken)
+        {
+            Task<CapturedImage?>[] captures = _screens
+                .Select(screen => Methods.CaptureRectangle(screen.Bounds))
+                .ToArray();
+            CapturedImage?[] images;
+            try
+            {
+                images = await Task.WhenAll(captures);
+            }
+            catch
+            {
+                foreach (Task<CapturedImage?> capture in captures)
+                {
+                    if (capture.Status == System.Threading.Tasks.TaskStatus.RanToCompletion)
+                        capture.Result?.Dispose();
+                }
+                throw;
+            }
+
+            try
+            {
+                if (_cancelled || cancellationToken.IsCancellationRequested)
+                    return false;
+
+                for (int index = 0; index < _overlays.Count; index++)
+                {
+                    CapturedImage source = images[index]
+                        ?? throw new InvalidOperationException($"Display {_screens[index].Index} could not be captured.");
+                    images[index] = null;
+                    Bitmap preview;
+                    try
+                    {
+                        preview = App.SnapX.ConvertImageSharpImgToAvalonia(source);
+                    }
+                    catch
+                    {
+                        source.Dispose();
+                        throw;
+                    }
+
+                    var frame = new FrozenDisplayFrame(_screens[index], source, preview);
+                    RegionSelectorWindow overlay = _overlays[index];
+                    _frozenFrames.Add(overlay, frame);
+                    // Put the frozen pixels on the selection canvas itself.
+                    // Window.Background also feeds the native window clear
+                    // color; an ImageBrush there does not reliably paint the
+                    // opaque macOS surface with every window theme/backend.
+                    // The canvas has explicit desktop-point dimensions, so its
+                    // image and selection geometry use the same transform.
+                    overlay._canvas.Background = new ImageBrush
+                    {
+                        Source = preview,
+                        Stretch = Stretch.Fill
+                    };
+                    DebugHelper.WriteLine(
+                        $"Frozen display {_screens[index].Index}: points={_screens[index].Bounds}; pixels={source.Width}x{source.Height}.");
+                }
+
+                return true;
+            }
+            finally
+            {
+                foreach (CapturedImage? image in images)
+                    image?.Dispose();
+            }
         }
 
         public async Task OverlayOpenedAsync(RegionSelectorWindow overlay)
@@ -202,7 +314,7 @@ public partial class RegionSelectorWindow
             }
             catch (Exception ex)
             {
-                DebugHelper.WriteException(ex, "A live display overlay could not determine its bounds");
+                DebugHelper.WriteException(ex, "A macOS display overlay could not determine its bounds");
                 _opened[overlay].TrySetResult(false);
                 Cancel();
             }
@@ -210,12 +322,12 @@ public partial class RegionSelectorWindow
 
         public void PointerPressed(RegionSelectorWindow overlay, PointerPressedEventArgs e)
         {
-            if (!_ready || _completed || _cancelled) return;
+            if (!_ready || _completed || _cancelled || (_annotating && !_regionSelectionMode)) return;
             var properties = e.GetCurrentPoint(overlay._canvas).Properties;
             if (properties.IsRightButtonPressed) { Cancel(); e.Handled = true; return; }
             if (!properties.IsLeftButtonPressed) return;
             var point = Methods.GetCursorPosition();
-            UpdateHover(point);
+            UpdateHover(point, preserveCommittedSelection: false);
             if (_owner._captureOptions.WindowPickerMode && _hoveredWindow is null)
             {
                 e.Handled = true;
@@ -223,6 +335,8 @@ public partial class RegionSelectorWindow
             }
             _start = point;
             _selection = DesktopRectangle.Empty;
+            SelectedWindow = null;
+            _annotationToolbar?.SetCanAccept(false);
             _dragging = true;
             _capturedPointer = e.Pointer;
             e.Pointer.Capture(overlay._canvas);
@@ -241,7 +355,7 @@ public partial class RegionSelectorWindow
 
         public void PointerMoved(PointerEventArgs e)
         {
-            if (!_ready || _completed || _cancelled) return;
+            if (!_ready || _completed || _cancelled || (_annotating && !_regionSelectionMode)) return;
             var point = Methods.GetCursorPosition();
             if (_dragging)
             {
@@ -254,7 +368,7 @@ public partial class RegionSelectorWindow
 
         public async Task PointerReleasedAsync(PointerReleasedEventArgs? e)
         {
-            if (!_dragging || _completed || _cancelled) return;
+            if (!_dragging || _completed || _cancelled || (_annotating && !_regionSelectionMode)) return;
             var point = Methods.GetCursorPosition();
             _capturedPointer?.Capture(null);
             _capturedPointer = null;
@@ -276,7 +390,17 @@ public partial class RegionSelectorWindow
 
         public void KeyDown(KeyEventArgs e)
         {
-            if (e.Key == Key.Escape) { Cancel(); e.Handled = true; }
+            if (_annotating && e.Key == Key.Enter && _dragging)
+            {
+                _ = PointerReleasedAsync(null);
+                e.Handled = true;
+                return;
+            }
+            if (_annotating && _annotationToolbar is not null)
+            {
+                _annotationToolbar.HandleKeyDown(e);
+            }
+            else if (e.Key == Key.Escape) { Cancel(); e.Handled = true; }
             else if (e.Key == Key.Enter && _dragging)
             {
                 _ = PointerReleasedAsync(null);
@@ -299,8 +423,13 @@ public partial class RegionSelectorWindow
             return DesktopRectangle.Intersect(new DesktopRectangle(x, y, width, height), DesktopBounds);
         }
 
-        private void UpdateHover(DesktopPoint point)
+        private void UpdateHover(DesktopPoint point, bool preserveCommittedSelection = true)
         {
+            if (preserveCommittedSelection && _annotating && !_committedSelection.IsEmpty)
+            {
+                DrawSelection(_committedSelection, point);
+                return;
+            }
             _hoveredWindow = CanPickWindows ? _windows.FirstOrDefault(window => window.Rectangle.Contains(point)) : null;
             var rectangle = _owner._captureOptions.MonitorPickerMode
                 ? _screens.FirstOrDefault(screen => screen.Bounds.Contains(point))?.Bounds ?? DesktopRectangle.Empty
@@ -336,41 +465,242 @@ public partial class RegionSelectorWindow
 
         private async Task CompleteAsync(DesktopRectangle rectangle)
         {
-            if (_completed || _cancelled) return;
+            if (_completed || _cancelled || (_annotating && !_regionSelectionMode)) return;
             rectangle = DesktopRectangle.Intersect(rectangle, DesktopBounds);
             int minimum = Math.Max(1, _owner._captureOptions.MinimumSize);
             if (rectangle.Width < minimum || rectangle.Height < minimum ||
                 !_screens.Any(screen => screen.Bounds.IntersectsWith(rectangle)))
             {
-                Cancel();
+                if (_annotating)
+                {
+                    _selection = _committedSelection;
+                    DrawSelection(_committedSelection, Methods.GetCursorPosition());
+                    _annotationToolbar?.SetCanAccept(!_committedSelection.IsEmpty);
+                }
+                else Cancel();
                 return;
             }
-            _completed = true;
             _dragging = false;
             _capturedPointer?.Capture(null);
             _capturedPointer = null;
-            _owner._selectionCompleted = true;
-            foreach (var overlay in _overlays) overlay.Hide();
+
+            if (_owner.TakeScreenshot && _owner._annotationRequested)
+            {
+                _committedSelection = rectangle;
+                _selection = rectangle;
+                SelectedWindow ??= _windows.FirstOrDefault(window => window.Rectangle.Contains(rectangle));
+                DrawSelection(rectangle, Methods.GetCursorPosition());
+                _annotationToolbar?.SetCanAccept(true);
+                return;
+            }
+
+            await FinalizeSelectionAsync(rectangle, null, annotationCompleted: false);
+        }
+
+        private void InitializeLiveAnnotation()
+        {
+            if (_completed || _cancelled || _annotating) return;
+
             CapturedImage? image = null;
             try
             {
-                if (_owner.TakeScreenshot)
-                {
-                    await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
-                    await Task.Delay(16);
-                    if (_cancelled) return;
-                    image = await Methods.CaptureRectangle(rectangle);
-                    if (_cancelled) return;
-                    if (image is null) throw new InvalidOperationException("The selected region could not be captured.");
-                }
+                FrozenDisplaySource[] sources = _frozenFrames.Values
+                    .Select(frame => new FrozenDisplaySource(frame.Screen.Bounds, frame.Source))
+                    .ToArray();
+                image = FrozenRegionComposer.Compose(sources, DesktopBounds);
                 if (_cancelled) return;
+
+                _annotationSource = image;
+                image = null;
+                _annotating = true;
+                _regionSelectionMode = true;
+
+                var document = new AnnotationDocument();
+                foreach (RegionSelectorWindow overlay in _overlays)
+                {
+                    var bounds = new DesktopRectangle(
+                        overlay._screenBounds.X,
+                        overlay._screenBounds.Y,
+                        overlay._screenBounds.Width,
+                        overlay._screenBounds.Height);
+                    double scaleX = overlay.ClientSize.Width / bounds.Width;
+                    double scaleY = overlay.ClientSize.Height / bounds.Height;
+                    var annotationCanvas = new AnnotationCanvas(_annotationSource, document, createPreview: false)
+                    {
+                        Width = overlay.ClientSize.Width,
+                        Height = overlay.ClientSize.Height,
+                        DrawBackground = false,
+                        DrawSourceImage = false,
+                        IsHitTestVisible = false,
+                        ImageViewport = new Rect(
+                            (DesktopBounds.X - bounds.X) * scaleX,
+                            (DesktopBounds.Y - bounds.Y) * scaleY,
+                            DesktopBounds.Width * scaleX,
+                            DesktopBounds.Height * scaleY)
+                    };
+                    Canvas.SetLeft(annotationCanvas, 0);
+                    Canvas.SetTop(annotationCanvas, 0);
+                    annotationCanvas.SetValue(Panel.ZIndexProperty, 20);
+                    overlay._selectionRect.SetValue(Panel.ZIndexProperty, 30);
+                    overlay._canvas.Children.Add(annotationCanvas);
+                    overlay.Cursor = Cursor.Default;
+                    overlay._infoBox.IsVisible = false;
+                    _annotationCanvases.Add(annotationCanvas);
+                }
+
+                if (_annotationCanvases.Count == 0)
+                    throw new InvalidOperationException("The selected region does not intersect an annotation surface.");
+
+                _annotationToolbar = new RegionAnnotationToolbar(_annotationCanvases, enableRegionSelection: true);
+                _annotationToolbar.Accepted += (_, _) => _ = FinalizeAnnotationAsync();
+                _annotationToolbar.Cancelled += (_, _) => Cancel();
+                _annotationToolbar.RegionSelectionRequested += (_, _) => SetRegionSelectionMode(true);
+                _annotationToolbar.AnnotationToolSelected += (_, _) => SetRegionSelectionMode(false);
+
+                RegionSelectorWindow toolbarOverlay = FindToolbarOverlay(Methods.GetCursorPosition());
+                double toolbarWidth = Math.Max(1, toolbarOverlay.ClientSize.Width - 24);
+                _annotationToolbar.Width = Math.Min(900, toolbarWidth);
+                Canvas.SetLeft(_annotationToolbar, Math.Max(12, (toolbarOverlay.ClientSize.Width - _annotationToolbar.Width) / 2));
+                Canvas.SetTop(_annotationToolbar, 12);
+                _annotationToolbar.SetValue(Panel.ZIndexProperty, 100);
+                _annotationToolbar.Moved += (_, movement) =>
+                {
+                    if (_annotationToolbar is null) return;
+                    double width = _annotationToolbar.Bounds.Width > 0
+                        ? _annotationToolbar.Bounds.Width
+                        : _annotationToolbar.Width;
+                    double height = _annotationToolbar.Bounds.Height > 0
+                        ? _annotationToolbar.Bounds.Height
+                        : 50;
+                    double x = Math.Clamp(
+                        Canvas.GetLeft(_annotationToolbar) + movement.DeltaX,
+                        0,
+                        Math.Max(0, toolbarOverlay.ClientSize.Width - width));
+                    double y = Math.Clamp(
+                        Canvas.GetTop(_annotationToolbar) + movement.DeltaY,
+                        0,
+                        Math.Max(0, toolbarOverlay.ClientSize.Height - height));
+                    Canvas.SetLeft(_annotationToolbar, x);
+                    Canvas.SetTop(_annotationToolbar, y);
+                };
+                toolbarOverlay._canvas.Children.Add(_annotationToolbar);
+                SetRegionSelectionMode(true);
+                toolbarOverlay.Activate();
+                toolbarOverlay.Focus();
+                DebugHelper.WriteLine(
+                    $"macOS frozen selector started with live annotation across {DesktopBounds}; surfaces={_annotationCanvases.Count}.");
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.WriteException(ex, "Inline region annotation could not start");
+                ShowErrorDialog(ex);
+                Cancel();
+            }
+            finally
+            {
+                image?.Dispose();
+            }
+        }
+
+        private void SetRegionSelectionMode(bool selectingRegion)
+        {
+            _regionSelectionMode = selectingRegion;
+            foreach (AnnotationCanvas canvas in _annotationCanvases)
+                canvas.IsHitTestVisible = !selectingRegion;
+            foreach (RegionSelectorWindow overlay in _overlays)
+                overlay.Cursor = selectingRegion
+                    ? new Cursor(StandardCursorType.Cross)
+                    : Cursor.Default;
+            if (selectingRegion)
+                _owner.Focus();
+            else
+                _annotationCanvases[0].Focus();
+        }
+
+        private RegionSelectorWindow FindToolbarOverlay(DesktopPoint point)
+        {
+            return _overlays.FirstOrDefault(overlay =>
+            {
+                var bounds = new DesktopRectangle(
+                    overlay._screenBounds.X, overlay._screenBounds.Y,
+                    overlay._screenBounds.Width, overlay._screenBounds.Height);
+                return bounds.Contains(point);
+            }) ?? _owner;
+        }
+
+        private async Task FinalizeAnnotationAsync()
+        {
+            if (!_annotating || _completed || _cancelled || _annotationSource is null ||
+                _committedSelection.IsEmpty) return;
+            CapturedImage? output = null;
+            try
+            {
+                _completed = true;
+                _annotating = false;
+                FrozenDisplaySource[] sources = _frozenFrames.Values
+                    .Select(frame => new FrozenDisplaySource(frame.Screen.Bounds, frame.Source))
+                    .ToArray();
+                output = FrozenRegionComposer.Compose(sources, _committedSelection);
+                AnnotationDocument document = _annotationCanvases[0].Document;
+                if (document.Elements.Count > 0)
+                {
+                    float scaleX = _annotationSource.Width / (float)DesktopBounds.Width;
+                    float scaleY = _annotationSource.Height / (float)DesktopBounds.Height;
+                    var sourceArea = new SixLabors.ImageSharp.RectangleF(
+                        (_committedSelection.X - DesktopBounds.X) * scaleX,
+                        (_committedSelection.Y - DesktopBounds.Y) * scaleY,
+                        _committedSelection.Width * scaleX,
+                        _committedSelection.Height * scaleY);
+                    AnnotationDocument transformed = document.Transform(sourceArea, output.Width, output.Height);
+                    CapturedImage rendered = transformed.Render(output);
+                    output.Dispose();
+                    output = rendered;
+                }
+                await FinalizeSelectionAsync(_committedSelection, output, annotationCompleted: true);
+                output = null;
+            }
+            catch (Exception ex)
+            {
+                output?.Dispose();
+                DebugHelper.WriteException(ex, "Inline region annotation could not be rendered");
+                ShowErrorDialog(ex);
+                Cancel();
+            }
+        }
+
+        private Task FinalizeSelectionAsync(
+            DesktopRectangle rectangle,
+            CapturedImage? preparedImage,
+            bool annotationCompleted)
+        {
+            if (_cancelled)
+            {
+                preparedImage?.Dispose();
+                return Task.CompletedTask;
+            }
+            _completed = true;
+            _owner._selectionCompleted = true;
+            foreach (RegionSelectorWindow overlay in _overlays) overlay.Hide();
+            CapturedImage? image = preparedImage;
+            try
+            {
+                if (_owner.TakeScreenshot && image is null)
+                {
+                    FrozenDisplaySource[] sources = _frozenFrames.Values
+                        .Select(frame => new FrozenDisplaySource(frame.Screen.Bounds, frame.Source))
+                        .ToArray();
+                    image = FrozenRegionComposer.Compose(sources, rectangle);
+                }
                 _owner._selectionSucceeded = true;
+                _owner._annotationCompleted = annotationCompleted;
                 _owner._resultRect.TrySetResult(rectangle);
                 _owner._resultImg.TrySetResult(image);
                 if (image != null && !_owner.IsSilentMode)
                     UploadManager.RunImageTask(image, TaskSettings.GetDefaultTaskSettings());
-                image = null; // Ownership transferred to the result/capture task.
-                DebugHelper.WriteLine($"Live multi-display selection complete: {rectangle}; captureImage={_owner.TakeScreenshot}; overlays={_overlays.Count}");
+                image = null;
+                DebugHelper.WriteLine(
+                    $"macOS multi-display selection complete from {(_owner.TakeScreenshot ? "frozen frames" : "geometry")}: " +
+                    $"{rectangle}; inlineAnnotation={annotationCompleted}; overlays={_overlays.Count}");
             }
             catch (Exception ex)
             {
@@ -384,6 +714,7 @@ public partial class RegionSelectorWindow
                 image?.Dispose();
                 CloseAll();
             }
+            return Task.CompletedTask;
         }
 
         public void Cancel()
@@ -420,8 +751,19 @@ public partial class RegionSelectorWindow
         {
             if (_closing) return;
             _closing = true;
+            foreach (AnnotationCanvas canvas in _annotationCanvases) canvas.Dispose();
+            _annotationCanvases.Clear();
+            _annotationSource?.Dispose();
+            _annotationSource = null;
             foreach (var overlay in _overlays.Where(window => window != _owner)) overlay.Close();
             _owner.Close();
+            foreach (var overlay in _overlays)
+            {
+                overlay._canvas.Background = Brushes.Transparent;
+                overlay.Background = _owner.TakeScreenshot ? Brushes.Black : Brushes.Transparent;
+            }
+            foreach (FrozenDisplayFrame frame in _frozenFrames.Values) frame.Dispose();
+            _frozenFrames.Clear();
             _owner.RestoreHiddenWindows();
             _owner.ReleaseSelectorGate();
         }
@@ -452,7 +794,19 @@ public partial class RegionSelectorWindow
         SendObjectiveCInteger(
             handle.Handle,
             GetObjectiveCSelector("setLevel:"),
-            CGWindowLevelForKey(MainMenuWindowLevelKey) + 1);
+            CGWindowLevelForKey(ScreenSaverWindowLevelKey));
+        SendObjectiveCBool(
+            handle.Handle,
+            GetObjectiveCSelector("setIgnoresMouseEvents:"),
+            0);
+        SendObjectiveCBool(
+            handle.Handle,
+            GetObjectiveCSelector("setAcceptsMouseMovedEvents:"),
+            1);
+        SendObjectiveCBool(
+            handle.Handle,
+            GetObjectiveCSelector("setOpaque:"),
+            TakeScreenshot ? (byte)1 : (byte)0);
         SendObjectiveCRect(
             handle.Handle,
             GetObjectiveCSelector("setFrame:display:"),

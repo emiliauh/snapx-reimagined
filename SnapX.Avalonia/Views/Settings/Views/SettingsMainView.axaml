@@ -23,12 +23,16 @@
         AlwaysShowHeader="False"
         BackRequested="NavigationView_OnBackRequested"
         Background="{DynamicResource SolidBackgroundFillColorBase}"
+        CompactModeThresholdWidth="600"
+        CompactPaneLength="56"
+        ExpandedModeThresholdWidth="840"
         IsBackButtonVisible="True"
         IsBackEnabled="False"
-        IsPaneOpen="True"
+        IsPaneOpen="{Binding IsPaneOpen, Mode=TwoWay}"
         IsSettingsVisible="False"
         Name="SettingsNavigationView"
-        PaneDisplayMode="Left"
+        OpenPaneLength="328"
+        PaneDisplayMode="Auto"
         SelectionChanged="NavigationView_OnSelectionChanged"
         UseLayoutRounding="True">
         <controls:FANavigationView.Styles>
@@ -36,6 +40,10 @@
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="Padding" Value="12,0" />
                 <Setter Property="MinHeight" Value="44" />
+            </Style>
+            <Style Selector="controls|FANavigationViewItem TextBlock">
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
             </Style>
         </controls:FANavigationView.Styles>
         <controls:FANavigationView.MenuItems>
@@ -486,9 +494,8 @@
                             </controls:FAMenuFlyoutSubItem>
                             <controls:FAToggleMenuFlyoutItem
                                 Click="DynamicSettingItemOnClick"
-                                IsEnabled="False"
                                 Tag="!AnnotateImage"
-                                Text="Open in Image Editor">
+                                Text="Annotate screenshot">
                                 <controls:FAToggleMenuFlyoutItem.IconSource>
                                     <fluent:FluentIconSource
                                         Icon="ImageEdit"

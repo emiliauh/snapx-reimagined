@@ -69,12 +69,13 @@ After publishing with `./build.sh --configuration Release`, create a locally
 signed app bundle and launch it with Finder/Launch Services:
 
 ```zsh
-SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui "SnapX Local.app"
-open "SnapX Local.app"
+SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui "Output/SnapX.app"
+open "Output/SnapX.app"
 ```
 
 The bundle script requires a new output path and preserves all published native
-libraries. Local builds use a separate bundle identity and display name. Their
+libraries. Local builds use a separate bundle identity while retaining the SnapX
+display name. Their
 ad-hoc signature is suitable for one immutable test build; rebuilding changes
 its TCC identity. A long-lived local Code Signing certificate can preserve the
 identity on one Mac without an Apple Developer account. Distribution to other
@@ -82,11 +83,11 @@ Macs requires Developer ID signing and notarization. Screen capture may
 require enabling SnapX in System Settings → Privacy & Security → Screen &
 System Audio Recording and restarting the app.
 
-On macOS, screen recording uses FFmpeg's AVFoundation input. Select a region
-contained within one display; recordings spanning multiple displays are not
-supported. Retina input is normalized to desktop dimensions before cropping.
-The recorder settings offer screen capture and an optional default microphone.
-Grant microphone access when recording audio. Finder launches also search the
+On macOS, screen recording uses ScreenCaptureKit for optional playback/system
+audio and FFmpeg for final media encoding. Select a region contained within one
+display; recordings spanning multiple displays are not supported. Retina input
+is normalized to desktop dimensions before cropping. SnapX does not request
+microphone access for playback-audio capture. Finder launches also search the
 standard Homebrew and MacPorts executable locations, or you can enable the
 FFmpeg path override in Settings → Screen recorder.
 

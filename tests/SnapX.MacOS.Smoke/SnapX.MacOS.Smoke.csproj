@@ -10,4 +10,8 @@
     <ProjectReference Include="../../SnapX.Core/SnapX.Core.csproj" />
     <None Include="Pasteboard.m" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="BuildMacOSTrayClickProbe" AfterTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <Exec Command="xcrun clang -dynamiclib -fobjc-arc -fblocks -mmacosx-version-min=11.0 -framework AppKit -Wall -Wextra -Werror -Wl,-install_name,@rpath/libsnapx-tray.dylib &quot;$(MSBuildProjectDirectory)/../../SnapX.Avalonia/Native/snapx-tray.m&quot; -o &quot;$(TargetDir)libsnapx-tray.dylib&quot;" />
+  </Target>
 </Project>

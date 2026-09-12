@@ -384,7 +384,10 @@ jobs:
         if: matrix.configuration == 'Debug' && runner.os == 'Linux' && runner.arch == 'X64' && always()
         run: |
           raw_version=$(./build.sh --version | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.\+]+)?')
-          fallback_version=$(echo "$raw_version" | sed 's/-.*//')
+          # Preserve the prerelease identifier committed in source; remove only
+          # GitVersion's build metadata so CI never rewrites an alpha/beta/RC
+          # update back to the previous public version.
+          fallback_version="${raw_version%%+*}"
           sed -i "s|<Version>.*</Version>|<Version>${fallback_version}</Version>|" Directory.Build.props
           echo "version=$fallback_version" >> "$GITHUB_OUTPUT"
           if ! git diff --quiet Directory.Build.props; then

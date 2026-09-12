@@ -9,6 +9,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SnapX.Core.Hotkey;
 using SnapX.Core.Media;
+using SnapX.Core.ScreenCapture;
 using SnapX.Core.Upload;
 using SnapX.Core.Upload.BaseServices;
 using SnapX.Core.Upload.BaseUploaders;
@@ -38,7 +39,17 @@ public class WorkerTask : IDisposable
     public TaskStatus Status { get; private set; }
     public bool IsBusy => Status == TaskStatus.InQueue || IsWorking;
     public bool IsWorking => Status == TaskStatus.Preparing || Status == TaskStatus.Working || Status == TaskStatus.Stopping;
-    public bool StopRequested { get; private set; }
+    public bool StopRequested
+    {
+        get => Volatile.Read(ref stopRequested) != 0;
+        // Stopping is monotonic for a worker's lifetime. A completed stage may
+        // never clear a concurrent request from the UI thread.
+        private set
+        {
+            if (value)
+                Interlocked.Exchange(ref stopRequested, 1);
+        }
+    }
     public bool RequestSettingUpdate { get; private set; }
     public bool EarlyURLCopied { get; private set; }
     public Stream Data { get; private set; }
@@ -49,6 +60,10 @@ public class WorkerTask : IDisposable
     private ThreadWorker threadWorker;
     private GenericUploader uploader;
     private TaskReferenceHelper taskReferenceHelper;
+    private readonly CancellationTokenSource interactionCancellation = new();
+    private readonly object interactionCancellationSync = new();
+    private int stopRequested;
+    private bool interactionCancellationDisposed;
 
     #region Constructors
 
@@ -240,6 +255,7 @@ public class WorkerTask : IDisposable
     public void Stop()
     {
         StopRequested = true;
+        CancelInteractiveWork();
 
         switch (Status)
         {
@@ -262,9 +278,18 @@ public class WorkerTask : IDisposable
 
         try
         {
-            StopRequested = !DoThreadJob();
+            // Stop() can race an interactive after-capture stage. Never let a
+            // successful return from DoThreadJob clear a stop already requested
+            // by another thread.
+            if (!DoThreadJob())
+                StopRequested = true;
 
-            OnImageReady();
+            // A cancelled interactive stage (including the annotation editor)
+            // must not leak a preview event after the job has been stopped.
+            if (!StopRequested)
+            {
+                OnImageReady();
+            }
 
             if (!StopRequested)
             {
@@ -564,6 +589,11 @@ public class WorkerTask : IDisposable
 
     private bool DoAfterCaptureJobs()
     {
+        if (StopRequested)
+        {
+            return false;
+        }
+
         if (Image == null)
         {
             return true;
@@ -592,16 +622,48 @@ public class WorkerTask : IDisposable
             // }
         }
 
-        if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AnnotateImage))
+        if (!Info.Metadata.AnnotationCompleted &&
+            (Info.Metadata.RequiresAnnotation ||
+             Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AnnotateImage)))
         {
-            throw new NotImplementedException("AfterCaptureTasks.AnnotateImage is not implemented");
-            // Image = TaskHelpers.AnnotateImage(Image, null, Info.TaskSettings, true);
-            //
-            // if (Image == null)
-            // {
-            //     return false;
-            // }
+            ImageAnnotationResult annotation;
+            try
+            {
+                annotation = AnnotationTasks.EditAsync(
+                        Image,
+                        Info.TaskSettings,
+                        interactionCancellation.Token)
+                    .GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (StopRequested || interactionCancellation.IsCancellationRequested)
+            {
+                DebugHelper.WriteLine("Image annotation was stopped with its worker task.");
+                return false;
+            }
+
+            if (StopRequested || interactionCancellation.IsCancellationRequested)
+            {
+                if (annotation.Image is not null && !ReferenceEquals(annotation.Image, Image))
+                    annotation.Image.Dispose();
+                return false;
+            }
+            if (!annotation.Accepted)
+            {
+                DebugHelper.WriteLine("Image annotation was cancelled; skipping remaining after-capture actions.");
+                return false;
+            }
+
+            Image annotatedImage = annotation.Image!;
+            if (!ReferenceEquals(annotatedImage, Image))
+            {
+                Image.Dispose();
+                Image = annotatedImage;
+            }
+            Info.Metadata.Image = Image;
         }
+
+        if (StopRequested)
+            return false;
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.CopyImageToClipboard))
         {
@@ -621,6 +683,9 @@ public class WorkerTask : IDisposable
             {
                 DebugHelper.WriteException("Timed out or failed while copying image to clipboard.");
             }
+
+            if (StopRequested)
+                return false;
         }
 
         if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.PinToScreen))
@@ -640,6 +705,9 @@ public class WorkerTask : IDisposable
         if (Info.TaskSettings.AfterCaptureJob.HasFlagAny(AfterCaptureTasks.SaveImageToFile, AfterCaptureTasks.SaveImageToFileWithDialog, AfterCaptureTasks.DoOCR,
             AfterCaptureTasks.UploadImageToHost))
         {
+            if (StopRequested)
+                return false;
+
             var imageData = TaskHelpers.PrepareImage(Image, Info.TaskSettings);
             Data = imageData.ImageStream;
             Info.FileName = Path.ChangeExtension(Info.FileName, imageData.ImageFormat.GetDescription());
@@ -1211,6 +1279,24 @@ public class WorkerTask : IDisposable
         {
             Image.Dispose();
             Image = null;
+        }
+
+        lock (interactionCancellationSync)
+        {
+            if (!interactionCancellationDisposed)
+            {
+                interactionCancellationDisposed = true;
+                interactionCancellation.Dispose();
+            }
+        }
+    }
+
+    private void CancelInteractiveWork()
+    {
+        lock (interactionCancellationSync)
+        {
+            if (!interactionCancellationDisposed)
+                interactionCancellation.Cancel();
         }
     }
 }

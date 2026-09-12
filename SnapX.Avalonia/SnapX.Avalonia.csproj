@@ -130,6 +130,18 @@
           Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
     <Copy SourceFiles="$(TargetDir)libsnapx-notifications.dylib" DestinationFolder="$(PublishDir)" />
   </Target>
+  <Target Name="BuildMacOSTrayClick" AfterTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
+    <PropertyGroup>
+      <SnapXTrayArch Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">-arch arm64</SnapXTrayArch>
+      <SnapXTrayArch Condition="'$(RuntimeIdentifier)' == 'osx-x64'">-arch x86_64</SnapXTrayArch>
+    </PropertyGroup>
+    <Exec Command="xcrun clang -dynamiclib -fobjc-arc -fblocks -mmacosx-version-min=11.0 $(SnapXTrayArch) -framework AppKit -Wall -Wextra -Werror -Wl,-install_name,@rpath/libsnapx-tray.dylib &quot;$(MSBuildProjectDirectory)/Native/snapx-tray.m&quot; -o &quot;$(TargetDir)libsnapx-tray.dylib&quot;" />
+  </Target>
+  <Target Name="PublishMacOSTrayClick" AfterTargets="Publish" DependsOnTargets="BuildMacOSTrayClick"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
+    <Copy SourceFiles="$(TargetDir)libsnapx-tray.dylib" DestinationFolder="$(PublishDir)" />
+  </Target>
   <Target Name="BuildMacOSSystemAudio" AfterTargets="Build"
           Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
     <PropertyGroup>

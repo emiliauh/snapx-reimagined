@@ -15,6 +15,22 @@ if (!OperatingSystem.IsMacOS())
     return 1;
 }
 
+if (args.Contains("--tray-click-policy"))
+{
+    const ulong leftMouseDown = 1;
+    const ulong leftMouseUp = 2;
+    const ulong rightMouseUp = 4;
+    const ulong controlModifier = 1UL << 18;
+    if (Native.SnapXTrayClassifyEvent(leftMouseUp, 0) != 1 ||
+        Native.SnapXTrayClassifyEvent(leftMouseUp, controlModifier) != 2 ||
+        Native.SnapXTrayClassifyEvent(rightMouseUp, 0) != 2 ||
+        Native.SnapXTrayClassifyEvent(leftMouseDown, 0) != 3 ||
+        Native.SnapXTrayClassifyEvent(leftMouseDown, controlModifier) != 0)
+        throw new InvalidOperationException("The macOS tray helper does not preserve primary/menu click routing.");
+    Console.WriteLine("PASS: macOS tray helper routes left-click to the primary action and right/Control-click to the native menu.");
+    return 0;
+}
+
 if (args.Contains("--ocr"))
 {
     try
@@ -100,7 +116,7 @@ if (args.Contains("--multi-monitor-capture"))
     return 0;
 }
 
-if (args.Contains("--overlay-alpha"))
+if (args.Contains("--overlay-alpha") || args.Contains("--overlay-opacity"))
 {
     // The picker is intentionally above the normal application-window layer,
     // so query the unfiltered native list rather than capture candidates.
@@ -111,10 +127,24 @@ if (args.Contains("--overlay-alpha"))
         foreach (var display in MacOSAPI.GetScreens())
         {
             var center = new Point(display.Bounds.X + display.Bounds.Width / 2, display.Bounds.Y + display.Bounds.Height / 2);
-            if (overlays.Count(w => new Rectangle((int)w.X, (int)w.Y, (int)w.Width, (int)w.Height).Contains(center)) != 1)
-                throw new InvalidOperationException($"Expected one live overlay on display {display.Index}.");
+            var displayOverlays = overlays
+                .Where(w => new Rectangle((int)w.X, (int)w.Y, (int)w.Width, (int)w.Height).Contains(center))
+                .ToList();
+            if (displayOverlays.Count != 1)
+                throw new InvalidOperationException($"Expected one selector overlay on display {display.Index}.");
+            var nativeBounds = new Rectangle(
+                (int)displayOverlays[0].X,
+                (int)displayOverlays[0].Y,
+                (int)displayOverlays[0].Width,
+                (int)displayOverlays[0].Height);
+            if (Math.Abs(nativeBounds.X - display.Bounds.X) > 1 ||
+                Math.Abs(nativeBounds.Y - display.Bounds.Y) > 1 ||
+                Math.Abs(nativeBounds.Width - display.Bounds.Width) > 1 ||
+                Math.Abs(nativeBounds.Height - display.Bounds.Height) > 1)
+                throw new InvalidOperationException(
+                    $"Display {display.Index} overlay {nativeBounds} does not include the full display {display.Bounds}.");
         }
-        Console.WriteLine($"PASS: {overlays.Count} live overlays cover all display centers.");
+        Console.WriteLine($"PASS: {overlays.Count} selector overlays cover every full display, including menu-bar bounds.");
     }
     foreach (var overlay in overlays)
     {
@@ -124,7 +154,7 @@ if (args.Contains("--overlay-alpha"))
     using var captured = await new macOSCapture().CaptureWindow(new SnapX.Core.Media.WindowInfo { Handle = (nint)overlay.Hwnd })
         ?? throw new InvalidOperationException("The picker window could not be captured.");
     using var rgba = captured.CloneAs<Rgba32>();
-    long transparent = 0, translucent = 0, opaque = 0;
+    long transparent = 0, translucent = 0, opaque = 0, visibleContent = 0;
     rgba.ProcessPixelRows(accessor =>
     {
         for (int y = 0; y < accessor.Height; y++)
@@ -134,17 +164,35 @@ if (args.Contains("--overlay-alpha"))
                 if (pixel.A == 0) transparent++;
                 else if (pixel.A == 255) opaque++;
                 else translucent++;
+                if (pixel.A != 0 && (pixel.R > 8 || pixel.G > 8 || pixel.B > 8)) visibleContent++;
             }
         }
     });
     double transparentFraction = (double)transparent / ((long)rgba.Width * rgba.Height);
-    Console.WriteLine($"Overlay {rgba.Width}x{rgba.Height}: transparent={transparent:N0}, translucent={translucent:N0}, opaque={opaque:N0}; transparent coverage={transparentFraction:P2}.");
-    if (transparentFraction < 0.90)
+    double opaqueFraction = (double)opaque / ((long)rgba.Width * rgba.Height);
+    double contentFraction = (double)visibleContent / ((long)rgba.Width * rgba.Height);
+    Console.WriteLine($"Overlay {rgba.Width}x{rgba.Height}: transparent={transparent:N0}, translucent={translucent:N0}, opaque={opaque:N0}; transparent={transparentFraction:P2}; opaque={opaqueFraction:P2}.");
+    bool expectTransparent = args.Contains("--expect-transparent");
+    // Opt in only with a visibly nonblack desktop fixture. A legitimate
+    // black desktop is valid product input, but alpha alone cannot detect a
+    // broken frozen preview that only displays the native black clear color.
+    if (args.Contains("--expect-content") && contentFraction < 0.01)
     {
-        Console.Error.WriteLine("FAIL: The region picker is not predominantly transparent.");
+        Console.Error.WriteLine($"FAIL: The screenshot selector contains only {contentFraction:P2} nonblack pixels; expected the visible desktop fixture.");
         return 1;
     }
-    Console.WriteLine("PASS: Native picker capture retains a transparent desktop interior.");
+    if (args.Contains("--expect-content"))
+        Console.WriteLine($"PASS: Frozen selector renders desktop content ({contentFraction:P2} nonblack pixels).");
+    if (expectTransparent ? transparentFraction < 0.90 : opaqueFraction < 0.90)
+    {
+        Console.Error.WriteLine(expectTransparent
+            ? "FAIL: The recording-region geometry picker is not predominantly transparent."
+            : "FAIL: The screenshot region picker is not predominantly opaque.");
+        return 1;
+    }
+    Console.WriteLine(expectTransparent
+        ? "PASS: Recording-region geometry picker retains a transparent desktop interior."
+        : "PASS: Screenshot region picker presents a frozen opaque display frame.");
     }
     return 0;
 }
@@ -172,7 +220,8 @@ Check("CoreGraphics cursor position and native lifetime", () =>
 {
     for (int i = 0; i < 100; i++) api.GetCursorPosition();
 });
-Check("window enumeration and bounds overload dispatch", () =>
+if (!args.Contains("--clipboard-only"))
+    Check("window enumeration and bounds overload dispatch", () =>
 {
     var windows = api.GetWindowList();
     if (windows.Count == 0) throw new InvalidOperationException("No native windows returned.");
@@ -185,6 +234,8 @@ Check("window enumeration and bounds overload dispatch", () =>
     }
     Console.WriteLine($"Enumerated {windows.Count} windows.");
 });
+else
+    Console.WriteLine("SKIP: WindowServer probes in clipboard-only mode.");
 
 if (args.Contains("--clipboard"))
 {
@@ -301,4 +352,7 @@ static class Native
     [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
     [return: MarshalAs(UnmanagedType.I1)]
     internal static extern bool CGPreflightScreenCaptureAccess();
+
+    [DllImport("snapx-tray", EntryPoint = "snapx_tray_classify_event")]
+    internal static extern int SnapXTrayClassifyEvent(ulong eventType, ulong modifierFlags);
 }
