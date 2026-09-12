@@ -11,10 +11,11 @@ bash packaging/macos-bundle.sh Output/snapx-ui Output/SnapX.app
 Find available certificate identities with
 `security find-identity -v -p codesigning`. The bundle script signs nested
 Mach-O files first, then seals the app with a secure timestamp and hardened
-runtime. Its entitlements allow the main app and bundled FFmpeg process to use
-microphone input after the user approves it. Keeping the same Developer ID
-identity across releases gives macOS a stable designated requirement, so
-privacy grants continue to match updated versions of SnapX.
+runtime. ScreenCaptureKit records optional playback audio under the same Screen
+& System Audio Recording authorization used for display capture; neither the
+main app nor bundled FFmpeg requests microphone input. Keeping the same
+Developer ID identity across releases gives macOS a stable designated
+requirement, so privacy grants continue to match updated versions of SnapX.
 
 For repeated local development without an Apple Developer account, create one
 long-lived self-signed **Code Signing** certificate in Keychain Access and use
@@ -42,8 +43,8 @@ SNAPX_ALLOW_ADHOC=1 \
   bash packaging/macos-bundle.sh Output/snapx-ui "Output/SnapX.app"
 ```
 
-Ad-hoc/local artifacts are kept separate from production by bundle ID and app
-name. Ad-hoc signing is not suitable for distribution: its designated
+Ad-hoc/local artifacts are kept separate from production by bundle ID and
+signing mode while retaining the visible `SnapX` name. Ad-hoc signing is not suitable for distribution: its designated
 requirement is the executable's CDHash, which changes on every rebuild. Use one
 immutable artifact for permission testing; a rebuilt ad-hoc copy needs a fresh
 user approval for its new identity.
@@ -100,16 +101,14 @@ SnapX license. The DMG builder checks the same license layout before and after
 mounting the image.
 
 The Applications shortcut installs to `/Applications`; copying the app to
-`~/Applications` is also supported. Development images contain `SnapX
-Local.app`, so they cannot overwrite a production `SnapX.app` by name. On first
-launch, a permission checklist requests the required Screen Recording access
-and links to its System Settings panel. Finish setup stays disabled until macOS
-confirms that permission; quitting resumes setup next time. The app may need to
-be reopened after changing Screen Recording access. Optional system-audio
-recording uses an explicitly selected virtual loopback device. macOS classifies
-that feed as an audio input, so its separate access request is available from
-the permission page and Screen recorder settings without making it a first-run
-requirement. SnapX does not select the physical microphone.
+`~/Applications` is also supported. Development images contain `SnapX.app`
+with a separate local bundle ID. On first launch, a permission checklist
+requests the required Screen & System Audio Recording access and links to its
+System Settings panel. Finish setup stays disabled until macOS confirms that
+permission; quitting resumes setup next time. The app may need to be reopened
+after changing Screen Recording access. Optional playback audio is selected in
+Screen recorder settings and captured directly through ScreenCaptureKit. It
+requires no virtual loopback device and SnapX never requests microphone access.
 After permission setup, an installed copy of SnapX offers **Enable launch at
 login** and **Not now**, with **Not now** as the default. The Application
 settings page later provides Enable, Disable, status, and Open Login Items

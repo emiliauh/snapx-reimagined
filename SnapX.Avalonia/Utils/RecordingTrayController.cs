@@ -61,6 +61,11 @@ public sealed class RecordingTrayController : IDisposable
 
     private static void OnRecordingCompleted(string path)
     {
+        // The completed WorkerTask produces the single user-configured macOS
+        // notification, including its open/copy action. Avoid a second tray
+        // notification that bypasses that preference.
+        if (OperatingSystem.IsMacOS()) return;
+
         Dispatcher.UIThread.Post(() =>
         {
             App.SendDesktopNotification(Core.SnapXL.AppName, $"Recording finished:\n{path}");
@@ -77,6 +82,7 @@ public sealed class RecordingTrayController : IDisposable
         Dispatcher.UIThread.Post(() =>
         {
             App.SendDesktopNotification(Core.SnapXL.AppName, $"Recording failed: {exception.Message}");
+            if (OperatingSystem.IsMacOS()) return;
             ToastNotificationWindow.ShowToast(
                 null,
                 Core.SnapXL.AppName,

@@ -18,7 +18,7 @@
                 <TextBlock FontSize="26" FontWeight="SemiBold" Text="Screen recorder" />
                 <TextBlock Opacity="0.75" Text="Set capture timing, FFmpeg devices, codecs, and command templates." TextWrapping="Wrap" />
                 <TextBlock FontSize="12" Opacity="0.65" Text="{Binding RecorderSummary}" />
-                <TextBlock IsVisible="{Binding IsMacOS}" Text="macOS records a region within one display using FFmpeg AVFoundation. Install FFmpeg or choose its executable below. Screen recording permission is required; optional system audio uses a local loopback device selected below. Output uses the selected region's desktop dimensions." TextWrapping="Wrap" />
+                <TextBlock IsVisible="{Binding IsMacOS}" Text="macOS captures the selected region with ScreenCaptureKit when system audio is enabled, then uses FFmpeg for the chosen final encoding. Screen Recording permission covers both video and playback audio; no microphone or loopback driver is used." TextWrapping="Wrap" />
             </StackPanel>
 
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">
@@ -45,7 +45,7 @@
 
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">
                 <StackPanel Spacing="10">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="FFmpeg input and codecs" />
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Capture input and codecs" />
                     <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                         <TextBlock VerticalAlignment="Center" Text="Video source" />
                         <ComboBox Grid.Column="1" ItemsSource="{Binding VideoSources}" SelectedItem="{Binding SelectedVideoSource}" />
@@ -60,11 +60,7 @@
                     </Grid>
                     <StackPanel IsVisible="{Binding IsMacOS}" Spacing="8">
                         <TextBlock FontSize="12" Opacity="0.75" Text="{Binding SystemAudioStatus}" TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Command="{Binding RefreshSystemAudioSourcesCommand}" Content="Refresh loopback devices" IsEnabled="{Binding !IsRefreshingAudioSources}" />
-                            <Button Command="{Binding AllowSystemAudioAccessCommand}" Content="Allow loopback audio access" />
-                        </StackPanel>
-                        <TextBlock FontSize="12" Opacity="0.65" Text="macOS does not expose speaker output through FFmpeg directly. Route output through a virtual device such as BlackHole or Loopback (normally with a Multi-Output Device so speakers keep playing), then select it here. macOS classifies that virtual feed as an audio input even though SnapX does not select a microphone." TextWrapping="Wrap" />
+                        <TextBlock FontSize="12" Opacity="0.65" Text="Choose System audio (macOS) to include sound played by other applications. macOS may show its Screen &amp; System Audio Recording prompt when capture starts. SnapX explicitly leaves microphone capture off." TextWrapping="Wrap" />
                     </StackPanel>
                     <TextBlock IsVisible="{Binding IsLinux}" FontSize="12" Opacity="0.65" Text="Generated Linux recording commands currently capture video only. System audio remains available through a custom FFmpeg command configured below (for example, a PipeWire or PulseAudio monitor source)." TextWrapping="Wrap" />
                 </StackPanel>

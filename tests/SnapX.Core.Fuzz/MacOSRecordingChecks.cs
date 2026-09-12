@@ -12,7 +12,7 @@ internal static class MacOSRecordingChecks
 {
     public static void Fuzz(Random random, ref int checks)
     {
-        VerifyAVFoundationAudioDiscovery(ref checks);
+        VerifySystemAudioRouting(ref checks);
         var method = typeof(ScreenRecordingOptions).GetMethod("ResolveMacOSCaptureTarget", BindingFlags.Static | BindingFlags.NonPublic)!;
         for (int i = 0; i < 2000; i++)
         {
@@ -49,7 +49,7 @@ internal static class MacOSRecordingChecks
                     OverrideCLIPath = true,
                     CLIPath = executableFixture,
                     UseCustomCommands = false,
-                    AudioSource = FFmpegCaptureDevice.DefaultMicrophone.Value
+                    AudioSource = "default"
                 };
                 try
                 {
@@ -67,58 +67,91 @@ internal static class MacOSRecordingChecks
                 {
                     // Expected on a host that has not granted this test process Screen Recording access.
                 }
-                if (settings.CaptureSettings.FFmpegOptions.AudioSource != FFmpegCaptureDevice.None.Value)
-                    throw new InvalidOperationException("Legacy default-microphone recording was not disabled.");
+                catch (TargetInvocationException ex) when (
+                    screenStatus == MacOSPermissionStatus.Authorized &&
+                    !MacOSSystemAudioRecorder.IsAvailable &&
+                    ex.InnerException is PlatformNotSupportedException)
+                {
+                    // Framework-dependent tests may lack the packaged bridge;
+                    // that must be an explicit capability error, not mic access.
+                }
+                if (!settings.CaptureSettings.FFmpegOptions.IsMacOSSystemAudioSelected)
+                    throw new InvalidOperationException("Legacy audio selection was not migrated to direct system audio.");
                 checks++;
             }
             finally { File.Delete(executableFixture); }
         }
     }
 
-    private static void VerifyAVFoundationAudioDiscovery(ref int checks)
+    private static void VerifySystemAudioRouting(ref int checks)
     {
-        const string listing = """
-            [AVFoundation indev @ 0x1] AVFoundation video devices:
-            [AVFoundation indev @ 0x1] [0] Capture screen 0
-            [AVFoundation indev @ 0x1] AVFoundation audio devices:
-            [AVFoundation indev @ 0x1] [0] MacBook Pro Microphone
-            [AVFoundation indev @ 0x1] [1] BlackHole 2ch
-            [AVFoundation indev @ 0x1] [2] Loopback Audio
-            """;
-        MethodInfo parser = typeof(FFmpegCLIManager).GetMethod(
-            "ParseAVFoundationAudioDevices",
-            BindingFlags.NonPublic | BindingFlags.Static)
-            ?? throw new MissingMethodException(typeof(FFmpegCLIManager).FullName,
-                "ParseAVFoundationAudioDevices");
-        var devices = (IReadOnlyList<string>)(parser.Invoke(null, [listing])
-            ?? throw new InvalidOperationException("AVFoundation parser returned no device list."));
-        if (!devices.SequenceEqual(["MacBook Pro Microphone", "BlackHole 2ch", "Loopback Audio"]))
-            throw new InvalidOperationException("AVFoundation audio discovery mixed video and audio devices.");
-        if (FFmpegCaptureDevice.IsLikelySystemAudioLoopback(devices[0]) ||
-            !FFmpegCaptureDevice.IsLikelySystemAudioLoopback(devices[1]) ||
-            !FFmpegCaptureDevice.IsLikelySystemAudioLoopback(devices[2]))
-            throw new InvalidOperationException("System-audio discovery confused a physical microphone with a loopback device.");
-        checks += 2;
+        if (FFmpegCaptureDevice.MacOSSystemAudio.Value != "__snapx_system_audio__")
+            throw new InvalidOperationException("The persisted macOS system-audio identity changed.");
+        checks++;
+
+        foreach (string source in new[] { "", "None", "nOnE", "default", "BlackHole 2ch", "Loopback Audio", "Built-in Microphone", FFmpegCaptureDevice.MacOSSystemAudio.Value })
+        {
+            var audio = new FFmpegOptions { AudioSource = source };
+            audio.FixSources();
+            string expected = source.Equals("None", StringComparison.OrdinalIgnoreCase) ? "" : source;
+            if (OperatingSystem.IsMacOS() && expected.Length > 0)
+                expected = FFmpegCaptureDevice.MacOSSystemAudio.Value;
+            if (audio.AudioSource != expected)
+                throw new InvalidOperationException($"Audio normalization changed the wrong source: {source}.");
+            if (audio.IsMacOSSystemAudioSelected != (expected == FFmpegCaptureDevice.MacOSSystemAudio.Value))
+                throw new InvalidOperationException("Direct system-audio selection was confused with a device name.");
+            audio.FixSources();
+            if (audio.AudioSource != expected)
+                throw new InvalidOperationException("Audio normalization is not idempotent.");
+            checks += 3;
+        }
+
+        // Availability checks must not open a capture session or request TCC
+        // permission. Non-macOS CI must never attempt to load the native bridge.
+        bool available = MacOSSystemAudioRecorder.IsAvailable;
+        if (!OperatingSystem.IsMacOSVersionAtLeast(13) && available)
+            throw new InvalidOperationException("Native macOS system audio is available on an unsupported platform.");
+        if (!available)
+        {
+            try
+            {
+                using var recorder = new MacOSSystemAudioRecorder(
+                    Path.Combine(Path.GetTempPath(), "snapx-unavailable-system-audio.mp4"),
+                    0, 0, 0, 320, 240, 320, 240, 30, false);
+                throw new InvalidOperationException("Unavailable system audio accepted a capture session.");
+            }
+            catch (PlatformNotSupportedException) { checks++; }
+        }
+        checks++;
+
+        var options = new ScreenRecordingOptions
+        {
+            IsRecording = false,
+            InputPath = Path.Combine(Path.GetTempPath(), "snapx-system-audio-input.mp4"),
+            OutputPath = Path.Combine(Path.GetTempPath(), "snapx-system-audio-converted.mp4"),
+            FFmpeg = new FFmpegOptions { AudioSource = FFmpegCaptureDevice.MacOSSystemAudio.Value }
+        };
+        string conversion = options.GetFFmpegArgs();
+        if (!conversion.Contains("-c:a aac", StringComparison.Ordinal) ||
+            conversion.Contains(FFmpegCaptureDevice.MacOSSystemAudio.Value, StringComparison.Ordinal))
+            throw new InvalidOperationException("Native system-audio conversion lost audio encoding or exposed its sentinel as an input.");
+        checks++;
 
         if (OperatingSystem.IsMacOS())
         {
-            Screen screen = MacOSAPI.GetScreens().First();
-            var options = new ScreenRecordingOptions
+            options.IsRecording = true;
+            options.CaptureArea = new Rectangle(0, 0, 320, 240);
+            options.FFmpeg.VideoSource = FFmpegCaptureDevice.AVFoundation.Value;
+            try
             {
-                IsRecording = true,
-                FPS = 30,
-                CaptureArea = new Rectangle(screen.Bounds.X, screen.Bounds.Y, 320, 240),
-                OutputPath = Path.Combine(Path.GetTempPath(), "snapx-system-audio-command.mp4"),
-                FFmpeg = new FFmpegOptions
-                {
-                    VideoSource = FFmpegCaptureDevice.AVFoundation.Value,
-                    AudioSource = "BlackHole 2ch"
-                }
-            };
-            string command = options.GetFFmpegCommands();
-            if (!command.Contains($"Capture screen {screen.Index}:BlackHole 2ch", StringComparison.Ordinal))
-                throw new InvalidOperationException("The macOS recording command did not combine display and loopback audio.");
-            checks++;
+                options.GetFFmpegArgs();
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("system audio", StringComparison.OrdinalIgnoreCase))
+            {
+                checks++;
+                return;
+            }
+            throw new InvalidOperationException("Direct system audio was passed to an AVFoundation recording command.");
         }
     }
 
@@ -127,16 +160,14 @@ internal static class MacOSRecordingChecks
         if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("Requires macOS.");
         int checks = 0;
         VerifyPermissions(ref checks);
-        Console.WriteLine($"macOS permission status, settings routing, guards, and native callback ABI passed: {checks} checks.");
+        Console.WriteLine($"macOS screen permission status, settings routing, and guards passed: {checks} checks.");
         return 0;
     }
 
     private static void VerifyPermissions(ref int checks)
     {
         MacOSPermissionStatus screenStatus = MacOSPermissions.GetScreenCaptureStatus();
-        MacOSPermissionStatus microphoneStatus = MacOSPermissions.GetMicrophoneStatus();
-        if (screenStatus is not (MacOSPermissionStatus.Authorized or MacOSPermissionStatus.Denied) ||
-            microphoneStatus is < MacOSPermissionStatus.NotDetermined or > MacOSPermissionStatus.Authorized)
+        if (screenStatus is not (MacOSPermissionStatus.Authorized or MacOSPermissionStatus.Denied))
             throw new InvalidOperationException("A native macOS permission status was outside its documented range.");
         if (MacOSPermissions.HasScreenCaptureAccess() != (screenStatus == MacOSPermissionStatus.Authorized))
             throw new InvalidOperationException("The macOS screen permission status and convenience check disagree.");
@@ -144,26 +175,11 @@ internal static class MacOSRecordingChecks
             MacOSPermissionKind.ScreenRecording,
             screenStatus,
             MacOSPermissions.ThrowIfScreenCaptureAccessDenied);
-        VerifyPermissionGuard(
-            MacOSPermissionKind.Microphone,
-            microphoneStatus,
-            MacOSPermissions.ThrowIfMicrophoneAccessDenied);
         var permissionError = new MacOSPermissionException(MacOSPermissionKind.ScreenRecording);
         if (permissionError.Permission != MacOSPermissionKind.ScreenRecording ||
             permissionError.SettingsUrl != MacOSPermissions.ScreenRecordingSettingsUrl)
             throw new InvalidOperationException("The screen permission error does not route to Screen Recording settings.");
-        var callbackProbe = typeof(MacOSPermissions).GetMethod(
-            "RunMicrophoneCallbackInteropProbe",
-            BindingFlags.NonPublic | BindingFlags.Static)
-            ?? throw new MissingMethodException("The NativeAOT microphone callback probe is unavailable.");
-        foreach (bool granted in new[] { false, true })
-        {
-            var result = (Task<bool>)callbackProbe.Invoke(null, [granted])!;
-            if (result.GetAwaiter().GetResult() != granted)
-                throw new InvalidOperationException("The native microphone callback changed its BOOL result.");
-            checks++;
-        }
-        checks += 5;
+        checks += 4;
     }
 
     private static void VerifyPermissionGuard(

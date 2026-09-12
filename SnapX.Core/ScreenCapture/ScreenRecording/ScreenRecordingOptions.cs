@@ -64,6 +64,12 @@ public class ScreenRecordingOptions
 
     public string GetFFmpegArgs(bool isCustom = false)
     {
+        if (IsRecording && OperatingSystem.IsMacOS() && FFmpeg.IsMacOSSystemAudioSelected)
+        {
+            throw new InvalidOperationException(
+                "Direct macOS system audio is captured by ScreenCaptureKit before FFmpeg encoding.");
+        }
+
         if (IsRecording && !FFmpeg.IsVideoSourceSelected && !FFmpeg.IsAudioSourceSelected)
         {
             return null;

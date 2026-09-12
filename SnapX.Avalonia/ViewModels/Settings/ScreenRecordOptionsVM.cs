@@ -6,7 +6,6 @@ using SnapX.Core.Job;
 using SnapX.Core.Media;
 using SnapX.Core.ScreenCapture;
 using SnapX.Core.ScreenCapture.ScreenRecording;
-using SnapX.Core.Utils.Native;
 
 namespace SnapX.Avalonia.ViewModels.Settings;
 
@@ -109,7 +108,6 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
         get => AudioSources.FirstOrDefault(x => x.Value.Equals(FFmpeg.AudioSource, StringComparison.OrdinalIgnoreCase));
         set
         {
-            if (_suppressAudioSourceSelectionChanges) return;
             FFmpeg.AudioSource = value?.Value ?? string.Empty;
             OnPropertyChanged();
             OnPropertyChanged(nameof(RecorderSummary));
@@ -157,20 +155,9 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
     }
     public bool IsMacOS => OperatingSystem.IsMacOS();
     public bool IsLinux => OperatingSystem.IsLinux();
-    public string AudioSourceLabel => IsMacOS ? "System audio source" : "Audio source";
-    private bool _suppressAudioSourceSelectionChanges;
-    private bool _isRefreshingAudioSources;
-    public bool IsRefreshingAudioSources
-    {
-        get => _isRefreshingAudioSources;
-        private set => SetProperty(ref _isRefreshingAudioSources, value);
-    }
-    private string _systemAudioStatus = string.Empty;
-    public string SystemAudioStatus
-    {
-        get => _systemAudioStatus;
-        private set => SetProperty(ref _systemAudioStatus, value);
-    }
+    public string AudioSourceLabel => IsMacOS ? "System audio" : "Audio source";
+    public string SystemAudioStatus =>
+        "ScreenCaptureKit records the Mac's playback audio directly. No microphone or loopback driver is used.";
     public string RecorderSummary
     {
         get
@@ -179,7 +166,7 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
             var codec = FFmpeg.VideoCodec.ToString();
             string audio = string.IsNullOrWhiteSpace(FFmpeg.AudioSource)
                 ? "system audio off"
-                : $"system audio from {FFmpeg.AudioSource}";
+                : "system audio on";
             return $"{source} → {codec}.{FFmpeg.Extension} at {Capture.ScreenRecordFPS} FPS; {audio}";
         }
     }
@@ -188,93 +175,23 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
     {
         if (OperatingSystem.IsMacOS() && FFmpeg.VideoSource == FFmpegCaptureDevice.GDIGrab.Value)
             FFmpeg.VideoSource = FFmpegCaptureDevice.AVFoundation.Value;
-        if (OperatingSystem.IsMacOS() &&
-            FFmpeg.AudioSource.Equals(FFmpegCaptureDevice.DefaultMicrophone.Value, StringComparison.OrdinalIgnoreCase))
-        {
-            // Older builds offered the default microphone as their only macOS
-            // audio option. Do not silently turn voice capture into the new
-            // system-audio setting.
-            FFmpeg.AudioSource = FFmpegCaptureDevice.None.Value;
-        }
+        FFmpeg.FixSources();
         InitializeAudioSources();
         RefreshTextValues();
-        if (OperatingSystem.IsMacOS()) _ = RefreshSystemAudioSources();
     }
 
     private void InitializeAudioSources()
     {
         AudioSources.Clear();
         AudioSources.Add(FFmpegCaptureDevice.None);
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsMacOS())
+        {
+            AudioSources.Add(FFmpegCaptureDevice.MacOSSystemAudio);
+        }
+        else if (OperatingSystem.IsWindows())
         {
             AudioSources.Add(FFmpegCaptureDevice.VirtualAudioCapturer);
         }
-    }
-
-    [RelayCommand]
-    private async Task RefreshSystemAudioSources()
-    {
-        if (!OperatingSystem.IsMacOS() || IsRefreshingAudioSources) return;
-        IsRefreshingAudioSources = true;
-        try
-        {
-            using var manager = new FFmpegCLIManager(FFmpeg.FFmpegPath);
-            IReadOnlyList<string> detected = await manager.GetAVFoundationAudioDevicesAsync();
-            string[] loopbacks = detected
-                .Where(FFmpegCaptureDevice.IsLikelySystemAudioLoopback)
-                .Order(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            // Read after discovery so a selection made while FFmpeg was
-            // running wins. Collection replacement can transiently send a
-            // null SelectedItem through the two-way binding, so suppress that
-            // write and explicitly retain the configured source.
-            string configuredSource = FFmpeg.AudioSource;
-            _suppressAudioSourceSelectionChanges = true;
-            try
-            {
-                InitializeAudioSources();
-                foreach (string name in loopbacks)
-                {
-                    AudioSources.Add(FFmpegCaptureDevice.SystemAudioLoopback(name));
-                }
-                if (!string.IsNullOrWhiteSpace(configuredSource) &&
-                    AudioSources.All(source => !source.Value.Equals(configuredSource, StringComparison.OrdinalIgnoreCase)))
-                {
-                    AudioSources.Add(new FFmpegCaptureDevice(
-                        configuredSource,
-                        $"Configured system audio — {configuredSource} (not currently detected)"));
-                }
-                FFmpeg.AudioSource = configuredSource;
-            }
-            finally
-            {
-                _suppressAudioSourceSelectionChanges = false;
-            }
-
-            SystemAudioStatus = loopbacks.Length == 0
-                ? "No loopback device detected. Install and route audio through BlackHole, Loopback, or another supported virtual input, then refresh."
-                : $"Detected {loopbacks.Length} system-audio loopback device{(loopbacks.Length == 1 ? string.Empty : "s")}.";
-            OnPropertyChanged(nameof(SelectedAudioSource));
-        }
-        catch (Exception ex)
-        {
-            SystemAudioStatus = $"Could not list macOS audio inputs: {ex.Message}";
-        }
-        finally
-        {
-            IsRefreshingAudioSources = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task AllowSystemAudioAccess()
-    {
-        if (!OperatingSystem.IsMacOS()) return;
-        bool granted = await MacOSPermissions.RequestMicrophoneAccessAsync();
-        SystemAudioStatus = granted
-            ? "Audio-input access is enabled for the selected loopback device."
-            : "macOS did not allow audio-input access. Enable SnapX under Privacy & Security > Microphone; loopback drivers are classified as inputs.";
     }
 
     [RelayCommand]

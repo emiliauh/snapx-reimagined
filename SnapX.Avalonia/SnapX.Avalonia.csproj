@@ -118,4 +118,52 @@
     <Exec Command="gcc &quot;$(MSBuildProjectDirectory)/Native/snapx-outline.c&quot; &quot;$(MSBuildProjectDirectory)/Native/layer-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/xdg-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/relative-pointer-code.c&quot; -o &quot;$(TargetDir)snapx-outline&quot; -I&quot;$(MSBuildProjectDirectory)/Native&quot; -lwayland-client -lm" />
     <Exec Command="gcc &quot;$(MSBuildProjectDirectory)/Native/snapx-picker.c&quot; &quot;$(MSBuildProjectDirectory)/Native/layer-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/xdg-shell-code.c&quot; &quot;$(MSBuildProjectDirectory)/Native/relative-pointer-code.c&quot; -o &quot;$(TargetDir)snapx-picker&quot; -I&quot;$(MSBuildProjectDirectory)/Native&quot; -lwayland-client -lm" />
   </Target>
+  <Target Name="BuildMacOSNotifications" AfterTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
+    <PropertyGroup>
+      <SnapXNotificationArch Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">-arch arm64</SnapXNotificationArch>
+      <SnapXNotificationArch Condition="'$(RuntimeIdentifier)' == 'osx-x64'">-arch x86_64</SnapXNotificationArch>
+    </PropertyGroup>
+    <Exec Command="xcrun clang -dynamiclib -fobjc-arc -fblocks -mmacosx-version-min=11.0 $(SnapXNotificationArch) -framework Foundation -framework UserNotifications -Wl,-install_name,@rpath/libsnapx-notifications.dylib &quot;$(MSBuildProjectDirectory)/Native/snapx-notifications.m&quot; -o &quot;$(TargetDir)libsnapx-notifications.dylib&quot;" />
+  </Target>
+  <Target Name="PublishMacOSNotifications" AfterTargets="Publish" DependsOnTargets="BuildMacOSNotifications"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
+    <Copy SourceFiles="$(TargetDir)libsnapx-notifications.dylib" DestinationFolder="$(PublishDir)" />
+  </Target>
+  <Target Name="BuildMacOSSystemAudio" AfterTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
+    <PropertyGroup>
+      <SnapXSystemAudioArch Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">-arch arm64</SnapXSystemAudioArch>
+      <SnapXSystemAudioArch Condition="'$(RuntimeIdentifier)' == 'osx-x64'">-arch x86_64</SnapXSystemAudioArch>
+    </PropertyGroup>
+    <Exec Command="xcrun clang -dynamiclib -fobjc-arc -fblocks -mmacosx-version-min=13.0 $(SnapXSystemAudioArch) -framework Foundation -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia -framework CoreGraphics -Wall -Wextra -Werror -Wl,-install_name,@rpath/libsnapx-system-audio.dylib &quot;$(MSBuildProjectDirectory)/Native/snapx-system-audio.m&quot; -o &quot;$(TargetDir)libsnapx-system-audio.dylib&quot;" />
+  </Target>
+  <Target Name="PublishMacOSSystemAudio" AfterTargets="Publish" DependsOnTargets="BuildMacOSSystemAudio"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'">
+    <Copy SourceFiles="$(TargetDir)libsnapx-system-audio.dylib" DestinationFolder="$(PublishDir)" />
+  </Target>
+  <Target Name="SelectMacOSAvifTools" AfterTargets="Publish"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(TargetMacOS)' == 'true'
+            and ('$(RuntimeIdentifier)' == 'osx-arm64' or '$(RuntimeIdentifier)' == 'osx-x64')">
+    <!-- BrycensRanch.NeoSolve.ImageSharp.AVIF 1.3.2 publishes its two macOS
+         native-tool folders with their architecture labels reversed. Select
+         the folder containing the requested architecture explicitly so an
+         arm64-only bundle never ships helpers that require Rosetta. -->
+    <PropertyGroup>
+      <SnapXAvifPackageRoot>$(NuGetPackageRoot)/brycensranch.neosolve.imagesharp.avif/1.3.2/runtimes</SnapXAvifPackageRoot>
+      <SnapXAvifSourceRid Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">osx-x64</SnapXAvifSourceRid>
+      <SnapXAvifSourceRid Condition="'$(RuntimeIdentifier)' == 'osx-x64'">osx-arm64</SnapXAvifSourceRid>
+      <SnapXAvifExpectedArch Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">arm64</SnapXAvifExpectedArch>
+      <SnapXAvifExpectedArch Condition="'$(RuntimeIdentifier)' == 'osx-x64'">x86_64</SnapXAvifExpectedArch>
+    </PropertyGroup>
+    <ItemGroup>
+      <SnapXAvifTool Include="$(SnapXAvifPackageRoot)/$(SnapXAvifSourceRid)/native/avifenc" />
+      <SnapXAvifTool Include="$(SnapXAvifPackageRoot)/$(SnapXAvifSourceRid)/native/avifdec" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(SnapXAvifTool.Identity)')"
+           Text="The architecture-correct macOS AVIF tool is missing: %(SnapXAvifTool.Identity)" />
+    <Copy SourceFiles="@(SnapXAvifTool)" DestinationFolder="$(PublishDir)" />
+    <Exec Command="lipo &quot;$(PublishDir)avifenc&quot; -verify_arch $(SnapXAvifExpectedArch)" />
+    <Exec Command="lipo &quot;$(PublishDir)avifdec&quot; -verify_arch $(SnapXAvifExpectedArch)" />
+  </Target>
 </Project>

@@ -19,31 +19,10 @@ public class FFmpegCaptureDevice
     public static FFmpegCaptureDevice GDIGrab { get; } = new FFmpegCaptureDevice("gdigrab", "gdigrab (Graphics Device Interface)");
     public static FFmpegCaptureDevice X11Grab { get; } = new FFmpegCaptureDevice("x11grab", "x11grab (X11 display)");
     public static FFmpegCaptureDevice AVFoundation { get; } = new("avfoundation", "macOS screen capture (AVFoundation)");
-    public static FFmpegCaptureDevice DefaultMicrophone { get; } = new("default", "Default audio input");
+    public static FFmpegCaptureDevice MacOSSystemAudio { get; } = new("__snapx_system_audio__", "System audio (macOS)");
     public static FFmpegCaptureDevice DDAGrab { get; } = new FFmpegCaptureDevice("ddagrab", "ddagrab (Desktop Duplication API)");
     public static FFmpegCaptureDevice ScreenCaptureRecorder { get; } = new FFmpegCaptureDevice("screen-capture-recorder", "dshow (screen-capture-recorder)");
     public static FFmpegCaptureDevice VirtualAudioCapturer { get; } = new FFmpegCaptureDevice("virtual-audio-capturer", "dshow (virtual-audio-capturer)");
-
-    public static bool IsLikelySystemAudioLoopback(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return false;
-        string[] indicators =
-        [
-            "BlackHole",
-            "Loopback Audio",
-            "Soundflower",
-            "Background Music",
-            "iShowU Audio Capture",
-            "VB-Cable",
-            "Sound Siphon",
-            "SWB Audio Capture"
-        ];
-        return indicators.Any(indicator =>
-            name.Contains(indicator, StringComparison.OrdinalIgnoreCase));
-    }
-
-    public static FFmpegCaptureDevice SystemAudioLoopback(string name) =>
-        new(name, $"System audio — {name}");
 
     public override string ToString()
     {

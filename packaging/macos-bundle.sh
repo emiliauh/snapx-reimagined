@@ -191,7 +191,6 @@ cat > "$bundle/Contents/Info.plist" <<EOF
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><false/>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSMicrophoneUsageDescription</key><string>SnapX accesses a virtual loopback input only when you enable system audio recording.</string>
 </dict></plist>
 EOF
 

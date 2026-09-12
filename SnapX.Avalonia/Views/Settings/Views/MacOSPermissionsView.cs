@@ -10,10 +10,8 @@ namespace SnapX.Avalonia.Views.Settings.Views;
 public sealed class MacOSPermissionsView : UserControl
 {
     private readonly TextBlock _screenStatus = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly TextBlock _microphoneStatus = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _error = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Button _screenGrant = new() { Content = "Grant screen access" };
-    private readonly Button _microphoneGrant = new() { Content = "Allow loopback audio access" };
     private Window? _window;
     private CancellationTokenSource? _activationRefresh;
     private bool _requesting;
@@ -25,7 +23,6 @@ public sealed class MacOSPermissionsView : UserControl
         IsVisible = OperatingSystem.IsMacOS();
         if (!IsVisible) return;
         var screenSettings = new Button { Content = "Open Screen Recording settings" };
-        var microphoneSettings = new Button { Content = "Open Microphone settings" };
         var refresh = new Button { Content = "Check permissions again" };
         Content = new StackPanel
         {
@@ -33,24 +30,18 @@ public sealed class MacOSPermissionsView : UserControl
             Children =
             {
                 new TextBlock { Text = "macOS permissions", FontSize = 18, FontWeight = FontWeight.SemiBold },
-                Paragraph("Screen access is required for capture. Audio-input access is optional and is requested only when you enable system audio through a loopback device. Only you can approve macOS privacy toggles."),
-                Heading("Screen Recording — required for screenshots and video"),
-                Paragraph("Allow SnapX to capture your displays and other windows. macOS may call this Screen & System Audio Recording. After enabling SnapX, quit and reopen it if macOS requests a restart."),
+                Paragraph("Screen access is required for screenshots, video, and optional playback-audio capture. SnapX does not request microphone access. Only you can approve macOS privacy toggles."),
+                Heading("Screen & System Audio Recording — required for capture"),
+                Paragraph("Allow SnapX to capture your displays, other windows, and—when enabled in recorder settings—audio played by other applications. After enabling SnapX, quit and reopen it if macOS requests a restart."),
                 _screenStatus,
                 Buttons(_screenGrant, screenSettings),
-                Heading("System audio loopback — optional"),
-                Paragraph("FFmpeg records speaker output from a virtual device such as BlackHole or Loopback. macOS classifies that virtual feed as a microphone input, even though SnapX does not select your physical microphone."),
-                _microphoneStatus,
-                Buttons(_microphoneGrant, microphoneSettings),
                 Paragraph("Global shortcuts use macOS's hotkey API and do not need Accessibility or Input Monitoring access. Launch at login is a separate optional setting."),
                 refresh,
                 _error
             }
         };
-        _screenGrant.Click += async (_, _) => await RequestAsync(false);
-        _microphoneGrant.Click += async (_, _) => await RequestAsync(true);
+        _screenGrant.Click += (_, _) => RequestScreenAccess();
         screenSettings.Click += (_, _) => OpenSettings(MacOSPermissions.ScreenRecordingSettingsUrl);
-        microphoneSettings.Click += (_, _) => OpenSettings(MacOSPermissions.MicrophoneSettingsUrl);
         refresh.Click += (_, _) => Refresh();
         AttachedToVisualTree += (_, _) =>
         {
@@ -109,26 +100,21 @@ public sealed class MacOSPermissionsView : UserControl
         try
         {
             bool screen = MacOSPermissions.HasScreenCaptureAccess();
-            var microphone = MacOSPermissions.GetMicrophoneStatus();
             _screenStatus.Text = screen ? "1. Screen access: complete." : "1. Screen access: incomplete. Choose Grant screen access, enable SnapX in System Settings, then reopen it if needed.";
-            _microphoneStatus.Text = microphone == MacOSPermissionStatus.Authorized ? "2. Optional loopback audio access: enabled." : "2. Optional loopback audio access: " + microphone + ".";
             IsComplete = screen;
             CompletionChanged?.Invoke(IsComplete);
             _screenGrant.IsEnabled = !_requesting && !screen;
-            _microphoneGrant.IsEnabled = !_requesting && screen && microphone is not (MacOSPermissionStatus.Authorized or MacOSPermissionStatus.Restricted or MacOSPermissionStatus.Unavailable);
         }
         catch (Exception ex)
         {
             IsComplete = false;
             CompletionChanged?.Invoke(false);
             _screenStatus.Text = "1. Screen access: unable to check.";
-            _microphoneStatus.Text = "2. Microphone access: unable to check.";
             _screenGrant.IsEnabled = false;
-            _microphoneGrant.IsEnabled = false;
             _error.Text = ex.Message;
         }
     }
-    private async Task RequestAsync(bool microphone)
+    private void RequestScreenAccess()
     {
         if (_requesting) return;
         _requesting = true;
@@ -136,17 +122,8 @@ public sealed class MacOSPermissionsView : UserControl
         Refresh();
         try
         {
-            if (microphone)
-            {
-                await MacOSPermissions.RequestMicrophoneAccessAsync();
-                if (MacOSPermissions.GetMicrophoneStatus() != MacOSPermissionStatus.Authorized)
-                    OpenSettings(MacOSPermissions.MicrophoneSettingsUrl);
-            }
-            else
-            {
-                MacOSPermissions.RequestScreenCaptureAccess();
-                if (!MacOSPermissions.HasScreenCaptureAccess()) OpenSettings(MacOSPermissions.ScreenRecordingSettingsUrl);
-            }
+            MacOSPermissions.RequestScreenCaptureAccess();
+            if (!MacOSPermissions.HasScreenCaptureAccess()) OpenSettings(MacOSPermissions.ScreenRecordingSettingsUrl);
         }
         catch (Exception ex) { _error.Text = ex.Message; }
         finally { _requesting = false; Refresh(); }

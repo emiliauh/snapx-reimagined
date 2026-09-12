@@ -150,6 +150,10 @@ public class FFmpegOptions
 
     public bool IsAudioSourceSelected => !string.IsNullOrEmpty(AudioSource) && (!IsVideoSourceSelected || !IsAnimatedImage);
 
+    public bool IsMacOSSystemAudioSelected => string.Equals(AudioSource,
+        FFmpegCaptureDevice.MacOSSystemAudio.Value,
+        StringComparison.OrdinalIgnoreCase);
+
     public bool IsAnimatedImage => VideoCodec == FFmpegVideoCodec.gif || VideoCodec == FFmpegVideoCodec.libwebp || VideoCodec == FFmpegVideoCodec.apng;
 
     public bool IsEvenSizeRequired => !IsAnimatedImage;
@@ -157,27 +161,27 @@ public class FFmpegOptions
     // TEMP: For backward compatibility
     public void FixSources()
     {
-        if (VideoSource.Equals("None", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(VideoSource, "None", StringComparison.OrdinalIgnoreCase))
         {
             VideoSource = FFmpegCaptureDevice.None.Value;
         }
-        else if (VideoSource.Equals("GDI grab", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(VideoSource, "GDI grab", StringComparison.OrdinalIgnoreCase))
         {
             VideoSource = FFmpegCaptureDevice.GDIGrab.Value;
         }
 
-        if (AudioSource.Equals("None", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(AudioSource, "None", StringComparison.OrdinalIgnoreCase))
         {
             AudioSource = FFmpegCaptureDevice.None.Value;
         }
         else if (OperatingSystem.IsMacOS() &&
-                 AudioSource.Equals(FFmpegCaptureDevice.DefaultMicrophone.Value,
-                     StringComparison.OrdinalIgnoreCase))
+                 !string.IsNullOrWhiteSpace(AudioSource) &&
+                 !IsMacOSSystemAudioSelected)
         {
-            // Earlier macOS builds offered the physical default microphone.
-            // System audio is now opt-in through an explicitly selected
-            // loopback device, so never silently retain voice capture.
-            AudioSource = FFmpegCaptureDevice.None.Value;
+            // Migrate older default-input and loopback selections to the
+            // direct ScreenCaptureKit system-audio source. This preserves the
+            // user's audio intent without retaining microphone access.
+            AudioSource = FFmpegCaptureDevice.MacOSSystemAudio.Value;
         }
     }
 }

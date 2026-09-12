@@ -541,7 +541,8 @@ public static class ScreenRecordManager
         // leave it intact and convert that completed segment to GIF instead.
         bool lossless = !hasCustomCommands && (encodeAsGif
             || taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding
-            || taskSettings.CaptureSettings.FFmpegOptions.IsAnimatedImage);
+            || taskSettings.CaptureSettings.FFmpegOptions.IsAnimatedImage
+            || taskSettings.CaptureSettings.FFmpegOptions.IsMacOSSystemAudioSelected);
         string recordingBasePath = (lossless || encodeAsGif)
             ? FileHelpers.AppendTextToFileName(Path.ChangeExtension(finalPath, "mp4"), "-lossless")
             : finalPath;
@@ -1104,14 +1105,24 @@ public static class ScreenRecordManager
     {
         FFmpegOptions ffmpeg = taskSettings.CaptureSettings.FFmpegOptions;
         ffmpeg.FixSources();
+        bool hasCustomCommands = ffmpeg.UseCustomCommands && !string.IsNullOrWhiteSpace(ffmpeg.CustomCommands);
+        bool hasFfmpegExecutableOverride = ffmpeg.OverrideCLIPath && !string.IsNullOrWhiteSpace(ffmpeg.CLIPath);
 
         if (OperatingSystem.IsMacOS())
         {
             MacOSPermissions.ThrowIfScreenCaptureAccessDenied();
-            if (outputType == ScreenRecordOutput.FFmpeg &&
-                ffmpeg.IsAudioSourceSelected)
+            if (outputType == ScreenRecordOutput.FFmpeg && !hasCustomCommands && ffmpeg.IsMacOSSystemAudioSelected)
             {
-                MacOSPermissions.ThrowIfMicrophoneAccessDenied();
+                if (!ffmpeg.IsVideoSourceSelected)
+                {
+                    throw new PlatformNotSupportedException(
+                        "Direct macOS system audio capture requires screen video.");
+                }
+                if (!MacOSSystemAudioRecorder.IsAvailable)
+                {
+                    throw new PlatformNotSupportedException(
+                        "Direct system audio requires macOS 13 or later and the packaged SnapX capture component.");
+                }
             }
         }
 
@@ -1143,9 +1154,6 @@ public static class ScreenRecordManager
                 throw new ArgumentOutOfRangeException(nameof(taskSettings), duration, "Fixed recording duration must be finite and positive.");
             }
         }
-
-        bool hasCustomCommands = ffmpeg.UseCustomCommands && !string.IsNullOrWhiteSpace(ffmpeg.CustomCommands);
-        bool hasFfmpegExecutableOverride = ffmpeg.OverrideCLIPath && !string.IsNullOrWhiteSpace(ffmpeg.CLIPath);
 
         if (outputType == ScreenRecordOutput.GIF)
         {

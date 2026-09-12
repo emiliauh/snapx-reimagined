@@ -97,6 +97,7 @@ public class ScreenRecorder : IDisposable
     private Rectangle captureRectangle;
     private ImageCache imgCache;
     private FFmpegCLIManager ffmpeg;
+    private MacOSSystemAudioRecorder? macOSSystemAudioRecorder;
     private int stopRequested;
     private int recordingState;
     private int disposed;
@@ -111,6 +112,7 @@ public class ScreenRecorder : IDisposable
     // the process actually invoked, while everything else about this class
     // (start/stop signaling, output path, disposal) stays the same.
     private bool useWfRecorder;
+    private bool useMacOSSystemAudioRecorder;
     private Process? wfRecorderProcess;
     private int wfRecorderStopSignaled;
     private const int WfRecorderPollIntervalMilliseconds = 100;
@@ -147,9 +149,43 @@ public class ScreenRecorder : IDisposable
                 bool hasCustomCommands = Options.FFmpeg.UseCustomCommands && !string.IsNullOrWhiteSpace(Options.FFmpeg.CustomCommands);
                 bool hasFfmpegExecutableOverride = Options.FFmpeg.OverrideCLIPath &&
                     !string.IsNullOrWhiteSpace(Options.FFmpeg.CLIPath);
+                useMacOSSystemAudioRecorder = !hasCustomCommands && OperatingSystem.IsMacOS() &&
+                    Options.FFmpeg.IsMacOSSystemAudioSelected;
+                if (useMacOSSystemAudioRecorder)
+                {
+                    if (!Options.FFmpeg.IsVideoSourceSelected)
+                    {
+                        throw new InvalidOperationException(
+                            "Direct macOS system audio recording requires a video source.");
+                    }
+
+                    var (screen, crop) = ScreenRecordingOptions.ResolveMacOSCaptureTarget(
+                        CaptureRectangle,
+                        MacOSAPI.GetScreens(),
+                        evenSize: true);
+                    if (!uint.TryParse(screen.Id, out uint displayId))
+                    {
+                        throw new InvalidOperationException("The selected macOS display identifier is invalid.");
+                    }
+
+                    macOSSystemAudioRecorder = new MacOSSystemAudioRecorder(
+                        Options.OutputPath,
+                        displayId,
+                        crop.X,
+                        crop.Y,
+                        crop.Width,
+                        crop.Height,
+                        crop.Width,
+                        crop.Height,
+                        FPS,
+                        Options.DrawCursor,
+                        DurationSeconds,
+                        audioBitrate: (int)Math.Clamp((long)Options.FFmpeg.AAC_Bitrate * 1000, 64_000, 320_000));
+                    DebugHelper.WriteLine("Screen-recording backend selected: ScreenCaptureKit with direct system audio.");
+                }
                 useWfRecorder = !hasCustomCommands && !hasFfmpegExecutableOverride &&
                     OperatingSystem.IsLinux() && LinuxAPI.IsWayland() && IsWfRecorderAvailable();
-                if (!useWfRecorder)
+                if (!useWfRecorder && !useMacOSSystemAudioRecorder)
                 {
                     DebugHelper.WriteLine(
                         hasCustomCommands
@@ -250,9 +286,17 @@ public class ScreenRecorder : IDisposable
 
             if (OutputType == ScreenRecordOutput.FFmpeg)
             {
-                LastRunSucceeded = useWfRecorder
-                    ? RunWfRecorder()
-                    : ffmpeg.Run(Options.GetFFmpegCommands());
+                if (useMacOSSystemAudioRecorder)
+                {
+                    OnRecordingStarted();
+                    LastRunSucceeded = macOSSystemAudioRecorder!.Run();
+                }
+                else
+                {
+                    LastRunSucceeded = useWfRecorder
+                        ? RunWfRecorder()
+                        : ffmpeg.Run(Options.GetFFmpegCommands());
+                }
             }
             else
             {
@@ -754,6 +798,8 @@ public class ScreenRecorder : IDisposable
             ffmpeg.Close();
         }
 
+        macOSSystemAudioRecorder?.RequestStop();
+
         Process? process = wfRecorderProcess;
         if (process != null)
         {
@@ -799,6 +845,7 @@ public class ScreenRecorder : IDisposable
         LastRunSucceeded = false;
         pauseGate.Set();
         ffmpeg?.ForceClose();
+        macOSSystemAudioRecorder?.RequestStop();
         Process? process = wfRecorderProcess;
         if (process is not null)
         {
@@ -940,6 +987,8 @@ public class ScreenRecorder : IDisposable
         {
             ffmpeg.Dispose();
         }
+
+        macOSSystemAudioRecorder?.Dispose();
 
         if (imgCache != null)
         {

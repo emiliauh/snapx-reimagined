@@ -783,43 +783,60 @@ public partial class App : Application
         // dispatcher. This is especially visible for completed recordings,
         // whose preview is an FFmpeg-extracted frame.
         bool nativeWayland = OperatingSystem.IsLinux() && LinuxAPI.IsWayland();
-        Bitmap? thumbnail = !nativeWayland && @event.Image is not null
+        bool nativeMacOS = OperatingSystem.IsMacOS();
+        string title = @event.Title;
+        string message = @event.Message;
+        string? url = @event.Url;
+        string? filePath = @event.FilePath;
+        ToastClickAction clickAction = @event.ClickAction;
+        SixLabors.ImageSharp.Image? retainedClickImage = nativeMacOS ? null : @event.Image;
+        Bitmap? thumbnail = !nativeWayland && !nativeMacOS && @event.Image is not null
             ? SnapX.ConvertImageSharpImgToAvalonia(@event.Image)
             : null;
 
         Dispatcher.UIThread.Post(() =>
         {
-            Action? onClick = @event.ClickAction switch
+            Action? onClick = clickAction switch
             {
-                ToastClickAction.OpenUrl when !string.IsNullOrEmpty(@event.Url) => () => URLHelpers.OpenURL(@event.Url),
-                ToastClickAction.OpenFile when !string.IsNullOrEmpty(@event.FilePath) => () => FileHelpers.OpenFile(@event.FilePath),
-                ToastClickAction.OpenFolder when !string.IsNullOrEmpty(@event.FilePath) => () => FileHelpers.OpenFolderWithFile(@event.FilePath),
-                ToastClickAction.CopyUrl when !string.IsNullOrEmpty(@event.Url) => () =>
-                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(@event.Url)),
-                ToastClickAction.CopyFile when !string.IsNullOrEmpty(@event.FilePath) => () =>
-                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(new[] { @event.FilePath })),
-                ToastClickAction.CopyFilePath when !string.IsNullOrEmpty(@event.FilePath) => () =>
-                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(@event.FilePath)),
-                ToastClickAction.CopyImageToClipboard when @event.Image is not null => () =>
-                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(@event.Image)),
+                ToastClickAction.OpenUrl when !string.IsNullOrEmpty(url) => () => URLHelpers.OpenURL(url),
+                ToastClickAction.OpenFile when !string.IsNullOrEmpty(filePath) => () => FileHelpers.OpenFile(filePath),
+                ToastClickAction.OpenFolder when !string.IsNullOrEmpty(filePath) => () => FileHelpers.OpenFolderWithFile(filePath),
+                ToastClickAction.CopyUrl when !string.IsNullOrEmpty(url) => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(url)),
+                ToastClickAction.CopyFile when !string.IsNullOrEmpty(filePath) => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(new[] { filePath })),
+                ToastClickAction.CopyFilePath when !string.IsNullOrEmpty(filePath) => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(filePath)),
+                ToastClickAction.CopyImageToClipboard when nativeMacOS && !string.IsNullOrEmpty(filePath) => () =>
+                    _ = CopyImageFileToClipboardAsync(filePath),
+                ToastClickAction.CopyImageToClipboard when retainedClickImage is not null => () =>
+                    Core.SnapXL.EventAggregator.Publish(new NeedClipboardCopyEvent(retainedClickImage)),
                 ToastClickAction.CloseNotification => null,
                 _ => null
             };
 
-            if (!OperatingSystem.IsMacOS())
-                SendDesktopNotification(@event.Title, @event.Message);
+            if (nativeMacOS)
+            {
+                SendDesktopNotification(title, message, onClick);
+                return;
+            }
+
+            SendDesktopNotification(title, message);
             if (!nativeWayland)
             {
-                ToastNotificationWindow.ShowToast(thumbnail, @event.Title, @event.Message, onClick);
+                ToastNotificationWindow.ShowToast(thumbnail, title, message, onClick);
             }
         });
     }
 
-    internal static void SendDesktopNotification(string title, string message)
+    internal static void SendDesktopNotification(string title, string message, Action? onClick = null)
     {
         if (OperatingSystem.IsMacOS())
         {
-            ToastNotificationWindow.ShowToast(null, title, message, null);
+            if (!MacOSNotificationService.Send(title, message, onClick))
+            {
+                ToastNotificationWindow.ShowToast(null, title, message, onClick);
+            }
             return;
         }
 
@@ -843,6 +860,22 @@ public partial class App : Application
                 DebugHelper.WriteException(ex, "Failed to send desktop notification");
             }
         });
+    }
+
+    private static async Task CopyImageFileToClipboardAsync(string path)
+    {
+        try
+        {
+            using SixLabors.ImageSharp.Image image = SixLabors.ImageSharp.Image.Load(path);
+            var copyEvent = new NeedClipboardCopyEvent(image, Path.GetFileName(path));
+            Core.SnapXL.EventAggregator.Publish(copyEvent);
+            await copyEvent.Completion;
+        }
+        catch (Exception ex)
+        {
+            DebugHelper.WriteException(ex, "Failed to copy a notification image");
+            SendDesktopNotification("SnapX", "Clipboard copy failed: " + ex.Message);
+        }
     }
 
     private void HandleClipboardCopyEvent(NeedClipboardCopyEvent @event)

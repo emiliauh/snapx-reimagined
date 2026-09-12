@@ -69,7 +69,7 @@ predates the follow-up uploader/OCR fixes.
 | Recording | All three displays produce decodable MP4s. Manager region start → pause → resume → stop → concatenated output passes. Final packaged GUI also starts/stops recording with bundled FFmpeg and produces a decodable MP4. |
 | Hotkeys | Native registration, duplicate rejection, unregister/re-register, and GUI Apply pass. Follow-up: user physically pressed Control+Shift+Command+1, confirmed the region overlay opened, then cancelled with Escape; application log confirms dispatch and Escape. |
 | Clipboard | Follow-up: 128 seeded Unicode/escaping text round-trips and PNG pixel/transparency round-trip pass. Original clipboard representations restored. |
-| Microphone | Follow-up: native packaged GUI recorded 9.09 seconds using MacBook Pro Microphone; AAC stereo 48 kHz track decodes with non-silent samples (peak -27.1 dB). |
+| Legacy microphone probe | Before direct system audio was added, a packaged GUI microphone probe produced decodable AAC. Microphone capture is no longer exposed or requested by SnapX. |
 | OCR | JIT and Native AOT ARM64 probes recognize synthetic two-line text exactly, return no text for a blank image, recognize file input and preserve caller-owned images. Models download locally; test images are not uploaded. |
 | Authenticated upload | Supplied Porkpaste SXCU imported through the actual native JSON import path and uploaded a synthetic 16×16 PNG successfully. No configuration secrets copied into the repository or logs. Seven Imgur/Dropbox loopback integration cases also pass with JSON reflection disabled and under Native AOT. |
 | Database | Captured records and dynamic columns render in the repaired table. Follow-up: repaired popup Run button executes `SELECT 1 AS Probe` and displays 1. |
@@ -80,7 +80,7 @@ predates the follow-up uploader/OCR fixes.
 | Instance locking | JIT and Native AOT probes verify ownership, contention and release with `flock`. |
 
 Evidence summaries are in `artifacts/macos-validation`. Screen captures and
-microphone recordings stayed local; upload actions were disabled in capture test
+legacy audio recordings stayed local; upload actions were disabled in capture test
 profiles. Only a generated synthetic test image was sent to the user-specified
 Porkpaste upload service.
 
@@ -178,10 +178,22 @@ installed loopback device and did not grant the new ad-hoc identity Screen
 Recording access, so real audio samples and menu-bar hit testing still require
 manual validation on an approved installation.
 
+The alpha.9 follow-up replaces loopback/input-device discovery with direct
+ScreenCaptureKit playback-audio capture. Video and system audio share one
+SCStream timestamp domain and are written to an H.264/AAC intermediate before
+FFmpeg applies the selected final codec. The microphone permission UI, usage
+description, entitlement, and AVFoundation input enumeration were removed.
+SnapX explicitly disables microphone capture on macOS 15 and never requests
+microphone access. Native notifications now deliver completed screenshot and
+recording results through Notification Center while SnapX runs headlessly.
+The native bridge and managed lifecycle probes pass; non-silent playback-audio
+and notification delivery still require packaged validation under the installed
+app's approved identity.
+
 An installed-upgrade test exposed a separate signing problem: TCC rejected a
 previously stored code requirement after the ad-hoc executable changed. Local
-and CI builds now use a separate application name and bundle ID, and the tested
-local copy worked after the user approved that identity. Ad-hoc rebuilds still
+and CI builds use a separate bundle ID while retaining the visible `SnapX`
+name, and the tested local copy worked after the user approved that identity. Ad-hoc rebuilds still
 need fresh approval. A stable Developer ID Application signature is needed for
 dependable identity across distributed updates. A persistent self-signed Code
 Signing identity is also a viable local-only strategy that does not need an
