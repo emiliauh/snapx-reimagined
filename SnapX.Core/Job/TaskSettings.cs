@@ -37,7 +37,9 @@ public class TaskSettings
     public HotkeyType Job { get; set; } = HotkeyType.None;
 
     public bool UseDefaultAfterCaptureJob { get; set; } = true;
-    public AfterCaptureTasks AfterCaptureJob { get; set; } = AfterCaptureTasks.CopyImageToClipboard | AfterCaptureTasks.SaveImageToFile | AfterCaptureTasks.UploadImageToHost;
+    // Captures stay local until the user explicitly enables an uploader.
+    public AfterCaptureTasks AfterCaptureJob { get; set; } =
+        AfterCaptureTasks.CopyImageToClipboard | AfterCaptureTasks.SaveImageToFile;
 
     public bool UseDefaultAfterUploadJob { get; set; } = true;
     public AfterUploadTasks AfterUploadJob { get; set; } = AfterUploadTasks.CopyURLToClipboard;

@@ -20,7 +20,10 @@ public class ProgressableStreamContent : HttpContent
 
     protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
     {
-        await using var sourceStream = await _innerContent.ReadAsStreamAsync().ConfigureAwait(false);
+        // The caller owns upload streams and may rewind them for a retry.
+        // Disposing the stream returned by StreamContent here closed the
+        // Worker's source after the first request.
+        var sourceStream = await _innerContent.ReadAsStreamAsync().ConfigureAwait(false);
 
         var buffer = ArrayPool<byte>.Shared.Rent(32768);
 

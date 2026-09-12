@@ -21,6 +21,17 @@ using SnapX.Core.Utils;
 if (args.Contains("--mac-recording-probe", StringComparer.Ordinal))
     return await MacOSRecordingChecks.Probe();
 
+if (args.Contains("--macos-permission-probe", StringComparer.Ordinal))
+    return MacOSRecordingChecks.PermissionProbe();
+
+if (args.Contains("--safe-after-capture-default-probe", StringComparer.Ordinal))
+{
+    int probeChecks = 0;
+    VerifyLegacyAutomaticUploadMigration(ref probeChecks);
+    Console.WriteLine($"Safe after-capture default migration passed: {probeChecks:N0} checks.");
+    return 0;
+}
+
 if (args.Contains("--macos-hotkey-probe", StringComparer.Ordinal))
 {
     if (!OperatingSystem.IsMacOS()) return 2;
@@ -71,6 +82,7 @@ try
 {
     VerifyLazySecretStore(ref checks);
     VerifyPortablePathIsolation(ref checks);
+    VerifyLegacyAutomaticUploadMigration(ref checks);
     FuzzRegionNormalization(random, ref checks);
     MacOSRecordingChecks.Fuzz(random, ref checks);
     checks += await VerifyRegionSelectionLifecycleAsync();
@@ -145,6 +157,32 @@ static void VerifyPortablePathIsolation(ref int checks)
         SnapXL.CustomPersonalPath = previousPersonal;
         config.SetValue(null, previousConfig);
     }
+}
+
+static void VerifyLegacyAutomaticUploadMigration(ref int checks)
+{
+    const AfterCaptureTasks legacyDefault = AfterCaptureTasks.CopyImageToClipboard |
+        AfterCaptureTasks.SaveImageToFile |
+        AfterCaptureTasks.UploadImageToHost;
+    const AfterCaptureTasks safeDefault = AfterCaptureTasks.CopyImageToClipboard |
+        AfterCaptureTasks.SaveImageToFile;
+
+    var legacyConfig = new ApplicationConfig();
+    legacyConfig.DefaultTaskSettings.AfterCaptureJob = legacyDefault;
+    Check(legacyConfig.MigrateLegacyAutomaticUploadDefault(),
+        "Legacy automatic upload default was not migrated", ref checks);
+    Check(legacyConfig.DefaultTaskSettings.AfterCaptureJob == safeDefault,
+        "Legacy automatic upload migration removed local capture actions", ref checks);
+    Check(!legacyConfig.MigrateLegacyAutomaticUploadDefault(),
+        "Legacy automatic upload migration was not one-time", ref checks);
+
+    var customizedConfig = new ApplicationConfig();
+    customizedConfig.DefaultTaskSettings.AfterCaptureJob = AfterCaptureTasks.SaveImageToFile |
+        AfterCaptureTasks.UploadImageToHost;
+    Check(!customizedConfig.MigrateLegacyAutomaticUploadDefault(),
+        "Automatic upload migration changed a customized task set", ref checks);
+    Check(customizedConfig.DefaultTaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.UploadImageToHost),
+        "Automatic upload migration disabled an explicitly customized uploader", ref checks);
 }
 
 static async Task<int> RunPortalProbe()

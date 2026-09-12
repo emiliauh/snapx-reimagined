@@ -41,6 +41,8 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
     public bool ShowTray { get; set; } = true;
     public bool SilentRun { get; set; } = false;
     public bool MacOSLoginPromptDismissed { get; set; }
+    public bool MacOSPermissionSetupDismissed { get; set; }
+    public bool LegacyAutomaticUploadDefaultMigrated { get; set; }
     public bool TrayIconProgressEnabled { get; set; } = true;
     public bool TaskbarProgressEnabled { get; set; } = true;
     public bool UseWhiteShareXIcon { get; set; } = false;
@@ -236,4 +238,22 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
     public ContentAlignment DropAlignment { get; set; }
 
     public string? SQLitePath { get; set; }
+
+    public bool MigrateLegacyAutomaticUploadDefault()
+    {
+        if (LegacyAutomaticUploadDefaultMigrated)
+            return false;
+
+        LegacyAutomaticUploadDefaultMigrated = true;
+
+        const AfterCaptureTasks legacyDefault = AfterCaptureTasks.CopyImageToClipboard |
+            AfterCaptureTasks.SaveImageToFile |
+            AfterCaptureTasks.UploadImageToHost;
+
+        if (DefaultTaskSettings.AfterCaptureJob != legacyDefault)
+            return false;
+
+        DefaultTaskSettings.AfterCaptureJob &= ~AfterCaptureTasks.UploadImageToHost;
+        return true;
+    }
 }

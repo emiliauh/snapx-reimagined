@@ -111,7 +111,7 @@ dotnet run --project tests/SnapX.NativeMessaging.Fuzz
 dotnet run --project tests/SnapX.MacOS.Smoke
 dotnet run --project tests/SnapX.Core.Fuzz -- --macos-hotkey-probe
 SNAPX_TEST_FFMPEG=/path/to/ffmpeg dotnet run --project tests/SnapX.Core.Fuzz -- --mac-recording-probe
-bash packaging/macos-bundle.sh Output/snapx-ui Output/SnapX.app
+SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui Output/SnapX.app
 ```
 
 Bundle creation requires a new output path. The standard source build expects
@@ -147,3 +147,29 @@ ad-hoc signed, and not notarized.
 dotnet run --project tests/SnapX.MacOS.LoginItems -p:DisableGitVersionTask=true -- --native-status
 bash packaging/macos-dmg.sh Output/SnapX.app Output/SnapX-0.5.0-alpha.5-macOS-arm64.dmg
 ```
+
+## First-launch privacy setup and signing identity
+
+The alpha.7 permission work adds native Core Graphics screen authorization and
+AVFoundation microphone authorization requests, a sequential first-launch
+checklist, matching System Settings links, and capture/recording permission
+guards. Both statuses are read from macOS; Finish setup stays disabled until
+both are authorized. A failed permission check routes to setup before capture.
+The installed Native AOT app correctly showed denied screen access and
+undetermined microphone access, with the second request and Finish disabled.
+After the user approved both entries, an installed app capture completed and
+stayed local. The focused permission probe passed seven native status, routing,
+guard, and block-callback checks without changing host permissions. A broader
+fuzz run passed 254,219 checks. The final Native AOT executable also reported a
+denied headless capture without trying to parent a dialog to a missing window.
+
+An installed-upgrade test exposed a separate signing problem: TCC rejected a
+previously stored code requirement after the ad-hoc executable changed. Local
+and CI builds now use a separate application name and bundle ID, and the tested
+local copy worked after the user approved that identity. Ad-hoc rebuilds still
+need fresh approval. A stable Developer ID Application signature is needed for
+dependable identity across distributed updates. A persistent self-signed Code
+Signing identity is also a viable local-only strategy that does not need an
+Apple Developer account, but it must be verified on the target Mac before
+claiming permission retention. The app does not reset or edit TCC permissions
+itself.

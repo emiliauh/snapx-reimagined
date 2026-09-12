@@ -67,6 +67,10 @@ public partial class App : Application
     // SetBitmapAsync returns. Keep the current bitmap alive until another
     // clipboard write replaces it (or the application exits).
     private static Bitmap? _clipboardBitmap;
+    // A tray capture can finish after the user has closed the main window.
+    // Keep a non-activating top-level alive so Avalonia still has a native
+    // clipboard owner without attempting to re-show that closed window.
+    private static Window? _clipboardWindow;
     // wl-copy stays alive to own a Wayland selection. Keep the current owner
     // process handle so it cannot be collected while SnapX is running; the
     // compositor releases the previous owner when a later copy replaces it.
@@ -384,6 +388,7 @@ public partial class App : Application
         _signalRegistrations.Clear();
         StopWaylandClipboardProcess();
         ReplaceClipboardBitmap(null);
+        _clipboardWindow = null;
         MyMainWindow = null;
     }
 
@@ -905,6 +910,22 @@ public partial class App : Application
     {
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
+            if (OperatingSystem.IsMacOS() && @event.Exception.GetBaseException() is MacOSPermissionException)
+            {
+                // CLI and silent launches process their requested job before a
+                // top-level window exists. A ContentDialog cannot be shown in
+                // that state; the original exception is already logged and a
+                // running tray instance can still surface a native notice.
+                if (MyMainWindow is null || !MyMainWindow.IsVisible)
+                {
+                    SendDesktopNotification("SnapX", @event.Exception.Message);
+                    return;
+                }
+
+                await MacOSPermissionSetup.ShowAsync(MyMainWindow);
+                return;
+            }
+
             // FAContentDialog is implemented with Avalonia's popup/overlay
             // machinery. On native Wayland that creates the transient EGL
             // WSI surface which can fail while a capture or recording is
@@ -983,49 +1004,36 @@ public partial class App : Application
         return await GetOrCreateClipboardWindowAsync();
     }
 
-    private static async Task<IClipboard> GetOrCreateClipboardWindowAsync()
+    private static Task<IClipboard> GetOrCreateClipboardWindowAsync()
     {
         lock (_windowLock)
         {
-            if (!MyMainWindow?.IsVisible ?? false)
+            if (_clipboardWindow is null)
             {
                 DebugHelper.WriteLine("Creating persistent clipboard window");
-                var openedTcs = new TaskCompletionSource<bool>();
-
-                MyMainWindow.Opened += (s, e) =>
+                var window = new Window
                 {
-                    DebugHelper.WriteLine($"{nameof(MyMainWindow)}: opened");
-                    openedTcs.TrySetResult(true);
+                    Width = 1,
+                    Height = 1,
+                    Opacity = 0,
+                    ShowActivated = false,
+                    ShowInTaskbar = false,
+                    CanResize = false,
+                    SystemDecorations = WindowDecorations.None,
+                    Position = new PixelPoint(-10_000, -10_000)
                 };
-
-                Task.Run(async () =>
+                window.Closed += (_, _) =>
                 {
-                    try
+                    lock (_windowLock)
                     {
-                        var openedTask = openedTcs.Task;
-                        var timeoutTask = Task.Delay(500);
-
-                        var completedTask = await Task.WhenAny(openedTask, timeoutTask);
-
-                        if (completedTask == openedTask)
-                        {
-                            DebugHelper.WriteLine("Window opened successfully");
-                        }
-                        else
-                        {
-                            DebugHelper.WriteLine("Window opened timed out, but continuing");
-                            openedTcs.TrySetResult(false);
-                        }
+                        if (ReferenceEquals(_clipboardWindow, window)) _clipboardWindow = null;
                     }
-                    catch (Exception ex)
-                    {
-                        DebugHelper.WriteLine($"Error waiting for window open: {ex.Message}");
-                    }
-                });
-                MyMainWindow.Show();
+                };
+                window.Show();
+                _clipboardWindow = window;
             }
 
-            return MyMainWindow.Clipboard;
+            return Task.FromResult(_clipboardWindow.Clipboard);
         }
     }
     CancellationTokenSource? _pollingCts = null;
@@ -1162,6 +1170,10 @@ public partial class App : Application
                     {
                         SnapX.start(desktop.Args ?? []);
                         _coreStarted = true;
+                        // CLI capture can publish permission failures while command-line
+                        // arguments are being processed, so subscribe before executing
+                        // them rather than dropping the first error event.
+                        ListenForEvents();
                         var CLIManager = SnapX.GetCLIManager();
                         CLIManager.UseCommandLineArgs().GetAwaiter().GetResult();
                     }
@@ -1174,7 +1186,6 @@ public partial class App : Application
 
                     if (errorStarting)
                         return;
-                    ListenForEvents();
                     DesktopNotifications ??= new DesktopNotificationService();
                     DebugHelper.WriteLine("Internal Startup time: {0} ms", SnapX.getStartupTime());
 
@@ -1306,13 +1317,21 @@ public partial class App : Application
                                     {
                                         Task.Run(async () =>
                                         {
-                                            var capturedImage = await Methods.CaptureWindow(window).ConfigureAwait(false);
-                                            if (capturedImage != null)
+                                            try
                                             {
-                                                UploadManager.RunImageTask(
-                                                    capturedImage,
-                                                    TaskSettings.GetDefaultTaskSettings()
-                                                );
+                                                var capturedImage = await Methods.CaptureWindow(window).ConfigureAwait(false);
+                                                if (capturedImage != null)
+                                                {
+                                                    UploadManager.RunImageTask(
+                                                        capturedImage,
+                                                        TaskSettings.GetDefaultTaskSettings()
+                                                    );
+                                                }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                DebugHelper.WriteException(ex, "Window capture failed");
+                                                SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Window capture failed", true));
                                             }
                                         });
                                     };
@@ -1360,6 +1379,7 @@ public partial class App : Application
                                                 catch (Exception ex)
                                                 {
                                                     DebugHelper.WriteException(ex, "Monitor capture failed");
+                                                    SnapXL.EventAggregator.Publish(new ErrorMessageEvent(ex, "Monitor capture failed", true));
                                                 }
                                             });
                                         };
@@ -1614,11 +1634,11 @@ public partial class App : Application
 
                     MyMainWindow = Window;
                     desktop.MainWindow = Window;
-                    Dispatcher.UIThread.Post(() => _ = MacOSStartupPrompt.OfferOnceAsync(Window));
-                    // MyMainWindow.Closed += (_, _) =>
-                    // {
-                    //     MyMainWindow = null;
-                    // };
+                    Window.Closed += (_, _) =>
+                    {
+                        if (ReferenceEquals(MyMainWindow, Window)) MyMainWindow = null;
+                    };
+                    Dispatcher.UIThread.Post(() => _ = MacOSPermissionSetup.OnFirstLaunchAsync(Window));
                     break;
                 }
             case ISingleViewApplicationLifetime singleView when SnapX.isSilent():
@@ -1805,6 +1825,14 @@ public partial class App : Application
             }
 
             MyMainWindow = mainWindow;
+            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                desktop.MainWindow = mainWindow;
+            }
+            mainWindow.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(MyMainWindow, mainWindow)) MyMainWindow = null;
+            };
             MyMainWindow.Show();
         }
 
@@ -1812,10 +1840,6 @@ public partial class App : Application
             MyMainWindow?.Show();
         MyMainWindow?.Focus();
         MyMainWindow?.Activate();
-        if (MyMainWindow != null)
-        {
-            // MyMainWindow.Closed += (_, _) => MyMainWindow = null;
-        }
     }
 
     [RelayCommand]

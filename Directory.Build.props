@@ -105,9 +105,6 @@
     <TargetFreeBSD>true</TargetFreeBSD>
     <DefineConstants>$(DefineConstants);FREEBSD</DefineConstants>
   </PropertyGroup>
-  <ItemGroup Condition="'$(TargetMacOS)' == 'true' and ( '$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' )">
-    <LinkerArg Include="-Wl,-ld_classic" />
-  </ItemGroup>
   <PropertyGroup Condition="'$(TargetWindows)' == 'true' and ( '$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' )">
     <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
     <UseRIDGraph>true</UseRIDGraph>

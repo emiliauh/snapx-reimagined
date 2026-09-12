@@ -1040,6 +1040,16 @@ public static class ScreenRecordManager
         ScreenRecordStartMethod startMethod,
         TaskSettings taskSettings)
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            MacOSPermissions.ThrowIfScreenCaptureAccessDenied();
+            if (outputType == ScreenRecordOutput.FFmpeg &&
+                taskSettings.CaptureSettings.FFmpegOptions.IsAudioSourceSelected)
+            {
+                MacOSPermissions.ThrowIfMicrophoneAccessDenied();
+            }
+        }
+
         if (startMethod == ScreenRecordStartMethod.Region && !RegionCaptureTasks.IsRegionSelectorAvailable)
         {
             throw new InvalidOperationException(

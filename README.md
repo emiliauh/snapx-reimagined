@@ -60,7 +60,7 @@ Run SnapX:
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/emiliauh/snapx-reimagined/releases), then drag SnapX into Applications. Requires macOS 14 or later. The published DMG includes FFmpeg. This prerelease is ad-hoc signed and is not notarized.
 
-On first installed launch, choose **Enable launch at login** or **Not now**. macOS manages any required approval. You can disable startup in SnapX's Application settings or in **System Settings > General > Login Items & Extensions > Open at Login**.
+On first launch, grant Screen Recording and Microphone access through the permission checklist. It links to each System Settings panel and enables **Finish setup** after macOS confirms both permissions. Reopen SnapX if macOS requests a restart. Then choose **Enable launch at login** or **Not now**. macOS manages any required approval. You can disable startup in SnapX's Application settings or in **System Settings > General > Login Items & Extensions > Open at Login**.
 
 See [packaging instructions](packaging/MACOS.md) and [validation results](MACOS-VALIDATION.md).
 
@@ -74,7 +74,7 @@ dotnet build SnapX.slnx --no-incremental -m:1
 dotnet run --project build --no-restore -- build --no-color
 ```
 
-Native AOT linking for macOS must run on macOS. GitHub CI builds and signs an application bundle.
+Native AOT linking for macOS must run on macOS. GitHub CI builds an ad-hoc signed development bundle. Distributed updates should use a stable Developer ID Application certificate; ad-hoc rebuilds can invalidate saved macOS permissions. See [signing instructions](packaging/MACOS.md).
 
 Run the local output:
 
@@ -85,9 +85,14 @@ Run the local output:
 To launch as a macOS application:
 
 ```sh
-bash packaging/macos-bundle.sh Output/snapx-ui SnapX.app
-open SnapX.app
+SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui "SnapX Local.app"
+open "SnapX Local.app"
 ```
+
+Local and CI bundles use the distinct `com.emiliauh.snapx.local` identity by
+default, so they do not collide with an installed production copy. A stable
+local code-signing certificate can preserve one machine's permission identity
+across rebuilds without an Apple Developer account; see the packaging guide.
 
 Install FFmpeg for screen recording and allow capture in macOS Privacy &
 Security settings. See the [build guide](.github/BUILDING.md) for native tests

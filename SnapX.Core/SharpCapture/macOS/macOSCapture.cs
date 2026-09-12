@@ -60,6 +60,8 @@ public class macOSCapture : BaseCapture
 
     private static async Task<Image?> CaptureNative(params string[] arguments)
     {
+        MacOSPermissions.ThrowIfScreenCaptureAccessDenied();
+
         // The Rust fullscreen compositor assumes a 1:1 point/pixel ratio and panics on Retina.
         // Apple's capture utility supports signed global coordinates and native backing pixels.
         string path = Path.Combine(Path.GetTempPath(), $"snapx-capture-{Guid.NewGuid():N}.png");

@@ -24,6 +24,7 @@
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsApplicationPage}">
                 <StackPanel Spacing="10">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Application" />
+                    <views:MacOSPermissionsView />
                     <views:MacOSStartupSettingsView />
                     <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="24" RowSpacing="8">
                         <CheckBox Content="Show tray icon" IsChecked="{Binding ShowTray}" />

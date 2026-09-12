@@ -69,13 +69,16 @@ After publishing with `./build.sh --configuration Release`, create a locally
 signed app bundle and launch it with Finder/Launch Services:
 
 ```zsh
-bash packaging/macos-bundle.sh Output/snapx-ui SnapX.app
-open SnapX.app
+SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui "SnapX Local.app"
+open "SnapX Local.app"
 ```
 
 The bundle script requires a new output path and preserves all published native
-libraries. Its ad-hoc signature is suitable for local testing; distribution to
-other Macs requires Developer ID signing and notarization. Screen capture may
+libraries. Local builds use a separate bundle identity and display name. Their
+ad-hoc signature is suitable for one immutable test build; rebuilding changes
+its TCC identity. A long-lived local Code Signing certificate can preserve the
+identity on one Mac without an Apple Developer account. Distribution to other
+Macs requires Developer ID signing and notarization. Screen capture may
 require enabling SnapX in System Settings → Privacy & Security → Screen &
 System Audio Recording and restarting the app.
 

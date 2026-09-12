@@ -36,6 +36,9 @@ internal static class MacOSRecordingChecks
         }
         if (OperatingSystem.IsMacOS())
         {
+            VerifyPermissions(ref checks);
+            MacOSPermissionStatus screenStatus = MacOSPermissions.GetScreenCaptureStatus();
+
             string executableFixture = Path.GetTempFileName();
             try
             {
@@ -44,11 +47,89 @@ internal static class MacOSRecordingChecks
                 {
                     OverrideCLIPath = true, CLIPath = executableFixture, UseCustomCommands = false
                 };
-                typeof(ScreenRecordManager).GetMethod("ValidateStart", BindingFlags.NonPublic | BindingFlags.Static)!
-                    .Invoke(null, [ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.CustomRegion, settings]);
+                try
+                {
+                    typeof(ScreenRecordManager).GetMethod("ValidateStart", BindingFlags.NonPublic | BindingFlags.Static)!
+                        .Invoke(null, [ScreenRecordOutput.FFmpeg, ScreenRecordStartMethod.CustomRegion, settings]);
+                    if (screenStatus != MacOSPermissionStatus.Authorized)
+                        throw new InvalidOperationException("macOS recording validation ignored denied screen access.");
+                }
+                catch (TargetInvocationException ex) when (
+                    screenStatus != MacOSPermissionStatus.Authorized &&
+                    ex.InnerException is MacOSPermissionException
+                    {
+                        Permission: MacOSPermissionKind.ScreenRecording
+                    })
+                {
+                    // Expected on a host that has not granted this test process Screen Recording access.
+                }
                 checks++;
             }
             finally { File.Delete(executableFixture); }
+        }
+    }
+
+    public static int PermissionProbe()
+    {
+        if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("Requires macOS.");
+        int checks = 0;
+        VerifyPermissions(ref checks);
+        Console.WriteLine($"macOS permission status, settings routing, guards, and native callback ABI passed: {checks} checks.");
+        return 0;
+    }
+
+    private static void VerifyPermissions(ref int checks)
+    {
+        MacOSPermissionStatus screenStatus = MacOSPermissions.GetScreenCaptureStatus();
+        MacOSPermissionStatus microphoneStatus = MacOSPermissions.GetMicrophoneStatus();
+        if (screenStatus is not (MacOSPermissionStatus.Authorized or MacOSPermissionStatus.Denied) ||
+            microphoneStatus is < MacOSPermissionStatus.NotDetermined or > MacOSPermissionStatus.Authorized)
+            throw new InvalidOperationException("A native macOS permission status was outside its documented range.");
+        if (MacOSPermissions.HasScreenCaptureAccess() != (screenStatus == MacOSPermissionStatus.Authorized))
+            throw new InvalidOperationException("The macOS screen permission status and convenience check disagree.");
+        VerifyPermissionGuard(
+            MacOSPermissionKind.ScreenRecording,
+            screenStatus,
+            MacOSPermissions.ThrowIfScreenCaptureAccessDenied);
+        VerifyPermissionGuard(
+            MacOSPermissionKind.Microphone,
+            microphoneStatus,
+            MacOSPermissions.ThrowIfMicrophoneAccessDenied);
+        var permissionError = new MacOSPermissionException(MacOSPermissionKind.ScreenRecording);
+        if (permissionError.Permission != MacOSPermissionKind.ScreenRecording ||
+            permissionError.SettingsUrl != MacOSPermissions.ScreenRecordingSettingsUrl)
+            throw new InvalidOperationException("The screen permission error does not route to Screen Recording settings.");
+        var callbackProbe = typeof(MacOSPermissions).GetMethod(
+            "RunMicrophoneCallbackInteropProbe",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new MissingMethodException("The NativeAOT microphone callback probe is unavailable.");
+        foreach (bool granted in new[] { false, true })
+        {
+            var result = (Task<bool>)callbackProbe.Invoke(null, [granted])!;
+            if (result.GetAwaiter().GetResult() != granted)
+                throw new InvalidOperationException("The native microphone callback changed its BOOL result.");
+            checks++;
+        }
+        checks += 5;
+    }
+
+    private static void VerifyPermissionGuard(
+        MacOSPermissionKind permission,
+        MacOSPermissionStatus status,
+        Action guard)
+    {
+        try
+        {
+            guard();
+            if (status != MacOSPermissionStatus.Authorized)
+                throw new InvalidOperationException($"The {permission} guard accepted {status} access.");
+        }
+        catch (MacOSPermissionException ex) when (
+            status != MacOSPermissionStatus.Authorized &&
+            ex.Permission == permission &&
+            ex.SettingsUrl == MacOSPermissions.GetSettingsUrl(permission))
+        {
+            // Expected: the guard includes the exact permission and settings route.
         }
     }
 

@@ -1,13 +1,17 @@
 Install SnapX
 =============
 
-1. Drag SnapX.app onto the Applications shortcut in this window.
+1. Drag the .app beside this file onto the Applications shortcut in this window.
    For a per-user installation, you can instead copy it to ~/Applications.
 2. Open the installed copy of SnapX from Applications.
-3. Follow macOS prompts for screen and system audio recording or microphone
-   access when you use features that need them.
+3. Complete the permission setup: Grant screen access first, then Grant
+   microphone access. SnapX requests its own entries in System Settings.
+   Approve SnapX under Privacy & Security in each matching permission panel.
+4. Each step stays incomplete until macOS reports access granted. If macOS
+   requires a restart, quit and reopen SnapX to continue. Finish setup becomes
+   available after both permissions are granted.
 
-On first launch from /Applications or ~/Applications, SnapX offers “Enable
+After permission setup in /Applications or ~/Applications, SnapX offers “Enable
 launch at login” and “Not now.” Nothing is enabled unless you choose Enable. If
 macOS needs approval, SnapX opens the Login Items panel in System Settings.
 

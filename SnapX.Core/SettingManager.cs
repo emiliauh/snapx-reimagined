@@ -247,7 +247,16 @@ public static class SettingManager
     [DapperAot]
     private static void ApplicationConfigBackwardCompatibilityTasks()
     {
-        if (File.Exists(SnapXL.ApplicationConfigPathOld)) Settings = MigrateJsonConfig<ApplicationConfig>(SnapXL.ApplicationConfigPathOld);
+        if (File.Exists(SnapXL.ApplicationConfigPathOld))
+        {
+            Settings = MigrateJsonConfig<ApplicationConfig>(SnapXL.ApplicationConfigPathOld);
+            DefaultTaskSettings = Settings.DefaultTaskSettings;
+        }
+
+        if (Settings.MigrateLegacyAutomaticUploadDefault())
+        {
+            DebugHelper.WriteLine("Removed the legacy automatic image upload from the default after-capture tasks.");
+        }
 
         var assembly = Assembly.GetExecutingAssembly();
 

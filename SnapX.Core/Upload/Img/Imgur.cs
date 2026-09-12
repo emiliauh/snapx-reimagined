@@ -266,7 +266,19 @@ public sealed class Imgur : ImageUploader, IOAuth2
 
         if (string.IsNullOrEmpty(result.Response)) return result;
 
-        var imgurResponse = JsonSerializer.Deserialize<ImgurResponse>(result.Response, ImgurSourceGenerationContext.Default.ImgurResponse);
+        ImgurResponse? imgurResponse;
+        try
+        {
+            imgurResponse = JsonSerializer.Deserialize<ImgurResponse>(
+                result.Response,
+                ImgurSourceGenerationContext.Default.ImgurResponse);
+        }
+        catch (JsonException)
+        {
+            result.IsSuccess = false;
+            Errors.AddFirst("Imgur upload failed: the server returned an invalid response.");
+            return result;
+        }
 
         if (imgurResponse?.success != true || imgurResponse.status != 200)
             return HandleUploadError(imgurResponse, stream, fileName, refreshTokenOnError, initialPosition);
@@ -311,8 +323,14 @@ public sealed class Imgur : ImageUploader, IOAuth2
         return $"https://i.imgur.com/{imageData.id}{thumbnail}.jpg";
     }
 
-    private UploadResult HandleUploadError(ImgurResponse imgurResponse, Stream stream, string? fileName, bool refreshTokenOnError, long initialPosition)
+    private UploadResult HandleUploadError(ImgurResponse? imgurResponse, Stream stream, string? fileName, bool refreshTokenOnError, long initialPosition)
     {
+        if (imgurResponse is null)
+        {
+            Errors.AddFirst("Imgur upload failed: the server returned an empty response.");
+            return new UploadResult();
+        }
+
         var errorData = ParseError(imgurResponse);
 
         if (errorData != null && UploadMethod == AccountType.User && refreshTokenOnError &&
@@ -335,7 +353,7 @@ public sealed class Imgur : ImageUploader, IOAuth2
 
     private void HandleErrors(ImgurResponse response)
     {
-        ImgurErrorData errorData = ParseError(response);
+        ImgurErrorData? errorData = ParseError(response);
 
         if (errorData != null)
         {
@@ -343,11 +361,13 @@ public sealed class Imgur : ImageUploader, IOAuth2
         }
     }
 
-    private ImgurErrorData ParseError(ImgurResponse response)
+    private ImgurErrorData? ParseError(ImgurResponse response)
     {
-        ImgurErrorData errorData = JsonSerializer.Deserialize<ImgurErrorData>(response.data.ToString(), ImgurSourceGenerationContext.Default.ImgurErrorData);
+        if (response.data is null) return null;
 
-        return errorData;
+        return JsonSerializer.Deserialize<ImgurErrorData>(
+            response.data.ToString(),
+            ImgurSourceGenerationContext.Default.ImgurErrorData);
     }
 }
 internal class ImgurResponse
@@ -418,4 +438,3 @@ public class ImgurAlbumData
     public int images_count { get; set; }
     public ImgurImageData[] images { get; set; }
 }
-

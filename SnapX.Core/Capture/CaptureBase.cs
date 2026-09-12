@@ -124,6 +124,7 @@ public abstract class CaptureBase
 
         try
         {
+            MacOSPermissions.ThrowIfScreenCaptureAccessDenied();
             AllowAnnotation = true;
             metadata = Execute(taskSettings);
         }

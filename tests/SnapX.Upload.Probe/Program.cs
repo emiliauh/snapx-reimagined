@@ -3,11 +3,14 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
+using SnapX.Core;
 using SnapX.Core.Upload;
 using SnapX.Core.Upload.Img;
 using SnapX.Core.Upload.File;
 using SnapX.Core.Upload.OAuth;
+using SnapX.Core.Job;
 using Factory = SnapX.Core.Utils.Miscellaneous.HttpClientFactory;
+using SnapX.Core.Utils.Miscellaneous;
 
 if (args.Length == 2 && args[0] == "--live-sxcu") return LiveUploaderProbe.Run(args[1]);
 return await Probe.Run();
@@ -20,11 +23,24 @@ static class Probe
         var field = typeof(Factory).GetField("_lazyClient", BindingFlags.NonPublic | BindingFlags.Static)!;
         var previous = field.GetValue(null);
         using var server = new LocalServer();
-        using var client = new HttpClient(new LocalTransport(server.Origin)) { Timeout = TimeSpan.FromSeconds(5) };
+        using var client = new HttpClient(new ModernProgressHandler(new LocalTransport(server.Origin)))
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        };
         field.SetValue(null, new Lazy<HttpClient>(() => client));
         int checks = 0, failures = 0;
         try
         {
+            RunCase("Fresh captures stay local by default", () =>
+            {
+                var tasks = new TaskSettings().AfterCaptureJob;
+                Require(tasks.HasFlag(AfterCaptureTasks.CopyImageToClipboard),
+                    "Fresh capture did not copy to the clipboard");
+                Require(tasks.HasFlag(AfterCaptureTasks.SaveImageToFile),
+                    "Fresh capture did not save locally");
+                Require(!tasks.HasFlag(AfterCaptureTasks.UploadImageToHost),
+                    "Fresh capture silently enabled upload");
+            });
             RunCase("Imgur authenticated multipart upload", () =>
             {
                 server.Reply("/3/upload", request =>
@@ -58,6 +74,17 @@ static class Probe
                 var uploader = new Imgur(Auth()) { UploadMethod = AccountType.User };
                 var result = uploader.Upload(stream, "fixture.png");
                 Require(result?.IsSuccess != true && uploader.Errors.Count > 0, "Imgur failure was not reported");
+                Require(stream.CanRead, "Failed upload closed the caller-owned stream");
+            });
+            RunCase("Imgur non-JSON failure is contained", () =>
+            {
+                server.Reply("/3/upload", request => (503, "<html>temporarily unavailable</html>"));
+                using var stream = new MemoryStream([1,2,3]);
+                var uploader = new Imgur(Auth()) { UploadMethod = AccountType.User };
+                var result = uploader.Upload(stream, "fixture.png");
+                Require(result?.IsSuccess != true && uploader.Errors.Count > 0,
+                    "Imgur invalid response was not reported");
+                Require(stream.CanRead, "Invalid response closed the caller-owned stream");
             });
             RunCase("Imgur expired-token refresh retries complete payload", () =>
             {

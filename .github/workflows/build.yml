@@ -456,9 +456,16 @@ jobs:
       - name: Publish
         shell: bash
         run: ./build.sh --configuration ${{ matrix.configuration }}
-      - name: Assemble and ad-hoc sign macOS app bundle
+      - name: Assemble macOS development app bundle
         if: runner.os == 'macOS'
         shell: bash
+        env:
+          # These CI artifacts are for development and smoke testing. Public
+          # distribution must use one stable Developer ID identity instead.
+          SNAPX_ALLOW_ADHOC: 1
+          SNAPX_BUNDLE_IDENTIFIER: com.emiliauh.snapx.ci.${{ github.run_id }}.${{ matrix.configuration }}
+          SNAPX_BUNDLE_NAME: SnapX CI ${{ matrix.configuration }}
+          SNAPX_BUNDLE_VERSION: 0.${{ github.run_number }}.${{ github.run_attempt }}
         run: |
           set -euo pipefail
 
@@ -467,7 +474,7 @@ jobs:
 
           archive="SnapX-UI-${{ matrix.configuration }}-macOS-${{ runner.arch }}.app.zip"
           ditto -c -k --sequesterRsrc --keepParent "$bundle" "$archive"
-          echo "PASS: Created and ad-hoc signed $archive"
+          echo "PASS: Created explicitly ad-hoc signed development artifact $archive"
 
           if [[ "${{ matrix.configuration }}" == "Release" ]]; then
             dmg="SnapX-UI-Release-macOS-${{ runner.arch }}.dmg"
