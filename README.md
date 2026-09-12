@@ -85,11 +85,12 @@ Run the local output:
 To launch as a macOS application:
 
 ```sh
-SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui "SnapX Local.app"
-open "SnapX Local.app"
+SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui "SnapX.app"
+open "SnapX.app"
 ```
 
-Local and CI bundles use the distinct `com.emiliauh.snapx.local` identity by
+Local and CI bundles use the visible `SnapX` name with the distinct
+`com.emiliauh.snapx.local` identity by
 default, so they do not collide with an installed production copy. A stable
 local code-signing certificate can preserve one machine's permission identity
 across rebuilds without an Apple Developer account; see the packaging guide.

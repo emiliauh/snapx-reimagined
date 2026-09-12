@@ -23,12 +23,12 @@ its SHA-1 identity in local mode:
 ```sh
 export SNAPX_CODESIGN_IDENTITY=0123456789ABCDEF0123456789ABCDEF01234567
 export SNAPX_LOCAL_SIGNING=1
-bash packaging/macos-bundle.sh Output/snapx-ui "Output/SnapX Local.app"
-bash packaging/macos-dmg.sh "Output/SnapX Local.app"
+bash packaging/macos-bundle.sh Output/snapx-ui "Output/SnapX.app"
+bash packaging/macos-dmg.sh "Output/SnapX.app"
 ```
 
-Local-certificate mode uses the separate `com.emiliauh.snapx.local` bundle ID
-and `SnapX Local` display name. It omits Apple timestamping and notarization and
+Local-certificate mode uses the visible `SnapX` name with the separate
+`com.emiliauh.snapx.local` bundle ID. It omits Apple timestamping and notarization and
 is only for this Mac. Reusing the same certificate gives rebuilt local bundles
 a certificate-anchored identity; verify permission retention on the target
 macOS version before relying on it. This does not make the app suitable for
@@ -39,7 +39,7 @@ must be requested explicitly:
 
 ```sh
 SNAPX_ALLOW_ADHOC=1 \
-  bash packaging/macos-bundle.sh Output/snapx-ui "Output/SnapX Local.app"
+  bash packaging/macos-bundle.sh Output/snapx-ui "Output/SnapX.app"
 ```
 
 Ad-hoc/local artifacts are kept separate from production by bundle ID and app

@@ -58,7 +58,7 @@ else
     # Services or TCC. Their signing identity is still expected to remain stable
     # when a local certificate is used.
     bundle_identifier="${SNAPX_BUNDLE_IDENTIFIER:-com.emiliauh.snapx.local}"
-    bundle_name="${SNAPX_BUNDLE_NAME:-SnapX Local}"
+    bundle_name="${SNAPX_BUNDLE_NAME:-SnapX}"
 fi
 if [[ ! "$bundle_identifier" =~ ^[A-Za-z0-9]+([.-][A-Za-z0-9]+)+$ ]]; then
     echo "Invalid bundle identifier: $bundle_identifier" >&2
