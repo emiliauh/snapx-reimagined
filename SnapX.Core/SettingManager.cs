@@ -119,6 +119,15 @@ public static class SettingManager
     private static ManualResetEvent uploadersConfigResetEvent = new(false);
     private static ManualResetEvent hotkeysConfigResetEvent = new(false);
 
+    internal static void ApplyConfigurationOverrides(IConfiguration configuration, ApplicationConfig settings) =>
+        configuration.Bind(settings);
+
+    internal static void ApplyConfigurationOverrides(IConfiguration configuration, UploadersConfig settings) =>
+        configuration.Bind(settings);
+
+    internal static void ApplyConfigurationOverrides(IConfiguration configuration, HotkeysConfig settings) =>
+        configuration.Bind(settings);
+
     [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "<Pending>")]
     public static void LoadInitialSettings()
     {
@@ -151,9 +160,6 @@ public static class SettingManager
             hotkeysConfigResetEvent.WaitOne();
         }
     }
-    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]
-    [RequiresDynamicCode("Calls Microsoft.Extensions.Configuration.ConfigurationBinder.Bind(Object)")]
-    [RequiresUnreferencedCode("Calls Microsoft.Extensions.Configuration.ConfigurationBinder.Bind(Object)")]
     public static void LoadApplicationConfig(bool fallbackSupport = true)
     {
         var configurationBuilder = new ConfigurationBuilder();
@@ -173,7 +179,7 @@ public static class SettingManager
         Settings.CreateBackup = true;
         Settings.CreateWeeklyBackup = true;
         Settings.SettingsSaveFailed += Settings_SettingsSaveFailed;
-        SnapXL.Configuration.Bind(Settings, Options => Options.BindNonPublicProperties = true);
+        ApplyConfigurationOverrides(SnapXL.Configuration, Settings);
         DefaultTaskSettings = Settings.DefaultTaskSettings;
         ApplicationConfigBackwardCompatibilityTasks();
 
@@ -196,8 +202,6 @@ public static class SettingManager
         DebugHelper.WriteLine($"ShareX - {message} failed to save settings");
     }
 
-    [RequiresDynamicCode("Calls Microsoft.Extensions.Configuration.ConfigurationBinder.Bind(Object)")]
-    [RequiresUnreferencedCode("Calls Microsoft.Extensions.Configuration.ConfigurationBinder.Bind(Object)")]
     public static void LoadUploadersConfig(bool fallbackSupport = true)
     {
         var configurationBuilder = new ConfigurationBuilder()
@@ -218,11 +222,10 @@ public static class SettingManager
         UploadersConfig.CreateBackup = true;
         UploadersConfig.CreateWeeklyBackup = true;
         UploadersConfig.UseEncryption = true;
-        BuiltConfig.Bind(UploadersConfig, Options => Options.BindNonPublicProperties = true);
+        ApplyConfigurationOverrides(BuiltConfig, UploadersConfig);
         UploadersConfigBackwardCompatibilityTasks();
     }
 
-    [RequiresUnreferencedCode("Calls Microsoft.Extensions.Configuration.ConfigurationBinder.Bind(Object)")]
     public static void LoadHotkeysConfig(bool fallbackSupport = true)
     {
         var configurationBuilder = new ConfigurationBuilder()
@@ -240,7 +243,7 @@ public static class SettingManager
         HotkeysConfig.CreateWeeklyBackup = true;
         if (HotkeysConfig.Hotkeys.Count <= 0) HotkeysConfig.Hotkeys = HotkeyManager.GetDefaultHotkeyList();
 
-        BuiltConfig.Bind(HotkeysConfig, Options => Options.BindNonPublicProperties = true);
+        ApplyConfigurationOverrides(BuiltConfig, HotkeysConfig);
         HotkeysConfigBackwardCompatibilityTasks();
     }
 

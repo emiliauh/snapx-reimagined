@@ -2,6 +2,7 @@ using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
+using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using Microsoft.Data.Sqlite;
@@ -29,6 +30,14 @@ if (args.Contains("--safe-after-capture-default-probe", StringComparer.Ordinal))
     int probeChecks = 0;
     VerifyLegacyAutomaticUploadMigration(ref probeChecks);
     Console.WriteLine($"Safe after-capture default migration passed: {probeChecks:N0} checks.");
+    return 0;
+}
+
+if (args.Contains("--configuration-binding-probe", StringComparer.Ordinal))
+{
+    int probeChecks = 0;
+    VerifyConfigurationBinding(ref probeChecks);
+    Console.WriteLine($"Configuration binding probe passed: {probeChecks:N0} checks.");
     return 0;
 }
 
@@ -81,6 +90,7 @@ var checks = 0;
 try
 {
     VerifyLazySecretStore(ref checks);
+    VerifyConfigurationBinding(ref checks);
     VerifyPortablePathIsolation(ref checks);
     VerifyLegacyAutomaticUploadMigration(ref checks);
     FuzzRegionNormalization(random, ref checks);
@@ -129,6 +139,51 @@ static void VerifyLazySecretStore(ref int checks)
     Check(keyRequests == 1 && encrypted.StartsWith(SecurePropertyStore.Header), "Encryption did not initialize the key once", ref checks);
     Check(store.Unprotect(encrypted) == "local regression fixture" && keyRequests == 1,
         "Lazy-key secret did not round-trip with one vault lookup", ref checks);
+}
+
+static void VerifyConfigurationBinding(ref int checks)
+{
+    var application = new ApplicationConfig();
+    IConfiguration applicationOverrides = new ConfigurationBuilder()
+        .AddCommandLine([
+            "--ShowTray=false",
+            "--DefaultTaskSettings:Description=generated binder",
+            "--FilePath=/must-not-bind"
+        ])
+        .Build();
+    SettingManager.ApplyConfigurationOverrides(applicationOverrides, application);
+    Check(!application.ShowTray, "Application scalar override was not bound", ref checks);
+    Check(application.DefaultTaskSettings.Description == "generated binder",
+        "Application nested override was not bound", ref checks);
+    Check(string.IsNullOrEmpty(application.FilePath),
+        "Configuration overrides changed loader-owned runtime state", ref checks);
+
+    var uploaders = new UploadersConfig();
+    IConfiguration uploaderOverrides = new ConfigurationBuilder()
+        .AddCommandLine([
+            "--HastebinCustomDomain=https://binding.invalid",
+            "--FTPSelectedImage=7"
+        ])
+        .Build();
+    SettingManager.ApplyConfigurationOverrides(uploaderOverrides, uploaders);
+    Check(uploaders.HastebinCustomDomain == "https://binding.invalid",
+        "Uploader string override was not bound", ref checks);
+    Check(uploaders.FTPSelectedImage == 7, "Uploader numeric override was not bound", ref checks);
+
+    var hotkeys = new HotkeysConfig();
+    IConfiguration hotkeyOverrides = new ConfigurationBuilder()
+        .AddCommandLine([
+            "--Hotkeys:0:HotkeyInfo:Hotkey=F12",
+            "--Hotkeys:0:HotkeyInfo:Win=true",
+            "--Hotkeys:0:TaskSettings:Description=bound hotkey"
+        ])
+        .Build();
+    SettingManager.ApplyConfigurationOverrides(hotkeyOverrides, hotkeys);
+    Check(hotkeys.Hotkeys.Count == 1, "Hotkey collection override was not bound", ref checks);
+    Check(hotkeys.Hotkeys[0].HotkeyInfo.Hotkey == Keys.F12 && hotkeys.Hotkeys[0].HotkeyInfo.Win,
+        "Hotkey nested override was not bound", ref checks);
+    Check(hotkeys.Hotkeys[0].TaskSettings.Description == "bound hotkey",
+        "Hotkey task override was not bound", ref checks);
 }
 
 static void VerifyPortablePathIsolation(ref int checks)

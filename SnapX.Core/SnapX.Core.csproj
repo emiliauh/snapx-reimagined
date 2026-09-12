@@ -5,6 +5,7 @@
     <AssemblyTitle>SnapX Core</AssemblyTitle>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);Dapper.AOT</InterceptorsPreviewNamespaces>
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <SQLitePCLRawVersion>3.0.2</SQLitePCLRawVersion>
     <MSExtensionsVersion>10.0.5</MSExtensionsVersion>
   </PropertyGroup>
@@ -52,6 +53,9 @@
 <!--             Condition="'$(GeneratorExitCode)' != '0'" />-->
 <!--    <Message Text="Generator output: $(GeneratorOutput)" Importance="normal" />-->
 <!--  </Target>-->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SnapX.Core.Fuzz" />
+  </ItemGroup>
   <ItemGroup>
     <!-- Privacy friendly user/feature analytics -->
     <PackageReference Include="BrycensRanch.Aptabase.Core" Version="0.2.5" />
