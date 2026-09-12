@@ -363,7 +363,7 @@ jobs:
         if: matrix.configuration == 'Release'
         run: dotnet run --project tests/SnapX.NativeMessaging.Fuzz --configuration Release --no-restore
       - name: Run startup consent checks
-        if: matrix.configuration == 'Release'
+        if: runner.os == 'macOS' && matrix.configuration == 'Release'
         run: dotnet run --project tests/SnapX.MacOS.LoginItems --configuration Release --no-restore
       - name: Install Build Linux Deps
         if: runner.os == 'Linux'
