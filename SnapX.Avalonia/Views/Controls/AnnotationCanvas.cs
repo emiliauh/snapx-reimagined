@@ -289,7 +289,9 @@ public sealed class AnnotationCanvas : Control, IDisposable
         activeElement = new AnnotationElement
         {
             Tool = Tool,
-            Color = CurrentColor,
+            Color = Tool == AnnotationTool.Erase
+                ? SampleOriginalColor(sourceImage, imagePoint.X, imagePoint.Y)
+                : CurrentColor,
             StrokeWidth = CurrentStrokeWidth,
             Bounds = new ImageRectangle(imagePoint.X, imagePoint.Y, 1, 1),
             Points = Tool is AnnotationTool.Freehand or AnnotationTool.Arrow ? [imagePoint] : []
@@ -298,7 +300,7 @@ public sealed class AnnotationCanvas : Control, IDisposable
         // of the document so a click cannot create an invisible undo entry.
         if (Tool != AnnotationTool.Arrow)
         {
-            Document.Add(activeElement);
+            Document.Add(activeElement, select: false);
             Changed();
         }
     }
@@ -327,6 +329,8 @@ public sealed class AnnotationCanvas : Control, IDisposable
                 Document.ResizeSelected(resizeHandle, current, ImageTolerance(2));
             else if (moving)
                 Document.MoveSelected(current.X - lastPoint.X, current.Y - lastPoint.Y);
+            if (Document.Selected is { Tool: AnnotationTool.Erase } erase)
+                erase.Color = AnnotationDocument.SampleRepresentativeColor(sourceImage, erase.Bounds);
             lastPoint = current;
             Changed();
             return;
@@ -344,7 +348,7 @@ public sealed class AnnotationCanvas : Control, IDisposable
             {
                 if (activeElement.Points[0] == current) return;
                 activeElement.Points.Add(current);
-                Document.Add(activeElement);
+                Document.Add(activeElement, select: false);
             }
             else activeElement.Points[^1] = current;
             activeElement.Bounds = AnnotationDocument.BoundsFromPoints(activeElement.Points);
@@ -353,6 +357,8 @@ public sealed class AnnotationCanvas : Control, IDisposable
         {
             activeElement.Bounds = ImageRectangle.FromLTRB(lastPoint.X, lastPoint.Y, current.X, current.Y);
         }
+        if (activeElement.Tool == AnnotationTool.Erase)
+            activeElement.Color = AnnotationDocument.SampleRepresentativeColor(sourceImage, activeElement.Bounds);
         Changed();
     }
 
@@ -372,7 +378,7 @@ public sealed class AnnotationCanvas : Control, IDisposable
             moving = false;
             gestureCheckpointed = false;
             resizeHandle = AnnotationResizeHandle.None;
-            activeElement = null;
+            CompleteActiveElement();
             e.Pointer.Capture(null);
             Changed();
         }
@@ -385,9 +391,22 @@ public sealed class AnnotationCanvas : Control, IDisposable
         moving = false;
         gestureCheckpointed = false;
         resizeHandle = AnnotationResizeHandle.None;
-        activeElement = null;
+        CompleteActiveElement();
         base.OnPointerCaptureLost(e);
         RefreshCursor();
+    }
+
+    private void CompleteActiveElement()
+    {
+        if (activeElement is null) return;
+
+        // Selection handles describe finished geometry. Deferring selection
+        // also keeps every canvas that shares this document (multi-display
+        // overlays) from rendering an incrementally growing selection box.
+        if (activeElement.Tool == AnnotationTool.Erase)
+            activeElement.Color = AnnotationDocument.SampleRepresentativeColor(sourceImage, activeElement.Bounds);
+        Document.Select(activeElement);
+        activeElement = null;
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
@@ -429,6 +448,37 @@ public sealed class AnnotationCanvas : Control, IDisposable
                     brush);
                 context.DrawText(text, bounds.TopLeft);
                 break;
+            case AnnotationTool.Blur:
+                DrawBlur(context, bounds, viewport, element.EffectStrength);
+                break;
+            case AnnotationTool.Erase:
+                context.FillRectangle(brush, bounds);
+                break;
+        }
+    }
+
+    private void DrawBlur(DrawingContext context, ARect bounds, ARect viewport, float strength)
+    {
+        if (preview is not null)
+        {
+            using (context.PushClip(bounds))
+            using (context.PushEffect(new ImmutableBlurEffect(
+                Math.Max(1, strength) * Scale(viewport)), viewport))
+                context.DrawImage(preview, new ARect(preview.Size), viewport);
+            return;
+        }
+
+        // Transparent frozen-desktop overlays cannot apply an Avalonia effect
+        // to pixels owned by the compositor underneath them. Show an explicit
+        // preview marker; the accepted image still receives the real blur.
+        using (context.PushClip(bounds))
+        {
+            context.FillRectangle(new SolidColorBrush(AColor.FromArgb(70, 255, 255, 255)), bounds);
+            var marker = new Pen(new SolidColorBrush(AColor.FromArgb(150, 255, 255, 255)), 1);
+            for (double x = bounds.Left - bounds.Height; x < bounds.Right; x += 12)
+                context.DrawLine(marker,
+                    new APoint(x, bounds.Bottom),
+                    new APoint(x + bounds.Height, bounds.Top));
         }
     }
 

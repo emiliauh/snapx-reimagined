@@ -31,7 +31,7 @@ internal sealed class AnnotationEditorSessionPreferences
 
     internal void SetTool(AnnotationTool value)
     {
-        if (value is < AnnotationTool.Select or > AnnotationTool.Text)
+        if (value is < AnnotationTool.Select or > AnnotationTool.Erase)
             throw new ArgumentOutOfRangeException(nameof(value));
         lock (sync) tool = value;
     }

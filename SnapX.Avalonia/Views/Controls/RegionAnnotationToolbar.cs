@@ -36,7 +36,9 @@ internal sealed class RegionAnnotationToolbar : Border
         new("▭", "Rectangle", AnnotationTool.Rectangle),
         new("◯", "Ellipse", AnnotationTool.Ellipse),
         new("➜", "Arrow", AnnotationTool.Arrow),
-        new("T", "Text", AnnotationTool.Text)
+        new("T", "Text", AnnotationTool.Text),
+        new("▦", "Blur an area (hatched preview; applied when captured)", AnnotationTool.Blur),
+        new("▰", "Erase image content with a matching background-color overlay", AnnotationTool.Erase)
     ];
 
     private static readonly Rgba32[] Palette =

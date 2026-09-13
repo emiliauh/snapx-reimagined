@@ -102,6 +102,8 @@ public sealed class ImageAnnotationWindow : Window
         AddTool(toolbar, "Ellipse", AnnotationTool.Ellipse);
         AddTool(toolbar, "Arrow", AnnotationTool.Arrow);
         AddTool(toolbar, "Text", AnnotationTool.Text);
+        AddTool(toolbar, "Blur", AnnotationTool.Blur);
+        AddTool(toolbar, "Erase", AnnotationTool.Erase);
 
         toolbar.Children.Add(new Separator { Margin = new Thickness(8, 0), Height = 30 });
         toolbar.Children.Add(new TextBlock

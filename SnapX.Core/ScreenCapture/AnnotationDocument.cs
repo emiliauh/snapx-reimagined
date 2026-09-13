@@ -16,7 +16,9 @@ public enum AnnotationTool
     Rectangle,
     Ellipse,
     Arrow,
-    Text
+    Text,
+    Blur,
+    Erase
 }
 
 public enum AnnotationResizeHandle
@@ -40,6 +42,7 @@ public sealed class AnnotationElement
     public float StrokeWidth { get; set; } = 4;
     public string Text { get; set; } = "Text";
     public float FontSize { get; set; } = 30;
+    public float EffectStrength { get; set; } = 12;
     public List<PointF> Points { get; set; } = [];
 
     public AnnotationElement Clone() => new()
@@ -50,6 +53,7 @@ public sealed class AnnotationElement
         StrokeWidth = StrokeWidth,
         Text = Text,
         FontSize = FontSize,
+        EffectStrength = EffectStrength,
         Points = [.. Points]
     };
 }
@@ -86,12 +90,22 @@ public sealed class AnnotationDocument
         redo.Clear();
     }
 
-    public void Add(AnnotationElement element)
+    public void Add(AnnotationElement element, bool select = true)
     {
         ArgumentNullException.ThrowIfNull(element);
         Checkpoint();
         Elements.Add(element);
-        SelectedIndex = Elements.Count - 1;
+        // A canvas can add an element before its pointer gesture is complete so
+        // the stroke remains visible while it is being drawn. Do not expose
+        // that provisional geometry as a selection until the canvas commits it.
+        SelectedIndex = select ? Elements.Count - 1 : -1;
+    }
+
+    public bool Select(AnnotationElement element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        SelectedIndex = Elements.IndexOf(element);
+        return SelectedIndex >= 0;
     }
 
     public void DeleteSelected()
@@ -258,12 +272,68 @@ public sealed class AnnotationDocument
     {
         ArgumentNullException.ThrowIfNull(source);
         Image<Rgba32> output = source.CloneAs<Rgba32>();
-        output.Mutate(context =>
+        foreach (AnnotationElement element in Elements)
         {
-            foreach (AnnotationElement element in Elements)
-                DrawElement(context, element);
-        });
+            if (element.Tool == AnnotationTool.Blur)
+                ApplyBlur(output, element);
+            else
+                output.Mutate(context => DrawElement(context, element));
+        }
         return output;
+    }
+
+    /// <summary>
+    /// Estimates the background at the perimeter of an erase area. Foreground
+    /// text and icons must not brighten/darken the fill by contributing to an
+    /// average of the entire selection. Sampling remains bounded for large captures.
+    /// </summary>
+    public static Rgba32 SampleRepresentativeColor(Image image, RectangleF bounds)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        Rectangle rectangle = ToPixelRectangle(bounds, image.Width, image.Height);
+        if (rectangle.IsEmpty) return new Rgba32(0, 0, 0, 255);
+
+        using Image<Rgba32>? converted = image is Image<Rgba32> ? null : image.CloneAs<Rgba32>();
+        Image<Rgba32> pixels = image as Image<Rgba32> ?? converted!;
+        // Group nearby colors so antialiasing and gentle background variation
+        // cannot let a smaller, perfectly uniform foreground win the vote.
+        // Return a real sampled color from the winning group, never a gray
+        // synthesized by averaging a dark background with light lettering.
+        var groups = new Dictionary<int, int>();
+        var colors = new Dictionary<Rgba32, int>();
+        void Sample(int x, int y)
+        {
+            Rgba32 pixel = pixels[x, y];
+            pixel.A = 255;
+            int group = ColorGroup(pixel);
+            groups[group] = groups.GetValueOrDefault(group) + 1;
+            colors[pixel] = colors.GetValueOrDefault(pixel) + 1;
+        }
+
+        // Sample a narrow inner perimeter band so central text or images
+        // cannot overwhelm the background estimate.
+        int stepX = Math.Max(1, (rectangle.Width + 63) / 64);
+        int stepY = Math.Max(1, (rectangle.Height + 63) / 64);
+        int band = Math.Min(2, Math.Min(rectangle.Width, rectangle.Height));
+        for (int inset = 0; inset < band; inset++)
+        {
+            for (int x = rectangle.Left; x < rectangle.Right; x += stepX)
+            {
+                Sample(x, rectangle.Top + inset);
+                Sample(x, rectangle.Bottom - 1 - inset);
+            }
+            for (int y = rectangle.Top; y < rectangle.Bottom; y += stepY)
+            {
+                Sample(rectangle.Left + inset, y);
+                Sample(rectangle.Right - 1 - inset, y);
+            }
+        }
+
+        int backgroundGroup = groups.MaxBy(pair => pair.Value).Key;
+        return colors.Where(pair => ColorGroup(pair.Key) == backgroundGroup)
+            .MaxBy(pair => pair.Value).Key;
+
+        static int ColorGroup(Rgba32 pixel) => (pixel.R >> 3) << 10 | (pixel.G >> 3) << 5 | pixel.B >> 3;
     }
 
     /// <summary>
@@ -301,6 +371,7 @@ public sealed class AnnotationDocument
             }
             copy.StrokeWidth *= uniformScale;
             copy.FontSize *= uniformScale;
+            copy.EffectStrength *= uniformScale;
             transformed.Elements.Add(copy);
         }
         transformed.SelectedIndex = -1;
@@ -363,7 +434,41 @@ public sealed class AnnotationDocument
             case AnnotationTool.Text:
                 DrawText(context, element, color);
                 break;
+            case AnnotationTool.Erase:
+                context.Fill(color, bounds);
+                break;
         }
+    }
+
+    private static void ApplyBlur(Image<Rgba32> output, AnnotationElement element)
+    {
+        Rectangle target = ToPixelRectangle(element.Bounds, output.Width, output.Height);
+        if (target.IsEmpty) return;
+
+        float strength = Math.Max(1, element.EffectStrength);
+        int padding = (int)Math.Ceiling(strength * 3);
+        Rectangle sample = Rectangle.Intersect(
+            new Rectangle(target.X - padding, target.Y - padding,
+                target.Width + padding * 2, target.Height + padding * 2),
+            new Rectangle(0, 0, output.Width, output.Height));
+        using Image<Rgba32> patch = output.Clone(context =>
+            context.Crop(sample).GaussianBlur(strength));
+        patch.Mutate(context => context.Crop(new Rectangle(
+            target.X - sample.X,
+            target.Y - sample.Y,
+            target.Width,
+            target.Height)));
+        output.Mutate(context => context.DrawImage(patch, target.Location, 1));
+    }
+
+    private static Rectangle ToPixelRectangle(RectangleF bounds, int imageWidth, int imageHeight)
+    {
+        bounds = Normalize(bounds);
+        int left = Math.Clamp((int)MathF.Floor(bounds.Left), 0, imageWidth);
+        int top = Math.Clamp((int)MathF.Floor(bounds.Top), 0, imageHeight);
+        int right = Math.Clamp((int)MathF.Ceiling(bounds.Right), 0, imageWidth);
+        int bottom = Math.Clamp((int)MathF.Ceiling(bounds.Bottom), 0, imageHeight);
+        return Rectangle.FromLTRB(left, top, right, bottom);
     }
 
     private static void DrawArrow(IImageProcessingContext context, AnnotationElement element, Color color, float stroke)

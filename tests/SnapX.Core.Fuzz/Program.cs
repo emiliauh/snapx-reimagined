@@ -4,7 +4,9 @@ using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using Microsoft.Data.Sqlite;
 using SnapX.Core;
 using SnapX.Core.History;
@@ -790,6 +792,111 @@ static async Task<int> VerifyAnnotationLifecycleAsync()
             });
             Check(!renderedIncompleteArrow,
                 "An incomplete one-point arrow rendered differently from its preview", ref checks);
+        }
+
+        var provisionalDocument = new AnnotationDocument();
+        var provisionalElement = new AnnotationElement
+        {
+            Tool = AnnotationTool.Freehand,
+            Bounds = new RectangleF(10, 10, 20, 20),
+            Points = [new PointF(10, 10), new PointF(30, 30)]
+        };
+        provisionalDocument.Add(provisionalElement, select: false);
+        Check(provisionalDocument.Selected is null && provisionalDocument.SelectedIndex == -1,
+            "An in-progress annotation became selectable before its drawing gesture completed", ref checks);
+        Check(provisionalDocument.Select(provisionalElement) &&
+              ReferenceEquals(provisionalDocument.Selected, provisionalElement),
+            "A completed annotation did not become selected when its drawing gesture ended", ref checks);
+
+        using (var effectSource = new Image<Rgba32>(40, 20, Color.White))
+        {
+            effectSource.Mutate(context => context.Fill(Color.Black, new Rectangle(0, 0, 20, 20)));
+            Rgba32 sampled = AnnotationDocument.SampleRepresentativeColor(
+                effectSource, new RectangleF(0, 0, 40, 20));
+            Check(sampled == Color.Black.ToPixel<Rgba32>() || sampled == Color.White.ToPixel<Rgba32>(),
+                "Erase sampling synthesized gray between distinct screenshot surfaces", ref checks);
+
+            var eraseDocument = new AnnotationDocument();
+            eraseDocument.Add(new AnnotationElement
+            {
+                Tool = AnnotationTool.Erase,
+                Bounds = new RectangleF(5, 5, 10, 10),
+                Color = new Rgba32(25, 75, 125)
+            });
+            using Image<Rgba32> erased = eraseDocument.Render(effectSource);
+            Check(erased[10, 10] == new Rgba32(25, 75, 125) && erased[2, 2] == Color.Black.ToPixel<Rgba32>(),
+                "Erase annotation did not fill only its selected bounds", ref checks);
+
+            var blurDocument = new AnnotationDocument();
+            blurDocument.Add(new AnnotationElement
+            {
+                Tool = AnnotationTool.Blur,
+                Bounds = new RectangleF(10, 0, 20, 20),
+                EffectStrength = 3
+            });
+            using Image<Rgba32> blurred = blurDocument.Render(effectSource);
+            Check(blurred[19, 10] != Color.Black.ToPixel<Rgba32>() &&
+                  blurred[19, 10] != Color.White.ToPixel<Rgba32>() &&
+                  blurred[2, 10] == Color.Black.ToPixel<Rgba32>() &&
+                  blurred[35, 10] == Color.White.ToPixel<Rgba32>(),
+                "Blur annotation did not blur only its selected bounds", ref checks);
+
+            AnnotationDocument scaledBlur = blurDocument.Transform(
+                new RectangleF(0, 0, 40, 20), 80, 40);
+            Check(scaledBlur.Elements.Single().EffectStrength == 6,
+                "Annotation transform did not scale blur strength with the image", ref checks);
+        }
+
+        // Reproduce erasing light content from a dark UI (and the inverse).
+        // Most of this selection is foreground, so an area average or an
+        // interior majority produces a visibly mismatched rectangle.
+        foreach (Rgba32 background in new[]
+                 { new Rgba32(0, 0, 0), new Rgba32(255, 255, 255), new Rgba32(23, 47, 81) })
+        {
+            using var eraseSource = new Image<Rgba32>(80, 60, background);
+            Rgba32 foreground = background.R < 128 ? new Rgba32(255, 255, 255) : new Rgba32(0, 0, 0);
+            eraseSource.Mutate(context => context.Fill(Color.FromPixel(foreground), new Rectangle(10, 10, 60, 40)));
+            var eraseBounds = new RectangleF(5, 5, 70, 50);
+            Rgba32 matched = AnnotationDocument.SampleRepresentativeColor(eraseSource, eraseBounds);
+            Check(matched == background,
+                $"Erase included foreground content when matching background {background}", ref checks);
+            Check(AnnotationDocument.SampleRepresentativeColor(eraseSource,
+                      new RectangleF(75, 55, -70, -50)) == background,
+                "Reverse-direction erase selection changed the background estimate", ref checks);
+            Check(AnnotationDocument.SampleRepresentativeColor(eraseSource,
+                      new RectangleF(-20, -20, 120, 100)) == background,
+                "Clipped erase selection failed to sample the image boundary", ref checks);
+            Check(AnnotationDocument.SampleRepresentativeColor(eraseSource,
+                      new RectangleF(0, 0, 1, 1)) == background,
+                "Single-pixel erase selection failed to sample its source pixel", ref checks);
+
+            var backgroundErase = new AnnotationDocument();
+            backgroundErase.Add(new AnnotationElement
+            {
+                Tool = AnnotationTool.Erase,
+                Bounds = eraseBounds,
+                Color = matched
+            }, select: false);
+            Check(backgroundErase.Selected is null,
+                "In-progress erase displayed selection handles", ref checks);
+            backgroundErase.Select(backgroundErase.Elements[0]);
+            using (Image<Rgba32> result = backgroundErase.Render(eraseSource))
+            {
+                Check(result[40, 30] == background && result[0, 0] == background &&
+                      eraseSource[40, 30] == foreground,
+                    "Erase overlay failed to hide source content non-destructively", ref checks);
+            }
+            backgroundErase.Undo();
+            using (Image<Rgba32> undone = backgroundErase.Render(eraseSource))
+                Check(undone[40, 30] == foreground, "Undo erase failed to restore image content", ref checks);
+            backgroundErase.Redo();
+            using (Image<Rgba32> redone = backgroundErase.Render(eraseSource))
+                Check(redone[40, 30] == background, "Redo erase failed to reapply matching fill", ref checks);
+            AnnotationDocument transformedErase = backgroundErase.Transform(new RectangleF(5, 5, 70, 50), 140, 100);
+            using var scaledSource = new Image<Rgba32>(140, 100, foreground);
+            using Image<Rgba32> transformedResult = transformedErase.Render(scaledSource);
+            Check(transformedResult[0, 0] == background && transformedResult[139, 99] == background,
+                "Cropped and scaled erase export failed to retain the matched fill", ref checks);
         }
 
         document.Add(new AnnotationElement
