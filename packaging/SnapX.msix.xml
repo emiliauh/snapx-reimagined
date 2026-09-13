@@ -297,7 +297,7 @@
     </ExclusionItems>
   </Settings>
   <PrepareComputer DisableWindowsSearchService="true" DisableWindowsUpdateService="true" />
-  <SaveLocation PackagePath="C:\src\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.5.0.14_x64__enwe9x4v0qrtw.msix" TemplatePath="C:\src\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.5.0.14_x64__enwe9x4v0qrtw_template.xml" />
-  <Installer Path="C:\src\SnapX\packaging\SnapX-Release-Windows-0.5.0-alpha.14-X64.msi" />
-  <PackageInformation PackageName="SnapX" PackageDisplayName="SnapX" PublisherName="CN=AppModelSamples, OID.2.25.311729368913984317654407730594956997722=1" PublisherDisplayName="SnapXL" Version="0.5.0.14" p4:PackageDescription="Capture, share, and manage screenshots." xmlns:p4="http://schemas.microsoft.com/msix/msixpackagingtool/template/1910" />
+  <SaveLocation PackagePath="C:\src\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.11.0.0_x64__enwe9x4v0qrtw.msix" TemplatePath="C:\src\SnapX\packaging\SnapX_UNSIGNEDFINAL_0.11.0.0_x64__enwe9x4v0qrtw_template.xml" />
+  <Installer Path="C:\src\SnapX\packaging\SnapX-Release-Windows-0.11.0-X64.msi" />
+  <PackageInformation PackageName="SnapX" PackageDisplayName="SnapX" PublisherName="CN=AppModelSamples, OID.2.25.311729368913984317654407730594956997722=1" PublisherDisplayName="SnapXL" Version="0.11.0.0" p4:PackageDescription="Capture, share, and manage screenshots." xmlns:p4="http://schemas.microsoft.com/msix/msixpackagingtool/template/1910" />
 </MsixPackagingToolTemplate>

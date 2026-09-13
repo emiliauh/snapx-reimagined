@@ -12,7 +12,7 @@ description: |
   This version is under development and is not ready for general use.
   SnapX supports PNG, animated PNG, WebP, animated WebP, AVIF, animated AVIF, JPEG, GIF, TIFF, and BMP files.
   PaddleOCR provides optical character recognition on supported platforms.
-version: '0.5.0-alpha.14'
+version: '0.11.0'
 license: GPL-3.0-or-later
 source-code: "https://github.com/emiliauh/snapx-reimagined"
 adopt-info: ui-snapx

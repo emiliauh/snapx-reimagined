@@ -1,7 +1,7 @@
 # Maintainer: emiliauh <emiliauh@users.noreply.github.com>
 pkgbase=snapx-core
 pkgname=(snapx-core snapx snapx-ui)
-pkgver=0.5.0
+pkgver=0.11.0
 pkgrel=1
 pkgdesc="Screenshot tool that handles images, text, and video (fork of ShareX)"
 arch=('x86_64' 'aarch64' 'armv7h')
