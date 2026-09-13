@@ -1,166 +1,197 @@
+<p align="center">
+  <img src="SnapX.Core/Resources/SnapX_Logo.png" width="120" alt="SnapX logo">
+</p>
+
 # SnapX
 
-SnapX is a screen capture and recording application by [emiliauh](https://github.com/emiliauh).
+SnapX captures screenshots and records your screen on Windows, macOS, and Linux.
 
-The project home is [snapx-reimagined](https://github.com/emiliauh/snapx-reimagined).
+[![Build status](https://github.com/emiliauh/snapx-reimagined/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/emiliauh/snapx-reimagined/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/emiliauh/snapx-reimagined?include_prereleases&label=release)](https://github.com/emiliauh/snapx-reimagined/releases)
+[![License](https://img.shields.io/github/license/emiliauh/snapx-reimagined)](LICENSE.md)
 
-The application ID is `io.emiliauh.SnapXL.SnapX`. The executable name is `snapx-ui`.
+[Download](#download) | [Features](#features) | [Platform support](#platform-support) | [Build from source](#build-from-source) | [Report a problem](#support)
+
+> [!IMPORTANT]
+> SnapX is in prerelease development. Test it before you use it for important work. Some features still need tests on real computers.
+
+## Download
+
+The current release is [SnapX v0.11](https://github.com/emiliauh/snapx-reimagined/releases/tag/v0.11.0).
+
+| Platform | Available package | Requirement |
+| --- | --- | --- |
+| macOS | [Download the Apple Silicon DMG](https://github.com/emiliauh/snapx-reimagined/releases/download/v0.11.0/SnapX-0.11.0-macOS-arm64.dmg) | macOS 14 or later on Apple Silicon |
+| Windows | Build from source | A supported Windows release |
+| Linux | Build from source | A supported X11 or Wayland desktop |
+
+The macOS download includes FFmpeg. It uses a development signature. Apple has not notarized it, so macOS can show a warning when you first open it.
+
+### Install on macOS
+
+1. Open the DMG.
+2. Drag SnapX to the Applications shortcut.
+3. Open SnapX from Applications.
+4. Follow the permission checklist.
+5. Allow Screen and System Audio Recording in System Settings.
+6. Quit and reopen SnapX if macOS requests it.
+
+SnapX does not request microphone access. To record sound from other applications, select **System audio (macOS)** in Screen recorder settings.
+
+SnapX can start when you sign in. It enables this option only when you select **Enable launch at login**.
 
 ## Features
 
-- Capture a screen, a window, or a region.
-- Click a window or drag a region in the same picker.
-- Annotate anywhere on the frozen desktop before capture with a toolbar that is
-  visible from the start; choose or revise the saved region independently, then
-  confirm it. Tools include pen, shapes, arrows, text, colors, eyedropper
-  sampling, move/resize handles, and undo/redo.
-- Record a screen or a selected region on supported systems.
+- Capture a display, window, or selected region.
+- Add text, arrows, shapes, and drawings to screenshots.
+- Select colors with an eyedropper.
+- Move and resize annotations.
+- Undo and redo edits.
+- Record a display or selected region.
+- Pause, stop, or cancel a recording.
 - Show an outline around the recorded region.
-- Show pause, stop, and abort controls during a recording.
-- Run the native Wayland outline and controls as separate helper processes.
-- Forward later launches to the first running process.
-- Register global hotkeys through the desktop portal on Linux Wayland.
-- Register global hotkeys through the X11 backend on Linux X11.
-- Build Native AOT, self-contained, single-file executables.
+- Start actions from the application, tray menu, keyboard shortcuts, or command line.
+- Send new commands to the running SnapX process.
+- Upload images, text, and files to supported services.
 
-## Install on Linux
+On supported desktop systems, the region picker lets you select a window or drag a region. On native Wayland, SnapX opens the annotation editor after you select the region.
 
-Install the .NET 10 SDK. Install GCC and the Wayland client development files.
+## First use
 
-Install FFmpeg for X11 recording. Install `wf-recorder` for Wayland recording.
+### Capture a screenshot
 
-Clone this repository. Run these commands from its root directory:
+1. Open SnapX.
+2. Select a capture action.
+3. Select a window or drag a region.
+4. Add annotations if you need them.
+5. Confirm the capture.
 
-```sh
-export DisableGitVersionTask=true
-dotnet build SnapX.slnx --no-incremental -m:1
-dotnet run --project build --no-restore -- build --no-color
-```
+### Record the screen
 
-The build places the application in `Output/snapx-ui`.
+1. Open the screen recorder settings.
+2. Select the video and audio options.
+3. Start a recording action.
+4. Select a display or region.
+5. Use the on-screen controls to pause, stop, or cancel.
 
-Run SnapX:
+On macOS, keep each recording region inside one display.
 
-```sh
-./Output/snapx-ui/snapx-ui
-```
+## Keyboard shortcuts
 
-## Build on Windows
+You can change all shortcuts in SnapX settings.
 
-Install the .NET 10 SDK. Run these commands in PowerShell from the repository root:
+| Action | Windows and Linux default | macOS default |
+| --- | --- | --- |
+| Capture a region | `Control + Print Screen` | `Command + Control + Shift + 1` |
+| Capture the screen | `Print Screen` | `Command + Control + Shift + 2` |
+| Capture the active window | `Alt + Print Screen` | `Command + Control + Shift + 3` |
+| Record video | `Shift + Print Screen` | `Command + Control + Shift + 4` |
+| Record GIF | `Control + Shift + Print Screen` | `Command + Control + Shift + 5` |
 
-```powershell
-dotnet build SnapX.slnx --no-incremental -m:1
-dotnet run --project build --no-restore -- build --no-color
-```
+## Command line
 
-Run SnapX:
-
-```powershell
-.\Output\snapx-ui\snapx-ui.exe
-```
-
-## Install on macOS
-
-Download the Apple Silicon DMG from [GitHub Releases](https://github.com/emiliauh/snapx-reimagined/releases), then drag SnapX into Applications. Requires macOS 14 or later. The published DMG includes FFmpeg. This prerelease is ad-hoc signed and is not notarized.
-
-On first launch, grant the required Screen & System Audio Recording access through the permission checklist. Reopen SnapX if macOS requests a restart. To include audio played by other applications, choose **System audio (macOS)** in Screen recorder settings. SnapX captures it directly through ScreenCaptureKit and never requests microphone access or a loopback driver. Then choose **Enable launch at login** or **Not now**. macOS manages any required approval. You can disable startup in SnapX's Application settings or in **System Settings > General > Login Items & Extensions > Open at Login**.
-
-See [packaging instructions](packaging/MACOS.md) and [validation results](MACOS-VALIDATION.md).
-
-## Build on macOS
-
-Install the .NET 10 SDK and Xcode. Run these commands from the repository root (the explicit fallback avoids a GitVersion mainline-history error):
-
-```sh
-export DisableGitVersionTask=true
-dotnet build SnapX.slnx --no-incremental -m:1
-dotnet run --project build --no-restore -- build --no-color
-```
-
-Native AOT linking for macOS must run on macOS. GitHub CI builds an ad-hoc signed development bundle. Distributed updates should use a stable Developer ID Application certificate; ad-hoc rebuilds can invalidate saved macOS permissions. See [signing instructions](packaging/MACOS.md).
-
-Run the local output:
-
-```sh
-./Output/snapx-ui/snapx-ui
-```
-
-To launch as a macOS application:
-
-```sh
-SNAPX_ALLOW_ADHOC=1 bash packaging/macos-bundle.sh Output/snapx-ui "SnapX.app"
-open "SnapX.app"
-```
-
-Local and CI bundles use the visible `SnapX` name with the distinct
-`com.emiliauh.snapx.local` identity by
-default, so they do not collide with an installed production copy. A stable
-local code-signing certificate can preserve one machine's permission identity
-across rebuilds without an Apple Developer account; see the packaging guide.
-
-Install FFmpeg for screen recording and allow capture in macOS Privacy &
-Security settings. See the [build guide](.github/BUILDING.md) for native tests
-and recording setup.
-
-## Use SnapX
-
-Start a region capture from the user interface, tray menu, hotkey, or command line.
-
-Use this command to start the region picker:
+Start a region capture:
 
 ```sh
 snapx-ui -RectangleRegion
 ```
 
-Use this command to start a region recording:
+Start a region recording:
 
 ```sh
 snapx-ui -ScreenRecorder
 ```
 
-You can set hotkeys in the application. The initial hotkeys use the Print Screen key and its modifiers.
-
-On Hyprland, you can bind any key to a SnapX command. For example:
-
-```text
-Ctrl+W  snapx-ui -RectangleRegion
-Ctrl+E  snapx-ui -ScreenRecorder
-```
-
 ## Platform support
 
-| Platform | Build status | Current support |
+| Platform | Current support | Known limits |
 | --- | --- | --- |
-| Linux Wayland with Hyprland | Built by GitHub CI. | The compositor-native picker must exit before SnapX receives pixels, so annotation opens immediately after selection in the editor fallback instead of inside the picker. Recording outline, recording controls, and single-instance forwarding are runtime verified. `wf-recorder` records video. Other Wayland compositors need runtime tests. |
-| Linux X11 | Built by GitHub CI. | The combined picker and X11 hotkey backend are present. FFmpeg uses `x11grab`. CI tests launch and single-instance forwarding with Xvfb. Interactive picker and recording tests are still required. |
-| Windows | Built by GitHub CI. | Capture, the combined picker, recording, overlays, hotkeys, and single-instance forwarding are present. Runtime tests on Windows are still required. |
-| macOS | Builds locally and in GitHub CI; app bundles can be ad-hoc signed. | Still capture uses an opaque frozen-frame picker over complete display bounds, including the menu bar, with mixed-DPI cross-display composition. Its top toolbar is available immediately, annotations update live anywhere on the frozen desktop, and region selection is an independent tool before confirmation. Recording-region selection stays live and geometry-only. Single-instance forwarding and Carbon global hotkeys are implemented; recording supports Retina and rotated displays. See the [macOS build and test instructions](.github/BUILDING.md). |
+| macOS | Capture, annotations, recording, system audio, global shortcuts, and launch at login | The public package supports Apple Silicon. Recording regions cannot cross displays. Apple has not notarized the package. |
+| Windows | Capture, annotations, recording, overlays, and global shortcuts | More tests on Windows computers are required. A public installer is not available for v0.11. |
+| Linux X11 | Capture, annotations, recording, and global shortcuts | Recording requires FFmpeg. Capture and recording need more tests on X11 desktops. |
+| Linux Wayland | Region capture, recording, global shortcuts, and recording controls | Recording requires `wf-recorder`. Hyprland has the most tests. Other Wayland desktops need more tests. |
 
-The recording outline and controls use native Wayland helpers on supported Wayland sessions.
+See the [build and test guide](.github/BUILDING.md) for detailed requirements and test status.
 
-Other systems use Avalonia overlay windows. Their behavior can differ between window managers.
+## Build from source
 
-## Configuration
+Install Git and the .NET 10 SDK. You also need the tools for your operating system:
 
-- Set `SNAPX_TELEMETRY=1` to enable telemetry. SnapX disables telemetry by default.
-- Set `SNAPX_USE_VULKAN=1` to try Vulkan first on Linux X11.
-- Set `SNAPX_WAYLAND_GPU=1` to enable EGL rendering on native Wayland.
-- Set `SNAPX_REGISTER_PORTAL_HOST=0` to stop host ID registration with the global shortcut portal.
-- Set `SNAPX_DESKTOP_APP_ID` to change the application ID used by the portal backend.
+- Linux: Clang, zlib development headers, FFmpeg for X11, and `wf-recorder` for Wayland.
+- Windows: Visual Studio C++ build tools and Windows SDK `10.0.26100.0`.
+- macOS: Xcode command line tools. Install FFmpeg if you do not use the packaged DMG.
 
-## Development
+Read the [complete build guide](.github/BUILDING.md) before you build a package.
 
-Run the fuzz and property checks after a successful restore:
+Clone the repository:
 
 ```sh
-dotnet run --project tests/SnapX.Core.Fuzz --configuration Release --no-restore
+git clone https://github.com/emiliauh/snapx-reimagined.git
+cd snapx-reimagined
 ```
 
-GitHub CI runs these checks on Linux x64. CI also runs X11 and macOS launch tests.
+On Linux or macOS, run:
 
-## License
+```sh
+export DisableGitVersionTask=true
+dotnet build SnapX.slnx --no-incremental -m:1
+dotnet run --project build --no-restore -- build --no-color
+```
+
+On Windows, run in PowerShell:
+
+```powershell
+$env:DisableGitVersionTask = "true"
+dotnet build SnapX.slnx --no-incremental -m:1
+dotnet run --project build --no-restore -- build --no-color
+```
+
+The build creates the application in `Output/snapx-ui`. Keep the complete folder because SnapX uses the native libraries in it.
+
+Run SnapX on Linux or macOS:
+
+```sh
+./Output/snapx-ui/snapx-ui
+```
+
+Run SnapX on Windows:
+
+```powershell
+.\Output\snapx-ui\snapx-ui.exe
+```
+
+To create a macOS application bundle, read the [macOS packaging guide](packaging/MACOS.md).
+
+## Privacy
+
+Telemetry is off by default. SnapX sends telemetry only when you enable it. SnapX does not send captured images, videos, text, or files as telemetry.
+
+Read the [privacy policy](packaging/PRIVACY.md) for the data list, settings, and service information.
+
+## Security
+
+Do not report a vulnerability in a public issue. Use the private process in the [security policy](.github/SECURITY.md).
+
+## Support
+
+Search the [existing issues](https://github.com/emiliauh/snapx-reimagined/issues) before you create a report.
+
+For a bug report, include:
+
+- The SnapX version.
+- The operating system and version.
+- The desktop environment on Linux.
+- Clear steps that reproduce the problem.
+- Relevant logs or screenshots. Remove private information first.
+
+Use the [bug report form](https://github.com/emiliauh/snapx-reimagined/issues/new?template=bug_report.yml) or the [feature request form](https://github.com/emiliauh/snapx-reimagined/issues/new?template=feature_request.yml).
+
+## Contribute
+
+Read the [contribution guide](.github/CONTRIBUTING.md) and [code of conduct](.github/CODE_OF_CONDUCT.md) before you submit a change.
+
+## License and credits
 
 SnapX uses the [GPL-3.0-or-later license](LICENSE.md).
 
-SnapX has lineage from [ShareX](https://github.com/ShareX/ShareX) and [SnapX](https://github.com/SnapXL/SnapX).
+SnapX is based on [ShareX](https://github.com/ShareX/ShareX) and [SnapX](https://github.com/SnapXL/SnapX).
