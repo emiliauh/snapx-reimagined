@@ -23,7 +23,7 @@ internal static unsafe partial class MacOSNotificationService
             try { return NativeAvailable() != 0; }
             catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
             {
-                DebugHelper.WriteException(ex, "macOS notifications are unavailable in this build");
+                DebugHelper.WriteException(ex, "macOS notifications are not available in this build");
                 return false;
             }
         }
@@ -51,7 +51,7 @@ internal static unsafe partial class MacOSNotificationService
         catch (Exception ex)
         {
             ClickActions.TryRemove(token, out _);
-            DebugHelper.WriteException(ex, "Failed to queue macOS notification");
+            DebugHelper.WriteException(ex, "SnapX could not add the macOS notification to the queue");
             return false;
         }
     }
@@ -71,8 +71,8 @@ internal static unsafe partial class MacOSNotificationService
                 });
             else if (status <= 0)
                 DebugHelper.WriteLine(status == 0
-                    ? "macOS notifications are disabled. Enable SnapX in System Settings > Notifications."
-                    : "macOS could not deliver a SnapX notification.");
+                    ? "Notifications are off for SnapX. In System Settings, go to Notifications, and then enable SnapX notifications."
+                    : "macOS could not show the SnapX notification.");
         }
         catch { /* Managed exceptions must never unwind through the native callback. */ }
     }

@@ -204,7 +204,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBox
                                 Text="{Binding Account.Keypath, Mode=TwoWay}"
-                                ToolTip.Tip="Optional. If left empty, the SSH client will automatically search your home directory for private keys (Tmds.Ssh handles this)."
+                                ToolTip.Tip="This field is optional. If the field is empty, the SSH client searches your home directory for private keys."
                                 Width="500" />
                             <Button Click="Button_OnClick" Content="Browse" />
                         </StackPanel>

@@ -28,19 +28,19 @@ public class LocalhostAccount : ICloneable
     [YamlEncrypt]
     public string Password { get; set; }
 
-    [Category("Localhost"), Description("Localhost Sub-folder Path, e.g. screenshots, %y = year, %mo = month. SubFolderPath will be automatically appended to HttpHomePath if HttpHomePath does not start with @")]
+    [Category("Localhost"), Description("Set the local subfolder path. Use %y for the year and %mo for the month. SnapX adds this path to the HTTP home path unless that path starts with @.")]
     public string SubFolderPath { get; set; }
 
     [Category("Localhost"), Description("HTTP Home Path, %host = Host e.g. google.com without http:// because you choose that in Remote Protocol.\nURL = HttpHomePath + SubFolderPath + FileName\nURL = Host + SubFolderPath + FileName (if HttpHomePath is empty)")]
     public string? HttpHomePath { get; set; }
 
-    [Category("Localhost"), Description("Automatically add sub folder path to end of http home path"), DefaultValue(true)]
+    [Category("Localhost"), Description("Add the subfolder path to the end of the HTTP home path."), DefaultValue(true)]
     public bool HttpHomePathAutoAddSubFolderPath { get; set; }
 
-    [Category("Localhost"), Description("Don't add file extension to URL"), DefaultValue(false)]
+    [Category("Localhost"), Description("Do not add the file extension to the URL."), DefaultValue(false)]
     public bool HttpHomePathNoExtension { get; set; }
 
-    [Category("Localhost"), Description("Choose an appropriate protocol to be accessed by the browser. Use 'file' for Shared Folders. RemoteProtocol will always be 'file' if HTTP Home Path is empty. "), DefaultValue(BrowserProtocol.file)]
+    [Category("Localhost"), Description("Select the browser protocol. Select file for shared folders. SnapX uses file when the HTTP home path is empty."), DefaultValue(BrowserProtocol.file)]
     public BrowserProtocol RemoteProtocol { get; set; }
 
     [Category("Localhost"), Description("file://Host:Port"), Browsable(false)]
@@ -198,4 +198,3 @@ public class LocalhostAccount : ICloneable
         return Clone();
     }
 }
-

@@ -8,7 +8,7 @@ public static class HotkeyBackendFactory
     {
         if (preference == HotkeyBackendPreference.Disabled)
         {
-            return new UnavailableHotkeyBackend("Global hotkeys are disabled in settings.", "Disabled");
+            return new UnavailableHotkeyBackend("Keyboard shortcuts are off in Settings.", "Disabled");
         }
 
         if (preference == HotkeyBackendPreference.WaylandPortal)
@@ -16,16 +16,16 @@ public static class HotkeyBackendFactory
             if (!OperatingSystem.IsLinux() || !IsWaylandEnvironment())
             {
                 return new UnavailableHotkeyBackend(
-                    "The Wayland portal backend requires a Linux Wayland session.",
-                    "Wayland portal (unavailable)");
+                    "The Wayland portal needs a Linux Wayland session.",
+                    "Wayland portal (not available)");
             }
 
             var portal = new PortalGlobalHotkeyBackend();
             return portal.IsAvailable
                 ? portal
                 : new UnavailableHotkeyBackend(
-                    portal.AvailabilityError ?? "The GlobalShortcuts portal is unavailable.",
-                    "Wayland portal (unavailable)");
+                    portal.AvailabilityError ?? "The Wayland keyboard shortcut portal is not available.",
+                    "Wayland portal (not available)");
         }
 
         if (preference == HotkeyBackendPreference.X11)
@@ -34,15 +34,15 @@ public static class HotkeyBackendFactory
             {
                 return new UnavailableHotkeyBackend(
                     "No X11 display is available.",
-                    "X11 (unavailable)");
+                    "X11 (not available)");
             }
 
             var requestedX11 = new X11HotkeyBackend();
             if (requestedX11.IsAvailable) return requestedX11;
 
-            string requestedError = requestedX11.AvailabilityError ?? "The X11 hotkey backend is unavailable.";
+            string requestedError = requestedX11.AvailabilityError ?? "SnapX could not start the X11 keyboard shortcut service.";
             requestedX11.Dispose();
-            return new UnavailableHotkeyBackend(requestedError, "X11 (unavailable)");
+            return new UnavailableHotkeyBackend(requestedError, "X11 (not available)");
         }
 
         if (OperatingSystem.IsWindows())
@@ -65,15 +65,15 @@ public static class HotkeyBackendFactory
                 }
 
                 return new UnavailableHotkeyBackend(
-                    portal.AvailabilityError ?? "The GlobalShortcuts portal is unavailable.",
-                    "Wayland (unavailable)");
+                    portal.AvailabilityError ?? "The Wayland keyboard shortcut portal is not available.",
+                    "Wayland (not available)");
             }
 
             if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
             {
                 return new UnavailableHotkeyBackend(
-                    "No X11 DISPLAY is available. Global hotkeys are disabled for this session.",
-                    "X11 (unavailable)");
+                    "No X11 display is available. Keyboard shortcuts are off for this session.",
+                    "X11 (not available)");
             }
 
             var backend = new X11HotkeyBackend();
@@ -82,9 +82,9 @@ public static class HotkeyBackendFactory
                 return backend;
             }
 
-            string error = backend.AvailabilityError ?? "The X11 hotkey backend could not be initialized.";
+            string error = backend.AvailabilityError ?? "SnapX could not start the X11 keyboard shortcut service.";
             backend.Dispose();
-            return new UnavailableHotkeyBackend(error, "X11 (unavailable)");
+            return new UnavailableHotkeyBackend(error, "X11 (not available)");
         }
 
         if (OperatingSystem.IsMacOS())
@@ -93,7 +93,7 @@ public static class HotkeyBackendFactory
         }
 
         return new UnavailableHotkeyBackend(
-            "No global hotkey backend is available for this operating system yet.");
+            "This operating system does not have a keyboard shortcut service for SnapX.");
     }
 
     private static bool IsWaylandEnvironment()

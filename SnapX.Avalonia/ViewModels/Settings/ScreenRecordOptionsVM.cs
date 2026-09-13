@@ -157,7 +157,7 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
     public bool IsLinux => OperatingSystem.IsLinux();
     public string AudioSourceLabel => IsMacOS ? "System audio" : "Audio source";
     public string SystemAudioStatus =>
-        "ScreenCaptureKit records the Mac's playback audio directly. No microphone or loopback driver is used.";
+        "ScreenCaptureKit records system audio from the Mac. It does not use a microphone or a loopback driver.";
     public string RecorderSummary
     {
         get
@@ -165,9 +165,9 @@ public sealed partial class ScreenRecordOptionsVM : ViewModelBase
             var source = string.IsNullOrWhiteSpace(FFmpeg.VideoSource) ? "no video source" : FFmpeg.VideoSource;
             var codec = FFmpeg.VideoCodec.ToString();
             string audio = string.IsNullOrWhiteSpace(FFmpeg.AudioSource)
-                ? "system audio off"
-                : "system audio on";
-            return $"{source} → {codec}.{FFmpeg.Extension} at {Capture.ScreenRecordFPS} FPS; {audio}";
+                ? "off"
+                : "on";
+            return $"Video: {source}. Format: {codec}.{FFmpeg.Extension}. Frame rate: {Capture.ScreenRecordFPS} FPS. System audio: {audio}.";
         }
     }
 

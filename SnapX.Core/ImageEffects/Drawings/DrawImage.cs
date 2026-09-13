@@ -23,7 +23,7 @@ public class DrawImage : ImageEffect
     [DefaultValue(typeof(Point), "0, 0")]
     public Point Offset { get; set; }
 
-    [DefaultValue(DrawImageSizeMode.DontResize), Description("How the image watermark should be rescaled, if at all.")]
+    [DefaultValue(DrawImageSizeMode.DontResize), Description("Select how SnapX changes the watermark size.")]
     public DrawImageSizeMode SizeMode { get; set; }
 
     [DefaultValue(typeof(Size), "0, 0")]
@@ -35,7 +35,7 @@ public class DrawImage : ImageEffect
     [DefaultValue(false)]
     public bool Tile { get; set; }
 
-    [DefaultValue(false), Description("If image watermark size bigger than source image then don't draw it.")]
+    [DefaultValue(false), Description("Do not add the watermark if it is larger than the source image.")]
     public bool AutoHide { get; set; }
 
     [DefaultValue(ImageInterpolationMode.HighQualityBicubic)]

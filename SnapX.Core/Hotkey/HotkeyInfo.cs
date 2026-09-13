@@ -104,7 +104,7 @@ public class HotkeyInfo
 
         if (IsOnlyModifiers)
         {
-            text += "...";
+            text += "Select a key";
         }
         else if (KeyCode == Keys.Back)
         {

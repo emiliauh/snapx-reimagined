@@ -37,7 +37,7 @@
                         <CheckBox Grid.Row="3" Grid.Column="1" Content="Use custom theme" IsChecked="{Binding UseCustomTheme}" />
                         <CheckBox Grid.Row="4" Content="Disable telemetry" IsChecked="{Binding DisableTelemetry}" />
                         <CheckBox Grid.Row="4" Grid.Column="1" Content="Disable file logging" IsChecked="{Binding DisableLogging}" />
-                        <CheckBox Grid.Row="5" Content="Hardware accelerated UI" IsChecked="{Binding HardwareAccelerated}" />
+                        <CheckBox Grid.Row="5" Content="Use hardware acceleration for the user interface" IsChecked="{Binding HardwareAccelerated}" />
                         <CheckBox Grid.Row="5" Grid.Column="1" Content="Use binary file-size units" IsChecked="{Binding BinaryUnits}" />
                         <CheckBox Grid.Row="6" Content="Show most recent task first" IsChecked="{Binding ShowMostRecentTaskFirst}" />
                         <CheckBox Grid.Row="6" Grid.Column="1" Content="Save settings after task completion" IsChecked="{Binding SaveSettingsAfterTaskCompleted}" />
@@ -57,8 +57,8 @@
                 <StackPanel Spacing="8">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Application upload" />
                     <TextBlock Opacity="0.7" Text="Set upload rules that apply to all tasks." TextWrapping="Wrap" />
-                    <CheckBox Content="Disable all uploads (reports an error for upload tasks)" IsChecked="{Binding DisableUpload}" />
-                    <CheckBox Content="Accept invalid TLS certificates" IsChecked="{Binding AcceptInvalidSslCertificates}" />
+                    <CheckBox Content="Disable all uploads. Upload tasks will show an error." IsChecked="{Binding DisableUpload}" />
+                    <CheckBox Content="Allow invalid TLS certificates" IsChecked="{Binding AcceptInvalidSslCertificates}" />
                     <CheckBox Content="Ignore emoji while URL encoding" IsChecked="{Binding UrlEncodeIgnoreEmoji}" />
                     <CheckBox Content="Show the first upload warning" IsChecked="{Binding ShowUploadWarning}" />
                     <CheckBox Content="Show the multi-file upload warning" IsChecked="{Binding ShowMultiUploadWarning}" />
@@ -70,7 +70,7 @@
                         <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Concurrent upload limit" />
                         <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding UploadLimitText}" />
                     </Grid>
-                    <TextBlock FontSize="12" Opacity="0.7" Text="Set the large-file warning to 0 to disable it. Select Save settings to write the configuration." TextWrapping="Wrap" />
+                    <TextBlock FontSize="12" Opacity="0.7" Text="Enter 0 to disable the large file warning. Select Save settings to save the configuration." TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
@@ -81,7 +81,7 @@
                     <CheckBox Content="Show thumbnail titles" IsChecked="{Binding ShowThumbnailTitle}" />
                     <CheckBox Content="Show task list columns" IsChecked="{Binding ShowColumns}" />
                     <CheckBox Content="Show tips in an empty task list" IsChecked="{Binding ShowMainWindowTip}" />
-                    <CheckBox Content="Automatically expand the tray capture menu" IsChecked="{Binding TrayAutoExpandCaptureMenu}" />
+                    <CheckBox Content="Expand the tray capture menu automatically" IsChecked="{Binding TrayAutoExpandCaptureMenu}" />
                     <TextBlock Margin="0,6,0,0" Text="Thumbnail click action" />
                     <ComboBox ItemsSource="{Binding ThumbnailActions}" SelectedItem="{Binding ThumbnailAction}" />
                 </StackPanel>
@@ -90,7 +90,7 @@
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsTaskPage}">
                 <StackPanel Spacing="8">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Task defaults" />
-                    <TextBlock FontSize="12" Opacity="0.65" Text="These options specify if the task uses the application defaults." TextWrapping="Wrap" />
+                    <TextBlock FontSize="12" Opacity="0.65" Text="These options control which application defaults the task uses." TextWrapping="Wrap" />
                     <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="24" RowSpacing="8">
                         <CheckBox Content="Use default after-capture actions" IsChecked="{Binding UseDefaultAfterCaptureJob}" />
                         <CheckBox Grid.Column="1" Content="Use default after-upload actions" IsChecked="{Binding UseDefaultAfterUploadJob}" />
@@ -129,7 +129,7 @@
                     <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                         <TextBlock VerticalAlignment="Center" Text="Width" />
                         <TextBox Grid.Column="1" Text="{Binding ThumbnailWidthText}" />
-                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Height (0 = automatic)" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Height. Enter 0 to set it automatically." />
                         <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ThumbnailHeightText}" />
                         <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="File suffix" />
                         <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ThumbnailName}" />
@@ -257,10 +257,10 @@
 
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16" IsVisible="{Binding IsHotkeyPage}">
                 <StackPanel Spacing="10">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Global hotkeys" />
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Global keyboard shortcuts" />
                     <TextBlock Text="{Binding HotkeyPlatformHelp}" TextWrapping="Wrap" />
-                    <CheckBox Content="Enable global hotkeys" IsChecked="{Binding HotkeysEnabled}" IsEnabled="{Binding AreGlobalHotkeysSupported}" />
-                    <CheckBox Content="Disable hotkeys while another window is fullscreen" IsChecked="{Binding DisableHotkeysOnFullscreen}" />
+                    <CheckBox Content="Enable global keyboard shortcuts" IsChecked="{Binding HotkeysEnabled}" IsEnabled="{Binding AreGlobalHotkeysSupported}" />
+                    <CheckBox Content="Disable keyboard shortcuts while another window is full screen" IsChecked="{Binding DisableHotkeysOnFullscreen}" />
                     <Grid ColumnDefinitions="210,*" RowDefinitions="Auto">
                         <TextBlock VerticalAlignment="Center" Text="Hotkey backend" />
                         <ComboBox Grid.Column="1" ItemsSource="{Binding HotkeyBackendPreferences}" SelectedItem="{Binding SelectedHotkeyBackendPreference}">
@@ -293,7 +293,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <Button Command="{Binding ResetHotkeysCommand}" Content="Restore default hotkeys" HorizontalAlignment="Left" />
+                    <Button Command="{Binding ResetHotkeysCommand}" Content="Restore default keyboard shortcuts" HorizontalAlignment="Left" />
                 </StackPanel>
             </Border>
 
@@ -331,7 +331,7 @@
                 <StackPanel Spacing="8">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding PageTitle}" />
                     <TextBlock Text="{Binding ConfigNote}" TextWrapping="Wrap" />
-                    <TextBlock Text="This page is connected to the same settings model used by capture, upload, history, and hotkey workflows. Use the controls in the related sections to change behavior." TextWrapping="Wrap" />
+                    <TextBlock Text="This page uses the settings for capture, upload, history, and keyboard shortcut tasks. Use the related sections to change these settings." TextWrapping="Wrap" />
                     <Button Command="{Binding OpenConfigFolderCommand}" Content="Open configuration folder" HorizontalAlignment="Left" IsVisible="{Binding IsConfigFolderPage}" />
                 </StackPanel>
             </Border>

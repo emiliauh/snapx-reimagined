@@ -283,7 +283,7 @@
                     </controls:FANavigationViewItem>
                 </controls:FANavigationView.MenuItems>
             </controls:FANavigationViewItem>
-            <controls:FANavigationViewItem Content="Hotkeys" Tag="Hotkeys">
+            <controls:FANavigationViewItem Content="Keyboard shortcuts" Tag="Hotkeys">
                 <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="KeyboardShiftUppercase"
@@ -419,7 +419,7 @@
                         Icon="QuestionCircle"
                         Opacity="0.6">
                         <ToolTip.Tip>
-                            <TextBlock xml:space="preserve">Keep in mind any options that require interaction with the UI may be broken. We're working on it!</TextBlock>
+                            <TextBlock xml:space="preserve">Some options that require user interface interaction do not work.</TextBlock>
                         </ToolTip.Tip>
                     </fluent:FluentIcon>
                 </TextBlock>
@@ -769,7 +769,7 @@
                         IconVariant="Regular" />
                 </controls:FANavigationViewItem.IconSource>
             </controls:FANavigationViewItem>
-            <controls:FANavigationViewItem Content="Import/Export" Tag="ImportExport">
+            <controls:FANavigationViewItem Content="Import and export" Tag="ImportExport">
                 <controls:FANavigationViewItem.IconSource>
                     <fluent:FluentIconSource
                         Icon="ArchiveSettings"

@@ -15,7 +15,7 @@ public class AboutDialog
         return Core.Utils.OsInfo.GetFancyOSNameAndVersion();
     }
     public virtual string GetTitle() => Core.SnapXL.Title;
-    public virtual string GetLicense() => "GPL v3 or Later";
+    public virtual string GetLicense() => "GPL version 3 or later";
 
     public virtual string GetLicenseURL() =>
         $"{Core.Utils.Miscellaneous.Links.GitHub}/blob/develop/LICENSE.md";
@@ -26,7 +26,7 @@ public class AboutDialog
     public virtual string GetDiscord() => Core.Utils.Miscellaneous.Links.Discord;
 
     public virtual string GetDescription() => Assembly.GetExecutingAssembly()
-        .GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description ?? "Image sharing tool";
+        .GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description ?? "Screen capture and sharing tool";
     public virtual string GetCopyright() =>
         ((AssemblyCopyrightAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyCopyrightAttribute))!).Copyright;
     public virtual string GetRuntime() => System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;

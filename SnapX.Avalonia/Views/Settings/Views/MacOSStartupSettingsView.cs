@@ -11,7 +11,7 @@ public sealed class MacOSStartupSettingsView : UserControl
 {
     private readonly MacOSLoginItemService _service = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly Button _enable = new() { Content = "Enable launch at login" };
+    private readonly Button _enable = new() { Content = "Open SnapX at login" };
     private readonly Button _disable = new() { Content = "Disable" };
     private Window? _window;
 

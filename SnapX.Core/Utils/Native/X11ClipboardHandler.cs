@@ -134,7 +134,7 @@ public class X11ClipboardHandler : IDisposable
                 Thread.Sleep(10);
                 continue;
             }
-            DebugHelper.Logger.Debug("EventLoop: Processing event!");
+            DebugHelper.Logger.Debug("Event loop: Processing an event.");
             LinuxAPI.XNextEvent(_display, out var eventData);
 
             switch (eventData.type)

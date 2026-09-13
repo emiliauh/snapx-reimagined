@@ -1,7 +1,7 @@
 <windowing:FAAppWindow
     Height="600"
     Loaded="Control_OnLoaded"
-    Title="OCR Result"
+    Title="OCR result"
     Width="900"
     x:Class="SnapX.Avalonia.Views.OCR"
     x:DataType="viewModels:OCRViewModel"
@@ -157,7 +157,7 @@
             <SplitButton
                 Click="OcrClipboard_Click"
                 Content="Paste from Clipboard"
-                ToolTip.Tip="Only supports one file/paste at once.">
+                ToolTip.Tip="Paste one file or one image at a time.">
                 <SplitButton.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
                         <MenuItem Click="OcrFile_Click" Header="Select an image file">

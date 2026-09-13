@@ -1515,8 +1515,22 @@ static void FuzzSimplifiedTechnicalEnglish(Random random, ref int checks)
 
     Check(SimplifiedTechnicalEnglish.Analyze("Do not click here.").Count > 0,
         "The STE checker did not reject a vague instruction", ref checks);
+    Check(SimplifiedTechnicalEnglish.Analyze("On — SnapX starts.").Count > 0,
+        "The STE checker did not reject an em dash", ref checks);
+    Check(SimplifiedTechnicalEnglish.Analyze("People who've helped.").Count > 0,
+        "The STE checker did not reject a contraction", ref checks);
+    Check(SimplifiedTechnicalEnglish.Analyze("People who’ve helped.").Count > 0,
+        "The STE checker did not reject a contraction with a typographic apostrophe", ref checks);
+    Check(SimplifiedTechnicalEnglish.Analyze("SnapX cannot start.").Count == 0,
+        "The STE checker rejected the full form cannot", ref checks);
     Check(SimplifiedTechnicalEnglish.Analyze("This is a short sentence.").Count == 0,
         "The STE checker rejected clear text", ref checks);
+
+    foreach (char dash in "‐‑‒–—―−﹘﹣－")
+    {
+        Check(SimplifiedTechnicalEnglish.Analyze($"First{dash}second.").Count > 0,
+            $"The STE checker did not reject dash character U+{(int)dash:X4}", ref checks);
+    }
 
     for (int i = 0; i < 15_000; i++)
     {

@@ -46,21 +46,21 @@ public class UploadScreenshot : ImageUploader
                 switch (error)
                 {
                     case "1":
-                        errorMessage = "The MD5 sum that you provided did not match the MD5 sum that we calculated for the uploaded image file." +
-                                       " There may of been a network interruption during upload. Suggest that you try the upload again.";
+                        errorMessage = "The MD5 value does not match the MD5 value of the uploaded image file." +
+                                       " A network interruption can cause this error. Try the upload again.";
                         break;
                     case "2":
-                        errorMessage = "The apiKey that you provided does not exist or has been banned. Please contact us for more information.";
+                        errorMessage = "The API key does not exist or the service blocked it. Contact the service administrator.";
                         break;
                     case "3":
-                        errorMessage = "The file that you provided was not a png or jpg.";
+                        errorMessage = "The file is not a PNG or JPEG file.";
                         break;
                     case "4":
-                        errorMessage = "The file that you provided was too large, currently the limit per file is 50MB.";
+                        errorMessage = "The file is larger than the 50 MB limit.";
                         break;
                     case "99":
                     default:
-                        errorMessage = "An unkown error occured, please contact the admin and include a copy of the file that you were trying to upload.";
+                        errorMessage = "An unknown error occurred. Contact the service administrator and include a copy of the file.";
                         break;
                 }
 

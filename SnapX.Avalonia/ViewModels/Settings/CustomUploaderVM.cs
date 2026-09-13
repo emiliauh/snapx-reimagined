@@ -911,7 +911,7 @@ public partial class CustomUploaderVM : ViewModelBase
         });
         panel.Children.Add(new SelectableTextBlock
         {
-            Text = value ?? "???, Please check the debug log, this shouldn't be happening.",
+            Text = value ?? "No result is available. See the debug log for more information.",
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12
         });

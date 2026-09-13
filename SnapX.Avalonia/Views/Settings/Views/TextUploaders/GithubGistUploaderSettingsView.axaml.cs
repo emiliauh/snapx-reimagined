@@ -71,8 +71,8 @@ public partial class GithubGistUploaderSettingsView : UserControl
             CalculateAccessibility();
             var dialog = new FAContentDialog
             {
-                Title = success ? "Success" : "Login Failed",
-                Content = success ? "Login successful!" : "Please check your username and password.",
+                Title = success ? "Login complete" : "Login failed",
+                Content = success ? "The login is complete." : "Make sure that the authorization code is correct.",
                 CloseButtonText = "OK",
                 DefaultButton = FAContentDialogButton.Close
             };

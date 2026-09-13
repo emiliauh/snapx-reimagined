@@ -12,7 +12,7 @@
             Header="Account Authentication"
             IconSource="Contact"
             IsExpanded="True">
-            <controls:FASettingsExpanderItem Content="Don't have a key?">
+            <controls:FASettingsExpanderItem Content="Get an API key">
                 <controls:FASettingsExpanderItem.Footer>
                     <Button
                         Classes="accent"

@@ -68,8 +68,8 @@ public partial class PastebinUploaderSettingsView : UserControl
 
                 var dialog = new FAContentDialog
                 {
-                    Title = success ? "Success" : "Login Failed",
-                    Content = success ? "Login successful!" : "Please check your username and password.",
+                    Title = success ? "Login complete" : "Login failed",
+                    Content = success ? "The login is complete." : "Make sure that the user name and password are correct.",
                     CloseButtonText = "OK",
                     DefaultButton = FAContentDialogButton.Close
                 };

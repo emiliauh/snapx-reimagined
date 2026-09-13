@@ -79,7 +79,7 @@ public abstract class Changelog
             return false;
         }
 #if DEBUG
-        DebugHelper.WriteLine($"Validating changelog: {changelog?.Substring(0, Math.Min(100, changelog.Length))}...");
+        DebugHelper.WriteLine($"Changelog preview: {changelog?.Substring(0, Math.Min(100, changelog.Length))}");
 #endif
         return changelog!.Length > 4;
     }
@@ -160,7 +160,7 @@ public abstract class Changelog
             .Select(tag =>
             {
                 var firstLineOfMessage = tag.Commit?.Message?.Split('\n').FirstOrDefault()?.Trim();
-                return $"Tag: {tag.Name} - {firstLineOfMessage}";
+                return $"Tag {tag.Name}: {firstLineOfMessage}";
             })
             .ToList();
         DebugHelper.WriteLine($"Tags since version: {tagSummaries}");
@@ -182,7 +182,7 @@ public abstract class Changelog
 
             var buildSummaries = actions.WorkflowRuns
                 .Where(run => (run?.RunNumber > patch) && (run.Name.Contains("build", StringComparison.OrdinalIgnoreCase)) && run.Status.Contains("success", StringComparison.InvariantCultureIgnoreCase))
-                .Select(run => $"{run.Name} #{run.RunNumber}:  {run.DisplayTitle} - {run.Actor.Login}")
+                .Select(run => $"{run.Name} #{run.RunNumber}: {run.DisplayTitle}. User: {run.Actor.Login}")
                 .ToList();
 
             return buildSummaries.Count != 0 ? string.Join("\n", buildSummaries) : string.Empty;

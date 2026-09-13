@@ -33,7 +33,7 @@ public partial class Donation : UserControl
     {
         if (!_isInitialized)
         {
-            DebugHelper.WriteLine("DonationComboBox_SelectionChanged first run!");
+            DebugHelper.WriteLine("Donation amount selection initialized.");
             _isInitialized = true;
             return;
         }
@@ -133,4 +133,3 @@ public partial class Donation : UserControl
         ProcessDonation(Sender as FAComboBox, true);
     }
 }
-

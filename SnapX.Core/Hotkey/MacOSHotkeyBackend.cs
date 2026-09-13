@@ -18,9 +18,9 @@ internal sealed class MacOSHotkeyBackend : IHotkeyBackend
     private bool disposed;
 
     public event Action<string>? Activated;
-    public string Name => "macOS Carbon";
+    public string Name => "macOS keyboard shortcuts";
     public bool IsAvailable => OperatingSystem.IsMacOS();
-    public string? AvailabilityError => IsAvailable ? null : "macOS global shortcuts require macOS.";
+    public string? AvailabilityError => IsAvailable ? null : "macOS keyboard shortcuts are available only on macOS.";
 
     public MacOSHotkeyBackend() => callback = OnHotkey;
 
@@ -41,7 +41,7 @@ internal sealed class MacOSHotkeyBackend : IHotkeyBackend
                 if (status != 0)
                 {
                     foreach (var item in registrations)
-                        results[item.Id] = HotkeyBackendRegistrationResult.Failure($"macOS event handler failed (OSStatus {status}).");
+                        results[item.Id] = HotkeyBackendRegistrationResult.Failure($"macOS could not start the keyboard shortcut service. Error code: {status}.");
                     return results;
                 }
             }
@@ -49,7 +49,7 @@ internal sealed class MacOSHotkeyBackend : IHotkeyBackend
             {
                 if (!item.HotkeyInfo.IsValidHotkey || !TryGetKeyCode(item.HotkeyInfo.KeyCode, out uint code))
                 {
-                    results[item.Id] = HotkeyBackendRegistrationResult.Failure("This key has no macOS equivalent. Choose a letter, number, function, or navigation key.");
+                    results[item.Id] = HotkeyBackendRegistrationResult.Failure("This key is not available on macOS. Select a letter key, number key, function key, or navigation key.");
                     continue;
                 }
                 uint modifiers = (item.HotkeyInfo.Win ? 256u : 0) | (item.HotkeyInfo.Shift ? 512u : 0) |
@@ -62,7 +62,7 @@ internal sealed class MacOSHotkeyBackend : IHotkeyBackend
                     bindings.Add(id, (item.Id, reference));
                     results[item.Id] = HotkeyBackendRegistrationResult.Success;
                 }
-                else results[item.Id] = HotkeyBackendRegistrationResult.Failure($"macOS could not register this shortcut (OSStatus {status}); it may already be in use.");
+                else results[item.Id] = HotkeyBackendRegistrationResult.Failure($"macOS could not register this keyboard shortcut. Another application can use the same key combination. Error code: {status}.");
             }
             return results;
         }, cancellationToken);

@@ -37,7 +37,7 @@
             SelectionChanged="DonationServiceComboBox"
             Width="200">
             <ToolTip.Tip>
-                <Label Content="There are multiple methods to donate" />
+                <Label Content="Select a donation service" />
             </ToolTip.Tip>
             <controls:FAComboBoxItem Content="Liberapay" Tag="Liberapay" />
 

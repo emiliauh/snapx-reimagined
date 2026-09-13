@@ -229,7 +229,7 @@ public class UploadersConfig : SettingsBase<UploadersConfig>
 
     public string EmailSmtpServer { get; set; } = "smtp.gmail.com";
     public int EmailSmtpPort { get; set; } = 587;
-    public string EmailFrom { get; set; } = "...@gmail.com";
+    public string EmailFrom { get; set; } = "user@example.com";
     [JsonEncrypt]
     [YamlEncrypt]
     public string EmailPassword { get; set; } = "";

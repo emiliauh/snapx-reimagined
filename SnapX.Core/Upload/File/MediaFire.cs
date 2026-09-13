@@ -144,7 +144,7 @@ public sealed class MediaFire : FileUploader
             throw new IOException("Invalid response");
 
         if (resp.doupload.result != 0 || resp.doupload.fileerror != null)
-            throw new IOException($"Couldn't upload the file: {resp.doupload.description ?? "Unknown error"}");
+            throw new IOException($"SnapX could not upload the file. Details: {resp.doupload.description ?? "Unknown error"}");
         if (resp.doupload.status != 99) return null;
 
         if (resp.doupload.quickkey == null) throw new IOException("Invalid response");
@@ -157,7 +157,7 @@ public sealed class MediaFire : FileUploader
     private void EnsureSuccess(MFResponse resp)
     {
         if (resp.result != "Success")
-            throw new IOException($"Couldn't upload the file: {resp.message ?? "Unknown error"}");
+            throw new IOException($"SnapX could not upload the file. Details: {resp.message ?? "Unknown error"}");
 
         if (resp.new_key == "yes") NextSignatureKey();
     }
@@ -267,4 +267,3 @@ public sealed class MediaFire : FileUploader
         }
     }
 }
-

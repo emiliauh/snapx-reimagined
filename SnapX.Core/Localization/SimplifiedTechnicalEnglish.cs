@@ -30,10 +30,14 @@ public static partial class SimplifiedTechnicalEnglish
 
         var issues = new List<string>();
         var value = text.Trim();
-        var searchable = Regex.Replace(value, @"\{[^{}]*\}", "value");
+        var searchable = Regex.Replace(value, @"\{[^{}]*\}", "value")
+            .Replace('\u2019', '\'');
 
         if (ContractionPattern().IsMatch(searchable))
             issues.Add("Use a full form instead of a contraction.");
+
+        if (DashLikePunctuationPattern().IsMatch(searchable))
+            issues.Add("Use words or separate sentences instead of dash punctuation.");
 
         foreach (var phrase in ForbiddenPhrases)
         {
@@ -60,8 +64,11 @@ public static partial class SimplifiedTechnicalEnglish
         return issues;
     }
 
-    [GeneratedRegex(@"\b(?:can't|cannot|couldn't|didn't|doesn't|don't|isn't|it's|shouldn't|that's|there's|wasn't|weren't|won't|wouldn't|you'll|you're|you've)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(?:aren't|can't|couldn't|didn't|doesn't|don't|hasn't|haven't|I'd|I'll|isn't|it's|shouldn't|that's|there's|wasn't|we'll|we're|we've|weren't|who's|who've|won't|wouldn't|you'll|you're|you've)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ContractionPattern();
+
+    [GeneratedRegex("[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]", RegexOptions.CultureInvariant)]
+    private static partial Regex DashLikePunctuationPattern();
 
     [GeneratedRegex(@"[^.!?]+[.!?]", RegexOptions.CultureInvariant)]
     private static partial Regex SentencePattern();

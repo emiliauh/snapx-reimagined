@@ -204,7 +204,7 @@ internal sealed class RegionAnnotationToolbar : Border
             Height = 36,
             VerticalContentAlignment = VerticalAlignment.Center
         };
-        ToolTip.SetTip(textBox, "Text to place; choose the Text tool and click the image");
+        ToolTip.SetTip(textBox, "Enter the annotation text. Select the Text tool. Then, select the image.");
         AutomationProperties.SetName(textBox, "Annotation text");
         textBox.TextChanged += (_, _) =>
         {

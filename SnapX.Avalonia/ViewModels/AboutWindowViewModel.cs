@@ -163,7 +163,7 @@ public partial class AboutWindowViewModel : ViewModelBase
         OsPlatform = _commonAboutDialog.GetOsPlatform();
         BuildInformation = _commonAboutDialog.GetBuildInformation();
         SystemInformationText =
-            $"{SystemInfo} ({OsArchitecture}, {OsPlatform}) powered by {Runtime}!";
+            $"{SystemInfo}. Architecture: {OsArchitecture}. Platform: {OsPlatform}. Runtime: {Runtime}.";
         return Task.CompletedTask;
     }
 

@@ -67,7 +67,7 @@ public partial class LogViewer : FAAppWindow
             var message = logEvent.RenderMessage();
             if (_logTextBlock is null)
             {
-                DebugHelper.WriteLine($"{nameof(RefreshLogs)}: {nameof(_logTextBlock)} is null!");
+                DebugHelper.WriteLine($"{nameof(RefreshLogs)}: {nameof(_logTextBlock)} is null.");
                 return;
             }
 

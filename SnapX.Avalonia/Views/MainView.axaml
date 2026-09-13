@@ -165,7 +165,7 @@
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!PerformActions" Text="Perform actions" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!CopyFileToClipboard" Text="Copy file to clipboard" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!CopyFilePathToClipboard" Text="Copy file path to clipboard" />
-                            <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!ShowInExplorer" Text="Show file in explorer" />
+                            <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!ShowInExplorer" Text="Show file in folder" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!ScanQRCode" Text="Scan QR Code" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!DoOCR" Text="Perform OCR" />
                             <controls:FAToggleMenuFlyoutItem Click="AfterCaptureUploadItem_OnClick" Tag="!UploadImageToHost" Text="Upload image to host" />
@@ -298,7 +298,7 @@
                 MinHeight="44"
                 MinWidth="44"
                 Padding="8"
-                ToolTip.Tip="Click to switch between Photo and Video capture mode">
+                ToolTip.Tip="Select to change between photo mode and video mode.">
                 <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
                     <fluent:SymbolIcon x:Name="CaptureModeIcon" IconVariant="Regular" Symbol="Camera" Width="24" Height="24" VerticalAlignment="Center" />
                     <TextBlock x:Name="CaptureModeLabel" IsVisible="{Binding #MainNavView.IsPaneOpen}" Text="Photo" VerticalAlignment="Center" />

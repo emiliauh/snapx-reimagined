@@ -347,7 +347,7 @@ public static class SettingManager
                 // but its version number is LESS THAN or EQUAL TO the last applied version,
                 // it means an out-of-order or duplicate migration is being attempted.
                 throw new InvalidOperationException(
-                    $"Out-of-order migration detected! Attempted to apply '{fileName}' (version {currentMigrationVersion}), " +
+                    $"The migration order is not valid. SnapX tried to apply '{fileName}' (version {currentMigrationVersion}), " +
                     $"but a newer migration (version {lastAppliedMigrationVersion}) has already been applied. " +
                     "Please ensure to NAG developer that migrations are applied in strictly increasing numerical order."
                 );
@@ -463,7 +463,7 @@ public static class SettingManager
                 }
                 else
                 {
-                    DebugHelper.WriteAlways("JSON -> SQLite Migration: Migration complete! Welcome to the future! 🚀");
+                    DebugHelper.WriteAlways("JSON to SQLite migration: Complete.");
                 }
             }
             else
@@ -480,7 +480,7 @@ public static class SettingManager
         }
         catch (Exception ex)
         {
-            DebugHelper.WriteAlways($"JSON -> SQLite Migration: Migration failed!!!");
+            DebugHelper.WriteAlways("JSON to SQLite migration: Failed.");
             DebugHelper.WriteException(ex);
         }
     }

@@ -62,7 +62,7 @@ public class HistoryItem
     {
         get
         {
-            var text = ToString().Truncate(50, "...", false);
+            var text = ToString().Truncate(50, " [more]", false);
 
             return $"[{DateTime:HH:mm:ss}] {text}";
         }

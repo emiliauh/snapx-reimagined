@@ -28,11 +28,11 @@ public enum AnchorStyles
 
 public enum ResizeMode
 {
-    [Description("Resizes all images to the specified size.")]
+    [Description("Resize all images to the specified size.")]
     ResizeAll,
-    [Description("Only resize image if it is bigger than specified size.")]
+    [Description("Resize an image only if it is larger than the specified size.")]
     ResizeIfBigger,
-    [Description("Only resize image if it is smaller than specified size.")]
+    [Description("Resize an image only if it is smaller than the specified size.")]
     ResizeIfSmaller
 }
 

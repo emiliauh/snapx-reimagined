@@ -22,7 +22,7 @@ public sealed class LoginItemController(ILoginItemService service)
     public LoginItemStatus ApplyChoice(bool optedIn)
     {
         if (!optedIn) return service.GetStatus();
-        if (!service.CanManage) throw new InvalidOperationException("Move SnapX to Applications before enabling launch at login.");
+        if (!service.CanManage) throw new InvalidOperationException("Move SnapX to the Applications folder before you enable launch at login.");
         var status = service.GetStatus();
         if (status is not (LoginItemStatus.Enabled or LoginItemStatus.RequiresApproval)) service.Register();
         return service.GetStatus();
@@ -37,7 +37,7 @@ public sealed class MacOSLoginItemService : ILoginItemService
         // Retain the framework for the process lifetime: its ObjC classes stay registered.
         NativeLibrary.Load("/System/Library/Frameworks/ServiceManagement.framework/ServiceManagement");
         var cls = GetClass("SMAppService");
-        return cls != IntPtr.Zero ? cls : throw new PlatformNotSupportedException("macOS login item services are unavailable.");
+        return cls != IntPtr.Zero ? cls : throw new PlatformNotSupportedException("This version of macOS does not support login item services.");
     });
 
     public bool CanManage => OperatingSystem.IsMacOSVersionAtLeast(13) &&
@@ -73,9 +73,9 @@ public sealed class MacOSLoginItemService : ILoginItemService
 
     private void ChangeRegistration(string operation)
     {
-        if (!CanManage) throw new InvalidOperationException("Install SnapX in Applications before changing launch at login.");
+        if (!CanManage) throw new InvalidOperationException("Install SnapX in the Applications folder before you change launch at login.");
         if (SendWithError(MainService(), Selector(operation), out var error) != 0) return;
-        string message = "macOS could not change the login item. Check System Settings > General > Login Items & Extensions.";
+        string message = "macOS could not change the login item. In System Settings, go to General, and then Login Items and Extensions.";
         if (error != IntPtr.Zero)
         {
             var description = SendPointer(error, Selector("localizedDescription"));

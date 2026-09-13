@@ -8,7 +8,7 @@ using SixLabors.ImageSharp.Processing;
 
 namespace SnapX.Core.ImageEffects.Adjustments;
 
-[Description("Black & white")]
+[Description("Black and white")]
 internal class BlackWhite : ImageEffect
 {
     public override Image Apply(Image img)

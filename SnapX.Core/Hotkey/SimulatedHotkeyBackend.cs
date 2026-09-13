@@ -17,7 +17,7 @@ public sealed class SimulatedHotkeyBackend : IHotkeyBackend
 
     public bool IsAvailable => !_disposed;
 
-    public string? AvailabilityError => _disposed ? "The simulated hotkey backend is disposed." : null;
+    public string? AvailabilityError => _disposed ? "The simulated keyboard shortcut service stopped." : null;
 
     public IReadOnlyCollection<HotkeyRegistration> Registrations
     {

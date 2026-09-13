@@ -20,7 +20,7 @@
             IsClosable="False"
             IsOpen="True"
             Margin="16"
-            Message="This configuration contains passwords, account details, and upload history. Do not share it with someone you do not trust."
+            Message="This configuration contains passwords, account details, and upload history. Share it only with a person that you trust."
             Severity="Warning"
             Title="Warning">
             <controls:FAInfoBar.IconSource>

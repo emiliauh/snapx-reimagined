@@ -111,7 +111,7 @@ public sealed class RecordingControlWindow
         });
         _status = new TextBlock
         {
-            Text = "Recording…",
+            Text = "Recording",
             Foreground = Brushes.White,
             FontWeight = FontWeight.Bold,
             VerticalAlignment = VerticalAlignment.Center
@@ -276,12 +276,12 @@ public sealed class RecordingControlWindow
     {
         if (ScreenRecordManager.IsPaused)
         {
-            _status.Text = "Paused…";
+            _status.Text = "Paused";
             _pauseResume.Content = "Resume";
         }
         else
         {
-            _status.Text = "Recording…";
+            _status.Text = "Recording";
             _pauseResume.Content = "Pause";
         }
 

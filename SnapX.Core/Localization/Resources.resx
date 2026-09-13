@@ -34,13 +34,13 @@
     <value>Error</value>
   </data>
   <data name="Ok">
-    <value>Ok</value>
+    <value>OK</value>
   </data>
   <data name="Close">
     <value>Close</value>
   </data>
   <data name="Processing">
-    <value>Processing.</value>
+    <value>Processing</value>
   </data>
   <data name="UI_Settings">
     <value>Settings</value>
@@ -64,7 +64,7 @@
     <value>Upload with SnapX</value>
   </data>
   <data name="UploadManagerUploadFile">
-    <value>SnapX - File Upload</value>
+    <value>SnapX: File upload</value>
   </data>
   <data name="KeepSnapXOpenAndFree">
     <value>Keep SnapX free and open</value>
@@ -73,7 +73,7 @@
     <value>Count me in</value>
   </data>
   <data name="MaybeLater">
-    <value>Maybe later</value>
+    <value>Not now</value>
   </data>
   <data name="YouCanTypeHere">
     <value>You can type here</value>
@@ -128,49 +128,49 @@
   <value>Open</value>
  </data>
  <data name="UI_Open_ToolTip">
-  <value>Opens the URL or file.</value>
+  <value>Open the URL or file.</value>
  </data>
  <data name="UI_URL">
   <value>URL</value>
  </data>
  <data name="UI_URL_ToolTip">
-  <value>Opens the URL in your browser.</value>
+  <value>Open the URL in your browser.</value>
  </data>
   <data name="UI_ShortenURL">
     <value>Shorten URL</value>
   </data>
   <data name="UI_ShortenURL_ToolTip">
-    <value>Uses the configured URL shortener.</value>
+    <value>Use the configured URL shortener.</value>
   </data>
  <data name="UI_ShortenedURL">
   <value>Shortened URL</value>
  </data>
  <data name="UI_ShortenedURL_ToolTip">
-  <value>Opens the shortened URL in your browser.</value>
+  <value>Open the shortened URL in your browser.</value>
  </data>
  <data name="UI_ThumbnailURL">
   <value>Thumbnail URL</value>
  </data>
  <data name="UI_ThumbnailURL_ToolTip">
-  <value>Opens the thumbnail URL in your browser.</value>
+  <value>Open the thumbnail URL in your browser.</value>
  </data>
  <data name="UI_DeletionURL">
   <value>Deletion URL</value>
  </data>
  <data name="UI_DeletionURL_ToolTip">
-  <value>Opens the deletion URL in your browser.</value>
+  <value>Open the deletion URL in your browser.</value>
  </data>
  <data name="UI_File">
   <value>File</value>
  </data>
  <data name="UI_File_ToolTip">
-  <value>Opens the file with the default application.</value>
+  <value>Open the file with the default application.</value>
  </data>
  <data name="UI_FolderName">
   <value>Folder name</value>
  </data>
  <data name="UI_Folder_ToolTip">
-  <value>Opens the folder with the default application.</value>
+  <value>Open the folder with the default application.</value>
  </data>
  <data name="UI_ThumbnailFile">
   <value>Thumbnail file</value>
@@ -203,60 +203,60 @@
     <value>Download</value>
   </data>
   <data name="UI_Download_ToolTip">
-    <value>Downloads the file from the saved URL or thumbnail URL.</value>
+    <value>Download the file from the saved URL or thumbnail URL.</value>
   </data>
   <data name="UI_ShareURL">
     <value>Share URL</value>
   </data>
   <data name="UI_ShareURL_ToolTip">
-    <value>Shares the URL with a configured URL service.</value>
+    <value>Share the URL with the configured URL service.</value>
   </data>
  <data name="UI_Upload">
   <value>Upload</value>
  </data>
  <data name="UI_Upload_ToolTip">
-  <value>Uploads the item to the selected image service or custom uploader.</value>
+  <value>Upload the item to the selected image service or custom uploader.</value>
  </data>
  <data name="UI_OCRImage">
   <value>Run OCR on image</value>
  </data>
  <data name="UI_OCRImage_ToolTip">
-  <value>Reads text in the image with PaddleOCR.</value>
+  <value>Use PaddleOCR to read text in the image.</value>
  </data>
  <data name="UI_EditImage">
   <value>Edit image</value>
  </data>
  <data name="UI_EditImage_ToolTip">
-  <value>Opens the image editor.</value>
+  <value>Open the image editor.</value>
  </data>
  <data name="UI_BeautifyImage">
   <value>Enhance image</value>
  </data>
  <data name="UI_BeautifyImage_ToolTip">
-  <value>Opens the image enhancement tool.</value>
+  <value>Open the image enhancement tool.</value>
  </data>
  <data name="UI_AddImageEffects">
   <value>Add image effects</value>
  </data>
  <data name="UI_AddImageEffects_ToolTip">
-  <value>Opens the image effects editor.</value>
+  <value>Open the image effects editor.</value>
  </data>
  <data name="UI_RemoveTask">
   <value>Remove item from history</value>
  </data>
  <data name="UI_RemoveTask_ToolTip">
-  <value>Removes the task from history.</value>
+  <value>Remove the task from history.</value>
  </data>
  <data name="UI_ClearTaskList">
   <value>Clear task list</value>
  </data>
  <data name="UI_ClearTaskList_ToolTip">
-  <value>Removes recent tasks from the main window. History keeps the tasks.</value>
+  <value>Remove recent tasks from the main window. The tasks stay in history.</value>
  </data>
  <data name="UI_DeleteFileLocally">
   <value>Delete local file</value>
  </data>
  <data name="UI_DeleteFileLocally_ToolTip">
-  <value>Deletes the local file. It does not delete the remote item.</value>
+  <value>Delete the local file. This action does not delete the remote item.</value>
  </data>
 </root>

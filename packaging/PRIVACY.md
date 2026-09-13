@@ -1,100 +1,95 @@
-# SnapX's Privacy Policy
+# SnapX Privacy Policy
 
-> Authored on 2/8/2025 \
-> Last updated on 2/14/2025 11:37 AM EST (MM/DD/YYYY)
+Last updated: September 12, 2026
 
-By default, SnapX collects telemetry data about how the application is performing in two ways:
+SnapX uses telemetry to help the developers find errors and improve the
+application. Telemetry is off by default. SnapX sends telemetry only when you
+set the `SNAPX_TELEMETRY` environment variable to `1`.
 
-- Application usage data (Tells us how many people are using the application on what systems)
-- What Operating System you're running and which version you're using, i.e., `Windows 11 24H2 Home` or `macOS Sequoia` or `Fedora Linux 43 (KDE Plasma) x86_64 Linux 6.13.2`
-- Application version, i.e., `1.0.0+44e1612` and the assembly you're using, `snapx-ui`
-- What CPU your computer has, i.e., `i7-11800H`
-- What GPU your computer has, i.e,. `RTX 3060 Laptop GPU`
-- How much memory the application is using (Helps to identify memory leaks)
-- How much overall memory your computer has to understand better the "headroom space" left.
-- Application environment, i.e., running it on Linux with AppImage, Flatpak, Snap, or running the portable version of my application on Windows.
-- Application crash data with stack traces that have had any PII removed & anonymized
-- Geographic region (never precise location; only country, state, or city).
+## Data that telemetry can send
 
-All this data helps to improve SnapX as it is [free software](https://www.fsf.org/about/what-is-free-software).
+When you enable telemetry, SnapX can send this data:
 
-### Definitions
+- Application usage events.
+- The SnapX version and executable name.
+- The operating system and its version.
+- The processor and graphics processor models.
+- The total memory and the memory that the application uses.
+- The application package type, such as AppImage, Flatpak, Snap, or a portable
+  Windows application.
+- Error data and stack traces. SnapX removes known personally identifiable
+  information from this data before it sends the data.
+- An approximate geographic region, such as a country, state, or city.
 
-`telemetry` - Modern, dynamic distributed systems require comprehensive monitoring to understand software behavior in various situations. Developers face challenges tracking the software’s performance in the field and responding to various modifications. To keep up with continuously changing requirements, it’s essential to have a simple way to collect data from systems the application is running.
+SnapX does not send your captured images, videos, text, or files as telemetry.
+SnapX does not sell telemetry data.
 
-`stack trace` - A stack trace is like a list showing the steps a computer took before something went wrong. It helps us figure out which part of the program caused the problem by showing the path it followed. Just like a treasure map, it guides us to the exact place where the mistake happened.
+## Definitions
 
-`fingerprinting` - Information that can be used to single you out in the data samples, making your data unique.
+Telemetry is data about the operation and use of an application.
 
-`anonymous` - Not identified by name; of unknown name.
+A stack trace is a list of the functions that ran before an error. Developers
+use this list to find the cause of an error.
 
-## What I will not do
+Fingerprinting is the use of data to identify one device or person.
 
-- Sell your data
-- Violate the GDPR or the CCPA.
-- Spy on what you're doing
-- Collect non-anonymous data such as your name, computer's name (`Brycen's GamingLaptop`), etc.
-- Be evil
+Anonymous data does not include a name or another direct identifier.
 
-## Services Used
+## Telemetry services
 
-All the services used for telemetry are transparent about their code. The telemetry integrations can be reviewed in the SnapX.Core project source.
+SnapX can use these services when telemetry is enabled:
 
-- [Sentry](https://github.com/getsentry/sentry) - Application crash information & traces & performance analytics, i.e., specific code function taking a long time)
-- [Aptabase](https://github.com/aptabase/aptabase) - Usage analytics, i.e., how many users are using a specific function, such as uploading)
+- [Aptabase](https://github.com/aptabase/aptabase) receives application usage
+  events.
+- [Sentry](https://github.com/getsentry/sentry) receives error, stack trace,
+  and performance data. SnapX uses Sentry only when a Sentry connection is
+  configured.
 
-Sentry's GDPR compliance page can be found [here](https://sentry.io/security/#gdpr).
+Read the [Aptabase privacy policy](https://aptabase.io/legal/privacy).
 
-Sentry's CCPA compliance page can be found [here](https://sentry.io/legal/ccpa/1.0.0/).
+Read the [Sentry security and privacy information](https://sentry.io/security/)
+and the [Sentry CCPA information](https://sentry.io/legal/ccpa/1.0.0/).
 
-For application analytics, we use [Aptabase](https://aptabase.io), and their privacy policy can be found [here](https://aptabase.io/legal/privacy).
+These network services process your public IP address when your device connects
+to them. Review each service policy for information about its data processing
+and retention.
 
+## Disable telemetry
 
-## In terms of fingerprinting
+Telemetry is off unless `SNAPX_TELEMETRY=1` is in the environment. Remove that
+environment variable to keep telemetry off.
 
-- Although your *public* IP address is naturally processed by these network services. It is not saved and thus discarded.
-
-## How do I disable telemetry?
-
-Go into the application's settings menu or config file
-
-- On Linux, its `~/.config/SnapX/ApplicationConfig.yaml`
-- On Windows, its `%USERPROFILE%\Documents\SnapX\ApplicationConfig.yaml`
-- On macOS, its `~/Library/Application Support/SnapX/ApplicationConfig.yaml`
-
-[Never used YAML before?](https://circleci.com/blog/what-is-yaml-a-beginner-s-guide/)
-
-You should be adding a key that looks like this:
+You can also disable telemetry in SnapX settings. Or, set this value in the
+application configuration file:
 
 ```yaml
 DisableTelemetry: true
 ```
 
-You can additionally disable it with an environment variable. With `SNAPX_DISABLETELEMETRY=true` or the [failed standard](https://consoledonottrack.com/) `DO_NOT_TRACK=1`
+The configuration file is in one of these locations:
 
-You can also set a registry key for those using SnapX in Windows organizations. `Computer\HKEY_LOCAL_MACHINE\SOFTWARE\SnapXL\SnapX\DisableTelemetry` with the value of `true`
+- Linux: `~/.config/SnapX/ApplicationConfig.yaml`
+- Windows: `%USERPROFILE%\Documents\SnapX\ApplicationConfig.yaml`
+- macOS: `~/Library/Application Support/SnapX/ApplicationConfig.yaml`
 
+You can set the `DO_NOT_TRACK` environment variable to `1`. SnapX does not send
+telemetry when this variable is set.
 
-Settings are pulled in via the first match from:
-````
-User Group Policy (HKCU\Policies\{Path})
-Computer Group Policy (HKLM\Policies\{Path})
-User registry (HKCU\{Path})
-Computer registry (HKLM\{Path})
-````
+Windows administrators can set the following registry value to `true`:
 
-After it is disabled, and you restart SnapX, no data will be sent for crash data or application analytics. End of story.
+`Computer\HKEY_LOCAL_MACHINE\SOFTWARE\SnapXL\SnapX\DisableTelemetry`
 
+SnapX reads managed and local settings in this order:
 
-## How do I request that my data be removed?
+1. User Group Policy: `HKCU\Policies\{Path}`
+2. Computer Group Policy: `HKLM\Policies\{Path}`
+3. User registry: `HKCU\{Path}`
+4. Computer registry: `HKLM\{Path}`
 
-All data collected is anonymous. So I can't exactly fulfill requests to remove your specific data because the data that is collected is what I'd call... gray. There are no distinct identifiers.
+Restart SnapX after you change a telemetry setting.
 
-## Final notes
+## Data removal requests
 
-I made SnapX because I have a point to prove. I have not sold my soul to the devil. \
-I doubt I'll even get any donations for my work. This is not a transaction, though. \
-The data is only useful for development. \
-This is all I ask, **keep telemetry on**. Help me ***improve*** SnapX.
-
-The data that I collect is not valuable to anyone else besides me and the community for cool graphs to look at & drive decisions for the project as well.
+The telemetry data does not contain a direct user identifier. Therefore, the
+developers cannot find the data for one person and cannot remove that data in
+response to an individual request.

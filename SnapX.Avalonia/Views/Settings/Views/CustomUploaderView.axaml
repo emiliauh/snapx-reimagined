@@ -382,7 +382,7 @@
                                                     Icon="QuestionCircle"
                                                     Opacity="0.6">
                                                     <ToolTip.Tip>
-                                                        <TextBlock Text="Headers add request information. Use them for authentication, user-agent values, cookies, or API keys. Select this icon to open the documentation." TextWrapping="Wrap" />
+                                                        <TextBlock Text="Headers add information to a request. Use headers for authentication, user agent values, cookies, or API keys. Select the help icon to open the documentation." TextWrapping="Wrap" />
                                                     </ToolTip.Tip>
                                                 </avalonia:FluentIcon>
                                             </Button>
@@ -449,7 +449,7 @@
                                                     Icon="QuestionCircle"
                                                     Opacity="0.6">
                                                     <ToolTip.Tip>
-                                                        <TextBlock Text="Parameters add a query string to the URL. Use {input} for the uploaded text or URL. Use date tokens such as %mo for the current month. Select this icon to open the documentation." TextWrapping="Wrap" />
+                                                        <TextBlock Text="Parameters add a query string to the URL. Use {input} for the uploaded text or URL. Use a date token such as %mo for the current month. Select the help icon to open the documentation." TextWrapping="Wrap" />
                                                     </ToolTip.Tip>
                                                 </avalonia:FluentIcon>
                                             </Button>
@@ -519,7 +519,7 @@
                                                     Icon="QuestionCircle"
                                                     Opacity="0.6">
                                                     <ToolTip.Tip>
-                                                        <TextBlock Text="Arguments contain the data for a text uploader or URL shortener. Use {input} where SnapX must insert the uploaded text or URL. Select this icon to open the documentation." TextWrapping="Wrap" />
+                                                        <TextBlock Text="Arguments contain data for a text uploader or URL shortener. Use {input} where SnapX must insert the uploaded text or URL. Select the help icon to open the documentation." TextWrapping="Wrap" />
                                                     </ToolTip.Tip>
                                                 </avalonia:FluentIcon>
                                             </Button>
@@ -646,7 +646,7 @@
                                             Height="200"
                                             Text="{Binding Data}"
                                             TextWrapping="Wrap"
-                                            ToolTip.Tip="Payload which can be JSON, XML, plain text, etc                       You can use {input} or {filename} as variables."
+                                            ToolTip.Tip="The payload can contain JSON, XML, or plain text. You can use {input} and {filename} as variables."
                                             VerticalContentAlignment="Top" />
                                     </StackPanel>
                                     <DockPanel LastChildFill="False" Margin="8">

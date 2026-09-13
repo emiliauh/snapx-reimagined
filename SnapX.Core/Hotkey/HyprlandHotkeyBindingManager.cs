@@ -71,13 +71,13 @@ public static class HyprlandHotkeyBindingManager
 
         if (setting.HotkeyInfo is null)
         {
-            return HyprlandHotkeySyncResult.Failure("The hotkey does not have a key definition.");
+            return HyprlandHotkeySyncResult.Failure("This keyboard shortcut has no key.");
         }
 
         string registrationId = setting.HotkeyInfo.RegistrationId;
         if (!Regex.IsMatch(registrationId ?? string.Empty, "^[A-Za-z0-9]{32}$"))
         {
-            return HyprlandHotkeySyncResult.Failure("The hotkey has an invalid persistent identifier.");
+            return HyprlandHotkeySyncResult.Failure("This keyboard shortcut has an invalid identifier.");
         }
 
         string? entry = null;
@@ -85,7 +85,7 @@ public static class HyprlandHotkeyBindingManager
         {
             if (setting.TaskSettings is null || setting.TaskSettings.Job == HotkeyType.None)
             {
-                return HyprlandHotkeySyncResult.Failure("The hotkey does not have an executable action.");
+                return HyprlandHotkeySyncResult.Failure("This keyboard shortcut has no action.");
             }
 
             if (!TryFormatKey(setting.HotkeyInfo, out string? key, out string? keyError))
@@ -113,7 +113,7 @@ public static class HyprlandHotkeyBindingManager
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
             InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            return HyprlandHotkeySyncResult.Failure($"Could not read Hyprland bindings: {ex.Message}");
+            return HyprlandHotkeySyncResult.Failure($"SnapX could not read the Hyprland bindings. Details: {ex.Message}");
         }
 
         string updated = RemoveManagedEntry(original, registrationId);
@@ -124,7 +124,7 @@ public static class HyprlandHotkeyBindingManager
 
         if (string.Equals(original, updated, StringComparison.Ordinal))
         {
-            return HyprlandHotkeySyncResult.Success("The Hyprland binding was already up to date.");
+            return HyprlandHotkeySyncResult.Success("The Hyprland binding is current.");
         }
 
         try
@@ -134,18 +134,18 @@ public static class HyprlandHotkeyBindingManager
             if (string.Equals(validationError, previousConfigErrors, StringComparison.Ordinal))
             {
                 return HyprlandHotkeySyncResult.Success(
-                    remove ? "The Hyprland binding was removed." : "The Hyprland binding is active.");
+                    remove ? "The Hyprland keyboard shortcut was removed." : "The Hyprland keyboard shortcut is active.");
             }
 
             WriteAtomically(path, original);
             _ = ReloadAndValidate();
             return HyprlandHotkeySyncResult.Failure(
-                $"Hyprland rejected the updated binding. The previous file was restored: {validationError}");
+                $"Hyprland did not accept the new binding. SnapX restored the previous file. Details: {validationError}");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
             InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            return HyprlandHotkeySyncResult.Failure($"Could not update Hyprland bindings: {ex.Message}");
+            return HyprlandHotkeySyncResult.Failure($"SnapX could not update the Hyprland bindings. Details: {ex.Message}");
         }
     }
 
@@ -355,7 +355,7 @@ public static class HyprlandHotkeyBindingManager
         if (keyName is null)
         {
             key = null;
-            error = $"{info.KeyCode} cannot be represented as a Hyprland binding.";
+            error = $"SnapX cannot use {info.KeyCode} in a Hyprland binding.";
             return false;
         }
 

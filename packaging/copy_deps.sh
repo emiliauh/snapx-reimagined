@@ -23,7 +23,7 @@ copy_deps() {
     esac
 
     if ldd "$bin" 2>&1 | grep -q "statically linked"; then
-        echo "✨ $bin is statically linked — no deps to copy."
+        echo "✨ $bin is statically linked. No dependencies need to be copied."
         return 0
     fi
     flock "$PROCESSED_DEPS_FILE" grep -qxF "$bin" "$PROCESSED_DEPS_FILE" && return
@@ -44,7 +44,7 @@ copy_deps() {
 
            # Check if dependency itself is static
            if ldd "$dep" 2>&1 | grep -q "statically linked"; then
-               echo "⚡ $dep is statically linked — skipping its deps."
+               echo "⚡ $dep is statically linked. Its dependencies will not be copied."
                continue
            fi
 

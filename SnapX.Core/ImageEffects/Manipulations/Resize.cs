@@ -12,10 +12,10 @@ namespace SnapX.Core.ImageEffects.Manipulations;
 
 public class Resize : ImageEffect
 {
-    [DefaultValue(250), Description("Use width as 0 to automatically adjust width to maintain aspect ratio.")]
+    [DefaultValue(250), Description("Enter 0 to set the width from the aspect ratio.")]
     public int Width { get; set; } = 250;
 
-    [DefaultValue(0), Description("Use height as 0 to automatically adjust height to maintain aspect ratio.")]
+    [DefaultValue(0), Description("Enter 0 to set the height from the aspect ratio.")]
     public int Height { get; set; } = 0;
 
     [DefaultValue(ResizeMode.ResizeAll)]

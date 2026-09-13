@@ -11,7 +11,7 @@
             IsClosable="False"
             IsOpen="True"
             Margin="0,0,0,8"
-            Message="ImageShack's Login API is broken. We are in the process of contacting support regarding this issue. This means uploading with SnapX using ImageShack is currently impossible."
+            Message="The ImageShack login API does not work. SnapX cannot upload to an ImageShack user account."
             Severity="Warning"
             Title="ImageShack Logins Unavailable" />
         <controls:FASettingsExpander

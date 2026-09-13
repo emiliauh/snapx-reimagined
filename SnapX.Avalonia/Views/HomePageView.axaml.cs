@@ -793,22 +793,22 @@ public partial class HomePageView : UserControl
     {
         var lines = new List<string>
         {
-            $"File name: {item.FileName ?? "—"}",
-            $"File path: {item.FilePath ?? "—"}",
+            $"File name: {item.FileName ?? "Not available"}",
+            $"File path: {item.FilePath ?? "Not available"}",
             $"Date: {item.DateTime:O}",
-            $"Type: {item.Type ?? "—"}",
-            $"Host: {item.Host ?? "—"}",
-            $"URL: {item.URL ?? "—"}",
-            $"Shortened URL: {item.ShortenedURL ?? "—"}",
-            $"Thumbnail URL: {item.ThumbnailURL ?? "—"}",
-            $"Deletion URL: {item.DeletionURL ?? "—"}"
+            $"Type: {item.Type ?? "Not available"}",
+            $"Host: {item.Host ?? "Not available"}",
+            $"URL: {item.URL ?? "Not available"}",
+            $"Shortened URL: {item.ShortenedURL ?? "Not available"}",
+            $"Thumbnail URL: {item.ThumbnailURL ?? "Not available"}",
+            $"Deletion URL: {item.DeletionURL ?? "Not available"}"
         };
 
         if (item.Tags is { Count: > 0 })
         {
             lines.Add("Tags:");
             lines.AddRange(item.Tags.Where(tag => tag is not null).Select(tag =>
-                $"  {tag.Text ?? "—"} | {tag.WindowTitle ?? "—"} | {tag.ProcessName ?? "—"}"));
+                $"  {tag.Text ?? "Not available"} | {tag.WindowTitle ?? "Not available"} | {tag.ProcessName ?? "Not available"}"));
         }
 
         return string.Join(Environment.NewLine, lines);

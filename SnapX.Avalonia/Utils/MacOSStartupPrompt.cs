@@ -7,7 +7,7 @@ namespace SnapX.Avalonia.Utils;
 
 public static class MacOSStartupPrompt
 {
-    public const string RemovalInstructions = "You can turn this off here or remove SnapX from Open at Login in System Settings > General > Login Items & Extensions.";
+    public const string RemovalInstructions = "To turn off this option, use this page. You can also remove SnapX from Open at Login in System Settings. Go to General, and then Login Items and Extensions.";
     public static async Task OfferOnceAsync(Window owner)
     {
         if (!OperatingSystem.IsMacOS() || SnapXL.Portable) return;
@@ -18,13 +18,13 @@ public static class MacOSStartupPrompt
             if (!controller.ShouldOffer(SnapXL.Settings.MacOSLoginPromptDismissed)) return;
             var dialog = new FAContentDialog
             {
-                Title = "Start SnapX when you log in?",
+                Title = "Do you want SnapX to open when you log in?",
                 Content = new TextBlock
                 {
-                    Text = "SnapX can be ready for captures whenever you sign in to your Mac. This is optional. macOS controls approval for login items.\n\n" + RemovalInstructions,
+                    Text = "SnapX can be ready when you log in to your Mac. This option is not necessary. macOS controls login item approval.\n\n" + RemovalInstructions,
                     TextWrapping = TextWrapping.Wrap, MaxWidth = 440
                 },
-                PrimaryButtonText = "Enable launch at login",
+                PrimaryButtonText = "Open SnapX at login",
                 CloseButtonText = "Not now",
                 DefaultButton = FAContentDialogButton.Close
             };
@@ -39,17 +39,17 @@ public static class MacOSStartupPrompt
         catch (Exception ex)
         {
             DebugHelper.WriteException(ex, "Unable to configure launch at login");
-            await ShowMessageAsync(owner, "Launch at login", ex.Message + "\n\nYou can try again in SnapX's Application settings.");
+            await ShowMessageAsync(owner, "Launch at login", ex.Message + "\n\nYou can try again in the Application settings in SnapX.");
         }
     }
 
     public static string StatusText(LoginItemStatus status) => status switch
     {
-        LoginItemStatus.Enabled => "On — SnapX will open when you log in.",
-        LoginItemStatus.RequiresApproval => "Waiting for your approval in macOS Login Items settings.",
-        LoginItemStatus.NotRegistered => "Off — SnapX will not start automatically.",
-        LoginItemStatus.NotFound => "Not registered yet — enable launch at login to add SnapX.",
-        _ => "Move SnapX to Applications to enable launch at login (macOS 13 or later)."
+        LoginItemStatus.Enabled => "On. SnapX opens when you log in.",
+        LoginItemStatus.RequiresApproval => "macOS needs your approval. Open Login Items in System Settings.",
+        LoginItemStatus.NotRegistered => "Off. SnapX does not start automatically.",
+        LoginItemStatus.NotFound => "SnapX is not registered. Select Open SnapX at login to register SnapX.",
+        _ => "Move SnapX to the Applications folder. Launch at login needs macOS 13 or later."
     };
 
     public static Task ShowStatusAsync(Window owner, LoginItemStatus status) =>

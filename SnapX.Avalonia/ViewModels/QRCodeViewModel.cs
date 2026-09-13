@@ -152,26 +152,14 @@ public partial class QRCodeViewModel : ViewModelBase
         int byteCount = Encoding.UTF8.GetByteCount(text);
         bool isTooBig = byteCount > 2952;
 
-        var errorMessages = new[]
-        {
-            "The pixels went on strike. We're negotiating.",
-            "QR matrix collapsed. Even the squares are tired.",
-            "Something went wrong, but at least your CPU didn't melt.",
-            "The generator looked at your request and decided to take a nap.",
-            "Instruction unclear: Square became a circle. Aborting.",
-            "Your data is too powerful for this tiny window."
-        };
-
-        var randomJoke = errorMessages[Random.Shared.Next(errorMessages.Length)];
-
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
             var dialog = new FAContentDialog()
             {
-                Title = isTooBig ? "Content too large" : "Generation Failed",
+                Title = isTooBig ? "Content too large" : "QR code error",
                 Content = isTooBig
                     ? $"This content is {byteCount} bytes. The limit for a QR code is 2952 bytes."
-                    : $"{randomJoke} (Generation failed)",
+                    : "SnapX could not make the QR code. Check the input and try again.",
                 PrimaryButtonText = "Dismiss",
                 SecondaryButtonText = "Details",
                 DefaultButton = FAContentDialogButton.Primary

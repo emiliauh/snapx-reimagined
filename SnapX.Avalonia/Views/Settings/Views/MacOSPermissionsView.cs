@@ -11,7 +11,7 @@ public sealed class MacOSPermissionsView : UserControl
 {
     private readonly TextBlock _screenStatus = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _error = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly Button _screenGrant = new() { Content = "Grant screen access" };
+    private readonly Button _screenGrant = new() { Content = "Allow screen recording" };
     private Window? _window;
     private CancellationTokenSource? _activationRefresh;
     private bool _requesting;
@@ -22,20 +22,20 @@ public sealed class MacOSPermissionsView : UserControl
     {
         IsVisible = OperatingSystem.IsMacOS();
         if (!IsVisible) return;
-        var screenSettings = new Button { Content = "Open Screen Recording settings" };
-        var refresh = new Button { Content = "Check permissions again" };
+        var screenSettings = new Button { Content = "Open screen recording settings" };
+        var refresh = new Button { Content = "Check permission again" };
         Content = new StackPanel
         {
             Spacing = 12,
             Children =
             {
                 new TextBlock { Text = "macOS permissions", FontSize = 18, FontWeight = FontWeight.SemiBold },
-                Paragraph("Screen access is required for screenshots, video, and optional playback-audio capture. SnapX does not request microphone access. Only you can approve macOS privacy toggles."),
-                Heading("Screen & System Audio Recording — required for capture"),
-                Paragraph("Allow SnapX to capture your displays, other windows, and—when enabled in recorder settings—audio played by other applications. After enabling SnapX, quit and reopen it if macOS requests a restart."),
+                Paragraph("SnapX needs screen recording permission for screenshots and videos. SnapX also uses this permission when you record system audio. SnapX does not use your microphone. Only you can change macOS privacy settings."),
+                Heading("Screen and System Audio Recording permission is required"),
+                Paragraph("Allow SnapX to record your displays and the windows of other applications. SnapX can also record system audio if you enable this option. If macOS tells you to restart SnapX, quit SnapX and open it again."),
                 _screenStatus,
                 Buttons(_screenGrant, screenSettings),
-                Paragraph("Global shortcuts use macOS's hotkey API and do not need Accessibility or Input Monitoring access. Launch at login is a separate optional setting."),
+                Paragraph("Keyboard shortcuts do not need Accessibility or Input Monitoring permission. Launch at login is an optional and separate setting."),
                 refresh,
                 _error
             }
@@ -100,7 +100,7 @@ public sealed class MacOSPermissionsView : UserControl
         try
         {
             bool screen = MacOSPermissions.HasScreenCaptureAccess();
-            _screenStatus.Text = screen ? "1. Screen access: complete." : "1. Screen access: incomplete. Choose Grant screen access, enable SnapX in System Settings, then reopen it if needed.";
+            _screenStatus.Text = screen ? "1. Screen recording permission: Allowed." : "1. Screen recording permission: Not allowed. Select Allow screen recording. Then allow SnapX in System Settings. If necessary, quit SnapX and open it again.";
             IsComplete = screen;
             CompletionChanged?.Invoke(IsComplete);
             _screenGrant.IsEnabled = !_requesting && !screen;
@@ -109,7 +109,7 @@ public sealed class MacOSPermissionsView : UserControl
         {
             IsComplete = false;
             CompletionChanged?.Invoke(false);
-            _screenStatus.Text = "1. Screen access: unable to check.";
+            _screenStatus.Text = "1. SnapX could not check the screen recording permission.";
             _screenGrant.IsEnabled = false;
             _error.Text = ex.Message;
         }
@@ -131,6 +131,6 @@ public sealed class MacOSPermissionsView : UserControl
     private void OpenSettings(string url)
     {
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-        catch (Exception ex) { _error.Text = "Open System Settings > Privacy & Security manually. " + ex.Message; }
+        catch (Exception ex) { _error.Text = "SnapX could not open System Settings. In System Settings, go to Privacy and Security. " + ex.Message; }
     }
 }

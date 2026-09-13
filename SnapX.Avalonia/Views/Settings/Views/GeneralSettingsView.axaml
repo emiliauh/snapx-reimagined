@@ -51,7 +51,7 @@
                     FontSize="12"
                     Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                     Margin="32,0,0,0"
-                    Text="SnapX sends anonymous usage data. SnapX does not send personal data or files. Disable telemetry to stop this data."
+                    Text="SnapX sends anonymous usage data. SnapX does not send personal data or files. Enable Disable telemetry to stop this data."
                     TextWrapping="Wrap" />
 
                 <HyperlinkButton

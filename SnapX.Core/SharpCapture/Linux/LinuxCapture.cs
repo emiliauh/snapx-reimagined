@@ -40,7 +40,7 @@ public class LinuxCapture : BaseCapture
             }
             catch (Exception ex)
             {
-                DebugHelper.WriteException(ex, "KWin screen capture failed");
+                DebugHelper.WriteException(ex, "KWin could not capture the screen");
                 if (captureMode == WaylandCaptureMode.KWin) return null;
             }
         }
@@ -56,7 +56,7 @@ public class LinuxCapture : BaseCapture
             }
             catch (Exception ex)
             {
-                DebugHelper.WriteException(ex, "grim screen capture failed; trying the desktop portal");
+                DebugHelper.WriteException(ex, "grim could not capture the screen. SnapX will try the desktop portal");
             }
         }
 
@@ -68,7 +68,7 @@ public class LinuxCapture : BaseCapture
             }
             catch (Exception ex)
             {
-                DebugHelper.WriteException(ex, "Wayland portal screen capture failed");
+                DebugHelper.WriteException(ex, "The Wayland portal could not capture the screen");
                 if (captureMode == WaylandCaptureMode.Portal) return null;
             }
         }
@@ -108,7 +108,7 @@ public class LinuxCapture : BaseCapture
                 }
             }
 
-            throw new InvalidOperationException("The desktop portal did not provide a readable screenshot.");
+            throw new InvalidOperationException("The desktop portal did not return a screenshot that SnapX can read.");
         }
         finally
         {
@@ -141,24 +141,24 @@ public class LinuxCapture : BaseCapture
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
-            throw new TimeoutException("The desktop portal did not answer the screenshot request within 10 seconds.");
+            throw new TimeoutException("The desktop portal did not answer the screenshot request in 10 seconds.");
         }
 
         if (response.ResponseCode != 0)
         {
             throw new InvalidOperationException(
-                $"The desktop portal denied screen capture (response {response.ResponseCode}).");
+                $"The desktop did not allow screen capture. Response code: {response.ResponseCode}.");
         }
 
         if (!response.Results.TryGetValue("uri", out VariantValue uriValue))
         {
-            throw new InvalidOperationException("The desktop portal response did not include a screenshot URI.");
+            throw new InvalidOperationException("The desktop portal response did not include the screenshot location.");
         }
 
         string uriText = uriValue.GetString();
         if (!Uri.TryCreate(uriText, UriKind.Absolute, out Uri? uri) || !uri.IsFile)
         {
-            throw new InvalidOperationException("The desktop portal returned an invalid screenshot URI.");
+            throw new InvalidOperationException("The desktop portal returned a screenshot location that is not valid.");
         }
 
         string filePath = Uri.UnescapeDataString(uri.LocalPath);
@@ -211,7 +211,7 @@ public class LinuxCapture : BaseCapture
 
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException($"grim exited with code {process.ExitCode}: {error.Trim()}");
+            throw new InvalidOperationException($"grim could not capture the screen. Exit code: {process.ExitCode}. Details: {error.Trim()}");
         }
 
         if (output.Length == 0)
@@ -271,7 +271,7 @@ public class LinuxCapture : BaseCapture
         }
         catch (OperationCanceledException)
         {
-            throw new TimeoutException("The KWin screenshot operation or file write timed out.");
+            throw new TimeoutException("The KWin screenshot operation did not finish in the permitted time.");
         }
         finally
         {
@@ -550,14 +550,14 @@ public class LinuxCapture : BaseCapture
         startInfo.ArgumentList.Add("activewindow");
 
         using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("SnapX could not start hyprctl to read the active window.");
+            ?? throw new InvalidOperationException("SnapX could not start hyprctl to find the active window.");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         string json = await process.StandardOutput.ReadToEndAsync(timeout.Token).ConfigureAwait(false);
         string error = await process.StandardError.ReadToEndAsync(timeout.Token).ConfigureAwait(false);
         await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException($"hyprctl could not read the active window: {error.Trim()}");
+            throw new InvalidOperationException($"hyprctl could not find the active window. Details: {error.Trim()}");
         }
 
         using JsonDocument document = JsonDocument.Parse(json);

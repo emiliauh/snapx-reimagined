@@ -26,7 +26,7 @@ public class DrawText : ImageEffect
     [DefaultValue(typeof(Point), "5, 5")]
     public Point Offset { get; set; }
 
-    [DefaultValue(false), Description("If text watermark size bigger than source image then don't draw it.")]
+    [DefaultValue(false), Description("Do not add the text watermark if it is larger than the source image.")]
     public bool AutoHide { get; set; }
 
     [DefaultValue(typeof(Font), "Arial, 11.25pt")]
@@ -188,7 +188,7 @@ public class DrawText : ImageEffect
     {
         if (!string.IsNullOrEmpty(Text))
         {
-            return Text.Truncate(20, "...");
+            return Text.Truncate(20, " [more]");
         }
 
         return null;

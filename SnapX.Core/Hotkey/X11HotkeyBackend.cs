@@ -51,13 +51,13 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
         _thread = new Thread(EventLoop)
         {
             IsBackground = true,
-            Name = "SnapX X11 hotkeys"
+            Name = "SnapX X11 keyboard shortcuts"
         };
         _thread.Start();
 
         if (!_initialized.Task.Wait(TimeSpan.FromSeconds(5)))
         {
-            AvailabilityError = "Timed out while opening the X11 display.";
+            AvailabilityError = "SnapX could not open the X11 display in five seconds.";
         }
     }
 
@@ -122,7 +122,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
             _display = XOpenDisplay(null);
             if (_display == IntPtr.Zero)
             {
-                AvailabilityError = "XOpenDisplay failed for the current DISPLAY.";
+                AvailabilityError = "SnapX could not open the current X11 display.";
             }
             else
             {
@@ -134,7 +134,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
                     .ToArray();
                 if (_rootWindows.Length == 0)
                 {
-                    AvailabilityError = "X11 did not expose a root window.";
+                    AvailabilityError = "SnapX could not find the X11 root window.";
                 }
                 else
                 {
@@ -146,7 +146,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
         }
         catch (Exception ex)
         {
-            AvailabilityError = $"X11 initialization failed: {ex.Message}";
+            AvailabilityError = $"SnapX could not start X11 keyboard shortcuts. Details: {ex.Message}";
         }
         finally
         {
@@ -186,7 +186,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
         }
         catch (Exception ex)
         {
-            AvailabilityError = $"X11 event loop failed: {ex.Message}";
+            AvailabilityError = $"The X11 keyboard shortcut service stopped. Details: {ex.Message}";
             IsAvailable = false;
             DebugHelper.WriteException(ex, "X11 hotkey event loop failed");
         }
@@ -212,7 +212,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
         {
             return registrations.ToDictionary(
                 registration => registration.Id,
-                _ => HotkeyBackendRegistrationResult.Failure(AvailabilityError ?? "X11 is unavailable."),
+                _ => HotkeyBackendRegistrationResult.Failure(AvailabilityError ?? "X11 is not available."),
                 StringComparer.Ordinal);
         }
 
@@ -225,7 +225,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
             if (!TryGetXKeySym(registration.HotkeyInfo.KeyCode, out var keySym))
             {
                 results[registration.Id] = HotkeyBackendRegistrationResult.Failure(
-                    $"{registration.HotkeyInfo.KeyCode} is not supported by the X11 backend.");
+                    $"{registration.HotkeyInfo.KeyCode} is not supported for an X11 keyboard shortcut.");
                 continue;
             }
 
@@ -233,7 +233,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
             if (keyCode == 0)
             {
                 results[registration.Id] = HotkeyBackendRegistrationResult.Failure(
-                    $"{registration.HotkeyInfo.KeyCode} is not present in the current X11 keymap.");
+                    $"{registration.HotkeyInfo.KeyCode} is not in the current X11 key map.");
                 continue;
             }
 
@@ -241,7 +241,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
             if (!seen.Add((keyCode, modifiers)))
             {
                 results[registration.Id] = HotkeyBackendRegistrationResult.Failure(
-                    "Another hotkey in this registration batch uses the same key combination.");
+                    "Another keyboard shortcut in this group uses the same key combination.");
                 continue;
             }
 
@@ -297,7 +297,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
         if (_lastErrorCode != 0)
         {
             throw new InvalidOperationException(
-                $"XUngrabKey failed with X11 error {_lastErrorCode}.");
+                $"X11 could not remove the keyboard shortcut. Error code: {_lastErrorCode}.");
         }
     }
 
@@ -335,8 +335,8 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
             XSync(_display, false);
 
             error = _lastErrorCode == 10
-                ? "The hotkey is already registered by another application."
-                : $"XGrabKey failed with X11 error {_lastErrorCode}.";
+                ? "Another application already uses this keyboard shortcut."
+                : $"X11 could not register the keyboard shortcut. Error code: {_lastErrorCode}.";
             return false;
         }
     }
@@ -346,7 +346,7 @@ internal sealed class X11HotkeyBackend : IHotkeyBackend
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!IsAvailable)
         {
-            throw new PlatformNotSupportedException(AvailabilityError ?? "X11 hotkeys are unavailable.");
+            throw new PlatformNotSupportedException(AvailabilityError ?? "X11 keyboard shortcuts are not available.");
         }
 
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);

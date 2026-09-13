@@ -318,8 +318,8 @@ public sealed class VersionEnforcer : IDisposable
         if (_lockFileStream == null)
         {
             DebugHelper.WriteLine(_ownsLockFile
-                ? $"VersionEnforcer owns the lock file at {_lockFilePath} yet _lockFileStream is null! BUG!"
-                : $"VersionLock _lockFileStream is null! Lockfile at {_lockFilePath} ");
+                ? $"VersionEnforcer owns the lock file at {_lockFilePath}, but _lockFileStream is null."
+                : $"VersionLock _lockFileStream is null. Lock file: {_lockFilePath}.");
         }
         var lockfileInfo = ReadLockFileContent();
         if (lockfileInfo is not null && !IsProcessRunning(lockfileInfo.ProcessId)) _ownsLockFile = true;

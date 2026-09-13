@@ -21,7 +21,7 @@ public class CredentialHandle : Microsoft.Win32.SafeHandles.CriticalHandleMinusO
     public WinCredSecret[] AllocateCredentials(int count)
     {
         if (this.IsInvalid)
-            throw new InvalidOperationException("Invalid CriticalHandle!");
+            throw new InvalidOperationException("The critical handle is not valid.");
 
         var credentials = new WinCredSecret[count];
         for (int i = 0; i < count; i++)
@@ -51,7 +51,7 @@ public class CredentialHandle : Microsoft.Win32.SafeHandles.CriticalHandleMinusO
     public byte[] GetSecretAsBytes()
     {
         if (this.IsInvalid)
-            throw new InvalidOperationException("Invalid CriticalHandle!");
+            throw new InvalidOperationException("The critical handle is not valid.");
 
         var native = Marshal.PtrToStructure<NativeCredential>(this.handle);
         var data = new byte[native.CredentialBlobSize];
@@ -62,7 +62,7 @@ public class CredentialHandle : Microsoft.Win32.SafeHandles.CriticalHandleMinusO
     public string GetSecret()
     {
         if (this.IsInvalid)
-            throw new InvalidOperationException("Invalid CriticalHandle!");
+            throw new InvalidOperationException("The critical handle is not valid.");
 
         var native = Marshal.PtrToStructure<NativeCredential>(this.handle);
         var data = new byte[native.CredentialBlobSize];

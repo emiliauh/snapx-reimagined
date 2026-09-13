@@ -3,14 +3,14 @@
 
 [Desktop Entry]
 Name=SnapX
-Comment=Capture, share, and boost productivity.
+Comment=Capture, share, and manage screenshots.
 Exec=snapx-ui %U
 Icon=io.emiliauh.SnapXL.SnapX
 Terminal=false
 Type=Application
 X-Author=emiliauh
 X-ProjectHomepage=https://github.com/emiliauh/snapx-reimagined
-GenericName=Screenshot tool & sharing tool
+GenericName=Screenshot capture and sharing tool
 Categories=Graphics;Utility
 StartupNotify=true
 # Associates the toplevel's app_id/WM_CLASS with this entry. SnapX sets both

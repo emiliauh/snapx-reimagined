@@ -103,7 +103,7 @@ public sealed class BackblazeB2 : ImageUploader
             string newBucketId = B2ApiGetBucketId(auth, BucketName, out string getBucketError);
             if (getBucketError != null)
             {
-                DebugHelper.WriteLine($"B2 uploader: It's {newBucketId}.");
+                DebugHelper.WriteLine($"B2 uploader bucket ID: {newBucketId}.");
                 bucketId = newBucketId;
             }
         }
@@ -204,7 +204,7 @@ public sealed class BackblazeB2 : ImageUploader
             string? encodedFileName = URLHelpers.URLEncode(uploadResult.Upload.fileName, true);
             string? remoteLocation = URLHelpers.CombineURL(auth.downloadUrl, "file", URLHelpers.URLEncode(BucketName), encodedFileName);
 
-            DebugHelper.WriteLine($"B2 uploader: Successful upload! File should be at: {remoteLocation}");
+            DebugHelper.WriteLine($"B2 upload is complete. Remote location: {remoteLocation}");
 
             if (UseCustomUrl)
             {
@@ -296,7 +296,7 @@ public sealed class BackblazeB2 : ImageUploader
             catch (JsonException e)
             {
                 DebugHelper.WriteLine($"B2 uploader: Could not parse b2_list_buckets response: {e}");
-                error = "B2 upload failed: Couldn't parse b2_list_buckets response.";
+            error = "B2 upload failed. SnapX could not read the b2_list_buckets response.";
                 return null;
             }
 
@@ -326,7 +326,7 @@ public sealed class BackblazeB2 : ImageUploader
                 return bucketId;
             }
 
-            error = $"B2 upload failed: Couldn't find bucket {bucketName}.";
+            error = $"B2 upload failed. SnapX could not find the {bucketName} bucket.";
             return null;
         }
     }
@@ -422,7 +422,7 @@ public sealed class BackblazeB2 : ImageUploader
         }
 
         string? body = ProcessWebResponseText(response);
-        DebugHelper.WriteLine($"B2 uploader: B2ApiUploadFile() reports success! '{body}'");
+        DebugHelper.WriteLine($"B2ApiUploadFile reports success. Response: '{body}'");
 
         var uploadResult = JsonSerializer.Deserialize<B2Upload>(body);
         return new B2UploadResult((int)response.StatusCode, null, uploadResult);

@@ -4,7 +4,7 @@
   <!-- Semantic-release should generate Version changelogs -->
   <id>io.emiliauh.SnapXL.SnapX</id>
   <name>SnapX</name>
-  <summary>Capture, share, and boost productivity</summary>
+  <summary>Capture, share, and manage screenshots</summary>
   <developer id="io.emiliauh">
     <name>emiliauh</name>
     <web>https://github.com/emiliauh</web>
@@ -12,9 +12,10 @@
   <metadata_license>GFDL-1.3-or-later</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <description>
-    <p>SnapX is a free, open-source, cross-platform tool that lets you capture or record any area of your screen and instantly share it with a single keypress.</p>
-    <p>Upload images, videos, text, and more to multiple supported destinations—all with ease.</p>
-    <p>It is a hard fork of the Windows application ShareX.</p>
+    <p>SnapX is a free, open source application for screen capture and recording.</p>
+    <p>Use one key to capture or record an area of the screen.</p>
+    <p>Upload images, videos, and text to supported destinations.</p>
+    <p>SnapX is based on ShareX. It is not an official ShareX release.</p>
   </description>
   <screenshots>
     <screenshot type="default">

@@ -41,7 +41,7 @@ public static class URLHelpers
         url = url.Trim().TrimEnd('\n', '\r');
         if (!IsValidURL(url))
         {
-            throw new SecurityException($"OpenURL: '{url}' is not a valid URL!");
+            throw new SecurityException($"SnapX cannot open '{url}' because it is not a valid URL.");
         }
 
         Task.Run(() =>

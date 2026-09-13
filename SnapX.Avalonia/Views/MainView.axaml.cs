@@ -449,7 +449,7 @@ public partial class MainView : UserControl
         else
         {
             DebugHelper.WriteLine(
-                $"{nameof(DynamicURL_OnPointerPressed)} called with {Sender} which is not a Control!!"
+                $"{nameof(DynamicURL_OnPointerPressed)} received a sender that is not a Control: {Sender}."
             );
         }
     }
@@ -471,7 +471,7 @@ public partial class MainView : UserControl
         else
         {
             DebugHelper.WriteLine(
-                $"{nameof(DynamicFolder_OnPointerPressed)} called with {Sender} which is not a Control!!"
+                $"{nameof(DynamicFolder_OnPointerPressed)} received a sender that is not a Control: {Sender}."
             );
         }
     }

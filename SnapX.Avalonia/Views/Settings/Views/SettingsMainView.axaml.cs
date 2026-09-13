@@ -132,7 +132,7 @@ public partial class SettingsMainView : UserControl
         else
         {
             DebugHelper.WriteLine(
-                $"{nameof(DynamicURL_OnPointerPressed)} called with {Sender} which is not a Control!!");
+                $"{nameof(DynamicURL_OnPointerPressed)} received a sender that is not a Control: {Sender}.");
         }
     }
     private void DynamicFolder_OnPointerPressed(object? Sender, PointerPressedEventArgs E)
@@ -153,7 +153,7 @@ public partial class SettingsMainView : UserControl
         else
         {
             DebugHelper.WriteLine(
-                $"{nameof(DynamicFolder_OnPointerPressed)} called with {Sender} which is not a Control!!"
+                $"{nameof(DynamicFolder_OnPointerPressed)} received a sender that is not a Control: {Sender}."
             );
         }
     }

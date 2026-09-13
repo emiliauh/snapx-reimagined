@@ -32,11 +32,11 @@ public sealed class MacOSSystemAudioRecorder : IDisposable
         int outputWidth, int outputHeight, int fps, bool cursor,
         double duration = 0, int videoBitrate = 12_000_000, int audioBitrate = 192_000)
     {
-        if (!IsAvailable) throw new PlatformNotSupportedException("Direct system audio requires macOS 13 or later and the SnapX native capture component.");
+        if (!IsAvailable) throw new PlatformNotSupportedException("System audio recording needs macOS 13 or later and the SnapX capture component.");
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         handle = Create(Path.GetFullPath(outputPath), displayId, x, y, sourceWidth, sourceHeight,
             outputWidth, outputHeight, fps, cursor ? 1 : 0, duration, videoBitrate, audioBitrate);
-        if (handle == 0) throw new ArgumentException("Invalid screen and system audio recording configuration.");
+        if (handle == 0) throw new ArgumentException("The screen and system audio settings are not valid.");
     }
 
     public bool Run()
@@ -45,7 +45,7 @@ public sealed class MacOSSystemAudioRecorder : IDisposable
         lock (gate)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            if (hasRun) throw new InvalidOperationException("A capture segment can only run once.");
+            if (hasRun) throw new InvalidOperationException("You can run a capture segment only one time.");
             hasRun = true;
             running = true;
             current = handle;
@@ -58,7 +58,7 @@ public sealed class MacOSSystemAudioRecorder : IDisposable
             int length = Array.IndexOf(buffer, (byte)0);
             string message = Encoding.UTF8.GetString(buffer, 0, length < 0 ? buffer.Length : length);
             throw new IOException(string.IsNullOrWhiteSpace(message)
-                ? "Screen and system audio capture failed."
+                ? "SnapX could not record the screen and system audio."
                 : message);
         }
         finally

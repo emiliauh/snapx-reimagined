@@ -49,22 +49,22 @@ public class FTPAccount : INotifyPropertyChanged
     [YamlEncrypt]
     public string Password { get; set; }
 
-    [Category("FTP"), Description("Set true for active or false for passive"), DefaultValue(false)]
+    [Category("FTP"), Description("Enable active FTP mode. Disable this option for passive FTP mode."), DefaultValue(false)]
     public bool IsActive { get; set; }
 
-    [Category("FTP"), Description("FTP sub folder path, example: Screenshots.\r\nYou can use name parsing: %y = year, %mo = month.")]
+    [Category("FTP"), Description("Set the FTP subfolder path. Example: Screenshots. Use %y for the year and %mo for the month.")]
     public string SubFolderPath { get; set; }
 
-    [Category("FTP"), Description("Choose an appropriate protocol to be accessed by the browser"), DefaultValue(BrowserProtocol.http)]
+    [Category("FTP"), Description("Select the protocol that the browser uses."), DefaultValue(BrowserProtocol.http)]
     public BrowserProtocol BrowserProtocol { get; set; }
 
     [Category("FTP"), Description("URL = HttpHomePath + SubFolderPath + FileName\r\nIf HttpHomePath is empty then URL = Host + SubFolderPath + FileName\r\n%host = Host")]
     public string HttpHomePath { get; set; }
 
-    [Category("FTP"), Description("Automatically add sub folder path to end of http home path"), DefaultValue(false)]
+    [Category("FTP"), Description("Add the subfolder path to the end of the HTTP home path."), DefaultValue(false)]
     public bool HttpHomePathAutoAddSubFolderPath { get; set; }
 
-    [Category("FTP"), Description("Don't add file extension to URL"), DefaultValue(false)]
+    [Category("FTP"), Description("Do not add the file extension to the URL."), DefaultValue(false)]
     public bool HttpHomePathNoExtension { get; set; }
 
     [Category("FTP"), Description("Protocol://Host:Port"), Browsable(false)]

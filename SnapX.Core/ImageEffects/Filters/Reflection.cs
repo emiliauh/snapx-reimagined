@@ -14,7 +14,7 @@ internal class Reflection : ImageEffect
 {
     private int percentage;
 
-    [DefaultValue(20), Description("Reflection height size relative to screenshot height.\nValue need to be between 1 to 100.")]
+    [DefaultValue(20), Description("Set the reflection height as a percentage of the screenshot height. Enter a value from 1 through 100.")]
     public int Percentage
     {
         get
@@ -29,7 +29,7 @@ internal class Reflection : ImageEffect
 
     private int maxAlpha;
 
-    [DefaultValue(255), Description("Reflection transparency start from this value to MinAlpha.\nValue need to be between 0 to 255.")]
+    [DefaultValue(255), Description("Set the first reflection opacity. Enter a value from 0 through 255.")]
     public int MaxAlpha
     {
         get
@@ -44,7 +44,7 @@ internal class Reflection : ImageEffect
 
     private int minAlpha;
 
-    [DefaultValue(0), Description("Reflection transparency start from MaxAlpha to this value.\nValue need to be between 0 to 255.")]
+    [DefaultValue(0), Description("Set the last reflection opacity. Enter a value from 0 through 255.")]
     public int MinAlpha
     {
         get
@@ -57,13 +57,13 @@ internal class Reflection : ImageEffect
         }
     }
 
-    [DefaultValue(0), Description("Reflection start position will be: Screenshot height + Offset")]
+    [DefaultValue(0), Description("Set the reflection offset from the bottom of the screenshot.")]
     public int Offset { get; set; }
 
-    [DefaultValue(false), Description("Adding skew to reflection from bottom left to bottom right.")]
+    [DefaultValue(false), Description("Add a horizontal skew to the reflection.")]
     public bool Skew { get; set; }
 
-    [DefaultValue(25), Description("How much pixel skew left to right.")]
+    [DefaultValue(25), Description("Set the horizontal skew in pixels.")]
     public int SkewSize { get; set; }
 
     [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "<Pending>")]

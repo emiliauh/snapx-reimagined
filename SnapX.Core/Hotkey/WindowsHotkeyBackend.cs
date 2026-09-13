@@ -29,7 +29,7 @@ internal sealed class WindowsHotkeyBackend : IHotkeyBackend
 
     public event Action<string>? Activated;
 
-    public string Name => "Windows RegisterHotKey";
+    public string Name => "Windows keyboard shortcuts";
 
     public bool IsAvailable { get; private set; }
 
@@ -39,19 +39,19 @@ internal sealed class WindowsHotkeyBackend : IHotkeyBackend
     {
         if (!OperatingSystem.IsWindows())
         {
-            AvailabilityError = "RegisterHotKey is only available on Windows.";
+            AvailabilityError = "Windows keyboard shortcuts are available only on Windows.";
             return;
         }
 
         _thread = new Thread(MessageLoop)
         {
             IsBackground = true,
-            Name = "SnapX Windows hotkeys"
+            Name = "SnapX Windows keyboard shortcuts"
         };
         _thread.Start();
         if (!_initialized.Task.Wait(TimeSpan.FromSeconds(5)))
         {
-            AvailabilityError = "Timed out while creating the Win32 hotkey message queue.";
+            AvailabilityError = "SnapX could not start the Windows keyboard shortcut service in five seconds.";
         }
     }
 
@@ -117,7 +117,7 @@ internal sealed class WindowsHotkeyBackend : IHotkeyBackend
         }
         catch (Exception ex)
         {
-            AvailabilityError = $"Unable to initialize RegisterHotKey: {ex.Message}";
+            AvailabilityError = $"SnapX could not start Windows keyboard shortcuts. Details: {ex.Message}";
         }
         finally
         {
@@ -142,7 +142,7 @@ internal sealed class WindowsHotkeyBackend : IHotkeyBackend
         }
         catch (Exception ex)
         {
-            AvailabilityError = $"The RegisterHotKey message loop failed: {ex.Message}";
+            AvailabilityError = $"The Windows keyboard shortcut service stopped. Details: {ex.Message}";
             IsAvailable = false;
             DebugHelper.WriteException(ex, "Windows hotkey message loop failed");
         }
@@ -167,7 +167,7 @@ internal sealed class WindowsHotkeyBackend : IHotkeyBackend
             if (id == 0 || virtualKey == 0)
             {
                 results[registration.Id] = HotkeyBackendRegistrationResult.Failure(
-                    $"{registration.HotkeyInfo.KeyCode} is not a valid Windows hotkey key.");
+                    $"{registration.HotkeyInfo.KeyCode} is not valid for a Windows keyboard shortcut.");
                 continue;
             }
 
@@ -176,7 +176,7 @@ internal sealed class WindowsHotkeyBackend : IHotkeyBackend
             {
                 var error = Marshal.GetLastWin32Error();
                 results[registration.Id] = HotkeyBackendRegistrationResult.Failure(
-                    new Win32Exception(error, "RegisterHotKey failed; the combination may already be in use.").Message);
+                    new Win32Exception(error, "Windows could not register this keyboard shortcut. Another application can use the same key combination.").Message);
                 continue;
             }
 
@@ -210,7 +210,7 @@ internal sealed class WindowsHotkeyBackend : IHotkeyBackend
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!IsAvailable)
         {
-            throw new PlatformNotSupportedException(AvailabilityError ?? "Windows hotkeys are unavailable.");
+            throw new PlatformNotSupportedException(AvailabilityError ?? "Windows keyboard shortcuts are not available.");
         }
 
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);

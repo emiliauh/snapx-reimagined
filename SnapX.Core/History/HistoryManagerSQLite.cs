@@ -152,7 +152,7 @@ public class HistoryManagerSQLite(SqliteConnection Connection) : HistoryManager(
                     // This is an Easter egg
                     if (historyItem.DateTime < ShareXCreationDate)
                     {
-                        DebugHelper.WriteLine($"SQLite: WARN Date '{historyItem.DateTime:D}' indicates that this screenshot was taken before ShareX's creation??? Still saving, but what the heck!");
+                        DebugHelper.WriteLine($"SQLite warning: The date '{historyItem.DateTime:D}' is before the first ShareX release. SnapX will save the item.");
                     }
                     historyItem.FileName ??= Path.GetFileName(historyItem.FilePath);
 

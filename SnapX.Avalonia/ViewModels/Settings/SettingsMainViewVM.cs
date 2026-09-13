@@ -80,7 +80,7 @@ public partial class SettingsMainViewVM : ViewModelBase
                 : Ioc.Default.GetService(type);
             if (vm is not ViewModelBase vmb)
             {
-                DebugHelper.WriteLine($"Can't get ViewModelBase on {type}. Did you register it in ViewLocator & IoC?");
+                DebugHelper.WriteLine($"SnapX cannot get ViewModelBase for {type}. Make sure that it is registered in ViewLocator and IoC.");
                 return;
             }
             if (destinationTag.StartsWith("!"))

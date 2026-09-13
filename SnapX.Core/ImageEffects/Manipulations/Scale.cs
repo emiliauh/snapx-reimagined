@@ -11,11 +11,11 @@ namespace SnapX.Core.ImageEffects.Manipulations;
 internal class Scale : ImageEffect
 {
     [DefaultValue(100f),
-     Description("Use width percentage as 0 to maintain aspect ratio by automatically adjusting width.")]
+     Description("Enter 0 to set the width from the aspect ratio.")]
     public float WidthPercentage => 100f;
 
     [DefaultValue(0f),
-     Description("Use height percentage as 0 to maintain aspect ratio by automatically adjusting height.")]
+     Description("Enter 0 to set the height from the aspect ratio.")]
     public float HeightPercentage { get; set; } = 0f;
 
     public override Image Apply(Image img)

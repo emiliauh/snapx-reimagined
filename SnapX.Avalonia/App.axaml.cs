@@ -293,7 +293,7 @@ public partial class App : Application
             else
             {
                 DebugHelper.WriteLine(
-                    "Error has likely already been sent to Sentry as telemetry is not disabled! :heart:"
+                    "SnapX can send this error to Sentry because telemetry is enabled."
                 );
             }
 
@@ -1630,7 +1630,7 @@ public partial class App : Application
                             textBoxWindow.Height = 800;
                             textBoxWindow.Show();
                         };
-                        // new NativeMenuItem("Upload from clipboard..."),
+                        // new NativeMenuItem("Upload from clipboard"),
                         var shortenURL = new NativeMenuItem("Shorten URL");
                         menu.Items.Add(
                             new NativeMenuItem("Upload")

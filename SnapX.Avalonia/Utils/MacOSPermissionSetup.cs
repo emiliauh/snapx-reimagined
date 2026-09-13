@@ -58,9 +58,9 @@ public static class MacOSPermissionSetup
             var permissions = new MacOSPermissionsView();
             var dialog = new FAContentDialog
             {
-                Title = "Set up SnapX permissions",
+                Title = "Set up permissions for SnapX",
                 Content = new ScrollViewer { Content = permissions, MaxHeight = 520, MaxWidth = 560 },
-                PrimaryButtonText = "Finish setup",
+                PrimaryButtonText = "Complete setup",
                 IsPrimaryButtonEnabled = false,
                 CloseButtonText = firstLaunch ? "Quit SnapX" : "Close",
                 DefaultButton = FAContentDialogButton.Close

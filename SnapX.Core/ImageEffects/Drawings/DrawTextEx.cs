@@ -26,7 +26,7 @@ public class DrawTextEx : ImageEffect
     [DefaultValue(0)]
     public int Angle { get; set; }
 
-    [DefaultValue(false), Description("If text size bigger than source image then don't draw it.")]
+    [DefaultValue(false), Description("Do not add the text if it is larger than the source image.")]
     public bool AutoHide { get; set; }
 
     [DefaultValue(typeof(Font), "Arial, 36pt")]
@@ -84,7 +84,7 @@ public class DrawTextEx : ImageEffect
     {
         if (!string.IsNullOrEmpty(Text))
         {
-            return Text.Truncate(20, "...");
+            return Text.Truncate(20, " [more]");
         }
 
         return null;

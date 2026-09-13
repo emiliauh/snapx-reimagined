@@ -252,7 +252,7 @@ public static class FileHelpers
     {
         if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
         {
-            if (allowMessageBox) new Exception("Folder not found!").ShowError();
+            if (allowMessageBox) new Exception("SnapX cannot find the folder.").ShowError();
             return false;
         }
 
@@ -306,7 +306,7 @@ public static class FileHelpers
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
         {
-            new Exception("File not found!").ShowError();
+            new Exception("SnapX cannot find the file.").ShowError();
             return false;
         }
 
@@ -722,4 +722,3 @@ public static class FileHelpers
         return directoryInfo.EnumerateFiles().Where(f => allowedExtensions.Contains(f.Extension)).Select(x => x.FullName);
     }
 }
-

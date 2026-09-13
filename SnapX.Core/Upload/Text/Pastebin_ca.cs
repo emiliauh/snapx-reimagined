@@ -89,7 +89,7 @@ public class PastebinCaSettings
     public string? TextFormat { get; set; }
 
     /// <summary>expiry</summary>
-    [Description("Expire this post in ..."), DefaultValue("1 month")]
+    [Description("Select when the post expires."), DefaultValue("1 month")]
     public string? ExpireTime { get; set; }
 
     /// <summary>encrypt</summary>

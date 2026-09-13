@@ -12,7 +12,7 @@
         <controls:FAInfoBar
             IsClosable="True"
             IsOpen="True"
-            Message="Google now requires a $10,000+ annual audit for third-party photo uploads. We've disabled this by default to keep SnapX free, but you can still enable it using your own API key in Settings."
+            Message="Google requires an annual audit for third-party photo uploads. This audit can cost more than $10,000. SnapX disables this uploader by default. You can enable it with your own API key."
             Severity="Error"
             Title="Google Photos Support Limited" />
         <controls:FASettingsExpander

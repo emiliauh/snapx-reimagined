@@ -15,7 +15,7 @@ internal class Canvas : ImageEffect
     [DefaultValue(typeof(Padding), "0, 0, 0, 0")]
     public Padding Margin { get; set; }
 
-    [DefaultValue(CanvasMarginMode.AbsoluteSize), Description("How the margin around the canvas will be calculated.")]
+    [DefaultValue(CanvasMarginMode.AbsoluteSize), Description("Select how SnapX calculates the canvas margin.")]
     public CanvasMarginMode MarginMode { get; set; }
 
     [DefaultValue(typeof(Color), "Transparent")]

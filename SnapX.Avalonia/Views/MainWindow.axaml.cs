@@ -186,7 +186,7 @@ public partial class MainWindow : FAAppWindow
         }
         else
         {
-            DebugHelper.WriteLine("Got no files/folders back!");
+            DebugHelper.WriteLine("The file or folder request returned no items.");
         }
     }
 

@@ -96,18 +96,18 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
     }
     public bool IsElevated => SnapXL.IsAdmin;
     public string SessionDescription => IsWaylandSession
-        ? "Wayland session detected. SnapX uses desktop portals where available. On Hyprland, shortcuts from the settings page are also kept in a SnapX-managed section of your user bindings file; no administrator access is needed."
-        : "Wayland is not active. SnapX uses the platform capture and shortcut path.";
+        ? "This is a Wayland session. SnapX uses desktop portals when they are available. On Hyprland, SnapX also saves keyboard shortcuts in a marked section of your user bindings file. You do not need administrator access."
+        : "This is not a Wayland session. SnapX uses the capture and keyboard shortcut functions of the operating system.";
     public bool AreGlobalHotkeysSupported => true;
     public string HotkeyPlatformHelp => OperatingSystem.IsMacOS()
-        ? "macOS registers global shortcuts when you select Apply. Cmd or Win means Command; Option or Alt means Option. Shortcuts use physical ANSI key positions. Print Screen has no Mac equivalent; choose a letter or function key."
+        ? "To register macOS keyboard shortcuts, select Apply. Cmd and Win mean Command. Option and Alt mean Option. The shortcuts use physical ANSI key positions. The Mac keyboard does not have a Print Screen key. Select a letter key or a function key."
         : OperatingSystem.IsWindows()
-        ? "Windows registers global shortcuts when you select Apply. Clear releases the shortcut."
+        ? "To register Windows keyboard shortcuts, select Apply. To remove a shortcut, select Clear."
         : IsWaylandSession
-        ? "On Hyprland, Apply also writes a clearly marked user binding in ~/.config/hypr/bindings.lua and reloads it. Clear removes only SnapX's managed entry. No administrator access is needed. Other Wayland desktops use the portal."
-        : "X11 shortcuts are registered directly with the active X server. Apply grabs the key and Clear releases it.";
+        ? "On Hyprland, Apply saves the keyboard shortcut in ~/.config/hypr/bindings.lua and reloads the file. Clear removes only the SnapX entry. You do not need administrator access. Other Wayland desktops use the portal."
+        : "SnapX registers X11 keyboard shortcuts with the active X server. Apply registers the shortcut. Clear removes the shortcut.";
     public string ElevationStatus { get; private set; } =
-        "Administrator mode is optional. It does not bypass Wayland portal permissions.";
+        "Administrator mode is optional. It does not change Wayland portal permissions.";
 
     public string ConfigFolderPath => SnapXL.ConfigFolder;
     public string PersonalFolderPath => SnapXL.PersonalFolder;
@@ -384,7 +384,7 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
             // later generic settings save cannot persist an unapplied shortcut.
             row.SetHotkey(previousKey, previousWin);
             row.ShortcutText = requestedShortcutText;
-            row.SetError(hyprlandResult.Message ?? "Could not apply the Hyprland hotkey.");
+            row.SetError(hyprlandResult.Message ?? "SnapX could not apply the Hyprland keyboard shortcut.");
             return;
         }
         DebugHelper.WriteLine($"ApplyHotkeyAsync: Setting.HotkeyInfo.Hotkey is now {row.Setting.HotkeyInfo.Hotkey} immediately after SetHotkey.");
@@ -403,7 +403,7 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
         HyprlandHotkeySyncResult hyprlandResult = await HyprlandHotkeyBindingManager.ClearAsync(row.Setting);
         if (!hyprlandResult.IsSuccess)
         {
-            row.SetError(hyprlandResult.Message ?? "Could not clear the Hyprland hotkey.");
+            row.SetError(hyprlandResult.Message ?? "SnapX could not remove the Hyprland keyboard shortcut.");
             return;
         }
         row.SetHotkey(Keys.None, false);
@@ -471,7 +471,7 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
             HyprlandHotkeySyncResult result = await HyprlandHotkeyBindingManager.ClearAsync(previous);
             if (!result.IsSuccess)
             {
-                DebugHelper.WriteException(result.Message ?? "Could not remove a managed Hyprland hotkey.");
+                DebugHelper.WriteException(result.Message ?? "SnapX could not remove a managed Hyprland keyboard shortcut.");
             }
         }
         SnapXL.HotkeysConfig.Hotkeys = HotkeyManager.GetDefaultHotkeyList();
@@ -480,7 +480,7 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
             HyprlandHotkeySyncResult result = await HyprlandHotkeyBindingManager.ApplyAsync(setting);
             if (!result.IsSuccess)
             {
-                DebugHelper.WriteException(result.Message ?? "Could not apply a default Hyprland hotkey.");
+                DebugHelper.WriteException(result.Message ?? "SnapX could not apply a default Hyprland keyboard shortcut.");
             }
         }
         await SnapXL.ReloadHotkeysAsync();
@@ -659,14 +659,14 @@ public sealed partial class SettingsCategoryVM : ViewModelBase
 
     private static string DescriptionFor(string value) => value switch
     {
-        "Hotkeys" => "View and change the global shortcuts.",
+        "Hotkeys" => "View and change the keyboard shortcuts.",
         "Region" => "Set region detection, selection help, magnifier, and annotation options.",
         "OCR" => "Set the OCR language, scale, and result options.",
         "FileNaming" => "Set file-name patterns and URL replacement rules.",
         "Clipboard" => "Set clipboard upload, URL shortening, sharing, and folder index options.",
         "Filters" => "Set upload limits and upload rules.",
         "ScreenRecordOptions" => "Set the screen recorder and FFmpeg options.",
-        "Integration" => "Set the Wayland capture and global shortcut backends.",
+        "Integration" => "Set the Wayland capture and keyboard shortcut services.",
         "ConfigFolder" => "View the folder that contains SnapX configuration files.",
         _ => "Set the SnapX options for this workflow."
     };

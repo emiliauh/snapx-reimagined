@@ -50,7 +50,7 @@ public static class CaptureItemHelper
         var itemPointer = interop.CreateForWindow(hwnd, ref GraphicsCaptureItemGuid);
         if (itemPointer == null || itemPointer == IntPtr.Zero)
         {
-            DebugHelper.WriteLine($"CreateItemForWindow: itemPointer {itemPointer} is invalid!");
+            DebugHelper.WriteLine($"CreateItemForWindow: itemPointer {itemPointer} is not valid.");
             return null;
         }
         ComWrappers cw = new DefaultComWrappers();

@@ -10,10 +10,10 @@ namespace SnapX.Core.ImageEffects.Manipulations;
 
 internal class Skew : ImageEffect
 {
-    [DefaultValue(0), Description("How much pixel skew left to right.")]
+    [DefaultValue(0), Description("Set the horizontal skew in pixels.")]
     public int Horizontally { get; set; } = 0;
 
-    [DefaultValue(0), Description("How much pixel skew top to bottom.")]
+    [DefaultValue(0), Description("Set the vertical skew in pixels.")]
     public int Vertically { get; set; } = 0;
 
     public override Image Apply(Image img)

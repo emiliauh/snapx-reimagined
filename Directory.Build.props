@@ -6,7 +6,7 @@
     <Company>BrycensRanch and ShareX Team</Company>
     <Product>SnapX</Product>
     <Title>SnapX</Title>
-    <Description>Capture, share, and boost productivity. All in one.</Description>
+    <Description>Capture, share, and manage screenshots.</Description>
     <Copyright>Copyright (c) 2026 BrycensRanch and ShareX Team</Copyright>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <IncludeDebugSymbolsProjectOutputGroup>false</IncludeDebugSymbolsProjectOutputGroup>
@@ -23,7 +23,7 @@
     <WriteVersionInfoToBuildLog>true</WriteVersionInfoToBuildLog>
     <RollForward>LatestMajor</RollForward>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <Version>0.5.0-alpha.13</Version>
+    <Version>0.5.0-alpha.14</Version>
   </PropertyGroup>
   <PropertyGroup Condition="!Exists('.git')">
     <UpdateAssemblyInfo>false</UpdateAssemblyInfo>

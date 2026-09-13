@@ -277,7 +277,7 @@ public sealed class HistoryPreviewOverlay
             {
                 if (string.IsNullOrWhiteSpace(_item.FilePath))
                 {
-                    return MakeUnavailableSurface("The image path is missing.");
+                    return MakeUnavailableSurface("The image path is not available.");
                 }
 
                 var bitmap = new Bitmap(_item.FilePath);
@@ -287,7 +287,7 @@ public sealed class HistoryPreviewOverlay
             catch (Exception ex)
             {
                 DebugHelper.WriteException(ex, "Failed to decode the history image.");
-                return MakeUnavailableSurface($"Unable to decode the image: {ex.Message}");
+                return MakeUnavailableSurface($"SnapX cannot read the image: {ex.Message}");
             }
         }
 
@@ -328,12 +328,12 @@ public sealed class HistoryPreviewOverlay
             catch (Exception ex)
             {
                 DebugHelper.WriteException(ex, "Failed to read the history text file.");
-                scroll.Content = MakeUnavailableText($"Unable to read the text file: {ex.Message}");
+                scroll.Content = MakeUnavailableText($"SnapX cannot read the text file: {ex.Message}");
             }
             return scroll;
         }
 
-        scroll.Content = MakeUnavailableText("This file type cannot be previewed inside SnapX.");
+        scroll.Content = MakeUnavailableText("SnapX cannot show a preview of this file type.");
         return scroll;
     }
 
@@ -812,7 +812,7 @@ public sealed class HistoryPreviewOverlay
             _image.PointerReleased += Image_OnPointerReleased;
             _image.PointerCaptureLost += Image_OnPointerCaptureLost;
 
-            _zoomOutButton = MakeZoomButton("−", "Zoom out", (_, _) => ZoomBy(1.0 / ZoomStep));
+            _zoomOutButton = MakeZoomButton("-", "Zoom out", (_, _) => ZoomBy(1.0 / ZoomStep));
             _zoomInButton = MakeZoomButton("+", "Zoom in", (_, _) => ZoomBy(ZoomStep));
             _zoomText = new TextBlock
             {
@@ -1069,8 +1069,8 @@ public sealed class HistoryPreviewOverlay
             _zoomInButton.IsEnabled = _zoom < MaximumZoom - 0.0001;
             _image.Cursor = CanPan() ? _panCursor : _clickCursor;
             ToolTip.SetTip(_image, CanPan()
-                ? "Drag to pan; click to fit; pinch or Command/Ctrl-scroll to zoom"
-                : "Click to zoom; pinch or Command/Ctrl-scroll to zoom");
+                ? "Drag to move the image. Select the image to fit it in the preview. Pinch or use Command or Ctrl and the scroll wheel to change the zoom."
+                : "Select the image to change the zoom. Pinch or use Command or Ctrl and the scroll wheel to change the zoom.");
         }
 
         private bool CanPan()

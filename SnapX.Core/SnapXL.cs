@@ -389,7 +389,7 @@ public class SnapXL
         APIKeysLoader.Load();
 #endif
         DebugHelper.WriteLine($"Platform: {Environment.OSVersion.Platform} {Environment.OSVersion.Version}");
-        if (OsInfo.IsWSL()) DebugHelper.WriteLine("Running under WSL. Please keep in mind that SnapX defaults to escaping WSL. You can turn this off in settings.");
+        if (OsInfo.IsWSL()) DebugHelper.WriteLine("SnapX is running in WSL. By default, SnapX opens files outside WSL. You can disable this option in Settings.");
         DebugHelper.WriteLine(".NET: " + SnapXResources.Dotnet);
         if (Settings is not null) Settings.ApplicationVersion = Helpers.GetApplicationVersion();
         _ = Task.Run(() =>
@@ -718,7 +718,7 @@ public class SnapXL
     {
         if (Interlocked.Exchange(ref closeSequenceStarted, 1) != 0) return;
 
-        DebugHelper.WriteLine("SnapX closing!");
+        DebugHelper.WriteLine("SnapX is closing.");
         TaskManager.StopAllTasks();
         HotkeyManager?.Dispose();
         WatchFolderManager?.Dispose();
@@ -785,7 +785,7 @@ public class SnapXL
             {
                 var sb = new StringBuilder();
 
-                sb.AppendFormat("{0} \"{1}\"", "Unable to create personal folder!", PersonalFolder);
+                sb.AppendFormat("{0} \"{1}\"", "SnapX cannot create the personal folder.", PersonalFolder);
                 sb.AppendLine();
 
                 if (!string.IsNullOrEmpty(PersonalPathDetectionMethod))

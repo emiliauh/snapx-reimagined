@@ -16,9 +16,9 @@
         <StackPanel Spacing="18" MaxWidth="900">
             <StackPanel Spacing="4">
                 <TextBlock FontSize="26" FontWeight="SemiBold" Text="Screen recorder" />
-                <TextBlock Opacity="0.75" Text="Set capture timing, FFmpeg devices, codecs, and command templates." TextWrapping="Wrap" />
+                <TextBlock Opacity="0.75" Text="Set the capture time, FFmpeg devices, codecs, and command templates." TextWrapping="Wrap" />
                 <TextBlock FontSize="12" Opacity="0.65" Text="{Binding RecorderSummary}" />
-                <TextBlock IsVisible="{Binding IsMacOS}" Text="macOS captures the selected region with ScreenCaptureKit when system audio is enabled, then uses FFmpeg for the chosen final encoding. Screen Recording permission covers both video and playback audio; no microphone or loopback driver is used." TextWrapping="Wrap" />
+                <TextBlock IsVisible="{Binding IsMacOS}" Text="When system audio is enabled, macOS uses ScreenCaptureKit to capture the selected region and system audio. FFmpeg then encodes the result. Screen Recording permission permits both video and system audio. SnapX does not use the microphone or a loopback driver." TextWrapping="Wrap" />
             </StackPanel>
 
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="16">
@@ -60,9 +60,9 @@
                     </Grid>
                     <StackPanel IsVisible="{Binding IsMacOS}" Spacing="8">
                         <TextBlock FontSize="12" Opacity="0.75" Text="{Binding SystemAudioStatus}" TextWrapping="Wrap" />
-                        <TextBlock FontSize="12" Opacity="0.65" Text="Choose System audio (macOS) to include sound played by other applications. macOS may show its Screen &amp; System Audio Recording prompt when capture starts. SnapX explicitly leaves microphone capture off." TextWrapping="Wrap" />
+                        <TextBlock FontSize="12" Opacity="0.65" Text="Select System audio (macOS) to include audio from other applications. macOS can show the Screen and System Audio Recording prompt when capture starts. SnapX does not use the microphone." TextWrapping="Wrap" />
                     </StackPanel>
-                    <TextBlock IsVisible="{Binding IsLinux}" FontSize="12" Opacity="0.65" Text="Generated Linux recording commands currently capture video only. System audio remains available through a custom FFmpeg command configured below (for example, a PipeWire or PulseAudio monitor source)." TextWrapping="Wrap" />
+                    <TextBlock IsVisible="{Binding IsLinux}" FontSize="12" Opacity="0.65" Text="The generated Linux commands capture video only. To capture system audio, enter a custom FFmpeg command below. For example, use a PipeWire or PulseAudio monitor source." TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

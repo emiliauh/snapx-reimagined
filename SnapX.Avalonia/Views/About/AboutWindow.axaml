@@ -146,7 +146,7 @@
                                         IconSize="Resizable"
                                         IconVariant="Regular" />
 
-                                    <TextBlock HorizontalAlignment="Center" Text="Help &amp; Information" />
+                                    <TextBlock HorizontalAlignment="Center" Text="Help and information" />
                                 </StackPanel>
                             </Button>
                             <Button
@@ -197,7 +197,7 @@
                         <TextBlock
                             Foreground="Gray"
                             HorizontalAlignment="Center"
-                            Text="People who've helped us get here."
+                            Text="People who helped to make SnapX."
                             TextWrapping="Wrap" />
                         <Grid ColumnDefinitions="*,*,*,*" Margin="0,8,0,0">
                             <Expander
@@ -252,7 +252,7 @@
                                             BorderThickness="0"
                                             Grid.Column="1"
                                             Name="InfoToggle"
-                                            ToolTip.Tip="Click me to see a full raw list of loaded assemblies.">
+                                            ToolTip.Tip="Select to view the full list of loaded assemblies.">
                                             <fluent:SymbolIcon FontSize="18" Symbol="Info" />
                                         </ToggleButton>
 

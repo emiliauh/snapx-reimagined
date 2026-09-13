@@ -8,34 +8,34 @@ namespace SnapX.Core.Indexer;
 
 public class IndexerSettings
 {
-    [Category("Indexer"), DefaultValue(IndexerOutput.Html), Description("Indexer output type.")]
+    [Category("Indexer"), DefaultValue(IndexerOutput.Html), Description("Select the index output type.")]
     public IndexerOutput Output { get; set; }
 
-    [Category("Indexer"), DefaultValue(true), Description("Don't index hidden folders.")]
+    [Category("Indexer"), DefaultValue(true), Description("Do not include hidden folders in the index.")]
     public bool SkipHiddenFolders { get; set; }
 
-    [Category("Indexer"), DefaultValue(true), Description("Don't index hidden files.")]
+    [Category("Indexer"), DefaultValue(true), Description("Do not include hidden files in the index.")]
     public bool SkipHiddenFiles { get; set; }
 
-    [Category("Indexer"), DefaultValue(0), Description("Maximum folder depth level for indexing. 0 means unlimited.")]
+    [Category("Indexer"), DefaultValue(0), Description("Set the maximum folder depth. Enter 0 for no limit.")]
     public int MaxDepthLevel { get; set; }
 
-    [Category("Indexer"), DefaultValue(true), Description("Write folder and file size.")]
+    [Category("Indexer"), DefaultValue(true), Description("Show folder and file sizes.")]
     public bool ShowSizeInfo { get; set; }
 
-    [Category("Indexer"), DefaultValue(true), Description("Add footer information to show application and generated time.")]
+    [Category("Indexer"), DefaultValue(true), Description("Show the application name and generation time in the footer.")]
     public bool AddFooter { get; set; }
 
-    [Category("Indexer / Text"), DefaultValue("|___"), Description("Padding text to show indentation in the folder hierarchy.")]
+    [Category("Text index"), DefaultValue("|___"), Description("Set the text that identifies each folder level.")]
     public string IndentationText { get; set; }
 
-    [Category("Indexer / Text"), DefaultValue(false), Description("Adds empty line after folders.")]
+    [Category("Text index"), DefaultValue(false), Description("Add an empty line after each folder.")]
     public bool AddEmptyLineAfterFolders { get; set; }
 
-    [Category("Indexer / HTML"), DefaultValue(false), Description("Use custom Cascading Style Sheet file.")]
+    [Category("HTML index"), DefaultValue(false), Description("Use a custom CSS file.")]
     public bool UseCustomCSSFile { get; set; }
 
-    [Category("Indexer / HTML"), DefaultValue(false), Description("Display the path for each subfolder.")]
+    [Category("HTML index"), DefaultValue(false), Description("Show the path of each subfolder.")]
     public bool DisplayPath { get; set; }
 
     [Category("Indexer / HTML"), DefaultValue(false), Description("Limit the display path to the selected root folder. Must have DisplayPath enabled.")]

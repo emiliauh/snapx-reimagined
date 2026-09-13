@@ -113,44 +113,44 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
     public Point ActionsToolbarPosition { get; set; } = Point.Empty;
     public bool ActionsToolbarLockPosition { get; set; } = false;
     public bool ActionsToolbarStayTopMost { get; set; } = true;
-    [Category("Application"), DefaultValue(true), Description("Uses your GPU to render the UI, slightly increases memory usage")]
+    [Category("Application"), DefaultValue(true), Description("Use the GPU to show the user interface. This option can increase memory use.")]
     public bool HardwareAccelerated { get; set; } = true;
     public List<Color> RecentColors { get; set; } = [];
-    [Category("Application"), DefaultValue(false), Description("Calculate and show file sizes in binary units (KiB, MiB etc.)")]
+    [Category("Application"), DefaultValue(false), Description("Show file sizes in binary units, such as KiB and MiB.")]
     public bool BinaryUnits { get; set; }
     //
-    [Category("Application"), DefaultValue(false), Description("Show most recent task first in main window.")]
+    [Category("Application"), DefaultValue(false), Description("Show the most recent task first in the main window.")]
     public bool ShowMostRecentTaskFirst { get; set; }
     //
-    [Category("Application"), DefaultValue(false), Description("Show only customized tasks in main window workflows.")]
+    [Category("Application"), DefaultValue(false), Description("Show only edited workflows in the main window.")]
     public bool WorkflowsOnlyShowEdited { get; set; }
     //
-    [Category("Application"), DefaultValue(false), Description("Automatically expand capture menu when you open the tray menu.")]
+    [Category("Application"), DefaultValue(false), Description("Expand the capture menu when you open the tray menu.")]
     public bool TrayAutoExpandCaptureMenu { get; set; }
-    [Category("Application"), DefaultValue(false), Description("Prevent the application from logging to a file")]
+    [Category("Application"), DefaultValue(false), Description("Do not save logs to a file.")]
     public bool DisableLogging { get; set; }
 
     [Category("Application"), DefaultValue(false),
-     Description("Application crash analytics and usage analytics that are anonymized.")]
+     Description("Do not send anonymous crash and usage data.")]
     public bool DisableTelemetry { get; set; } = false;
     //
-    [Category("Application"), DefaultValue(true), Description("Show tips and hotkeys in main window when task list is empty.")]
+    [Category("Application"), DefaultValue(true), Description("Show tips and keyboard shortcuts when the task list is empty.")]
     public bool ShowMainWindowTip { get; set; }
     //
     [Category("Application"), DefaultValue(""),
-     Description("Browser path for your favorite browser for SnapX Web Extension.")]
+     Description("Set the browser path for the SnapX browser extension.")]
     public string BrowserPath = "";
     //
     //
     [Category("Application"), DefaultValue(false),
-     Description("Save settings after task completed but only if there is no other active tasks.")]
+     Description("Save settings after all active tasks are complete.")]
     public bool SaveSettingsAfterTaskCompleted { get; set; } = false;
     //
     [Category("Application"), DefaultValue(false),
-     Description("In main window when task is completed automatically select it.")]
+     Description("Select the last completed task in the main window.")]
     public bool AutoSelectLastCompletedTask { get; set; } = false;
     //
-    [Category("Application"), DefaultValue(false), Description("Ultra secret mode.")]
+    [Category("Application"), DefaultValue(false), Description("Enable developer functions.")]
     public bool DevMode
     {
         get
@@ -163,17 +163,17 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
         }
     }
     //
-    [Category("Hotkey"), DefaultValue(false), Description("Disables hotkeys.")]
+    [Category("Hotkey"), DefaultValue(false), Description("Disable keyboard shortcuts.")]
     public bool DisableHotkeys { get; set; }
-    [Category("Hotkey"), DefaultValue(HotkeyBackendPreference.Automatic), Description("Selects the global hotkey backend.")]
+    [Category("Hotkey"), DefaultValue(HotkeyBackendPreference.Automatic), Description("Select the global keyboard shortcut service.")]
     public HotkeyBackendPreference HotkeyBackendPreference { get; set; } = HotkeyBackendPreference.Automatic;
     //
-    [Category("Hotkey"), DefaultValue(false), Description("If active window is fullscreen then hotkeys won't be executed.")]
+    [Category("Hotkey"), DefaultValue(false), Description("Disable keyboard shortcuts when the active window is full screen.")]
     public bool DisableHotkeysOnFullscreen { get; set; }
     //
     private int hotkeyRepeatLimit;
     //
-    [Category("Hotkey"), DefaultValue(500), Description("If you hold hotkeys then it will only trigger every this milliseconds.")]
+    [Category("Hotkey"), DefaultValue(500), Description("Set the minimum time between repeated keyboard shortcut actions, in milliseconds.")]
     public int HotkeyRepeatLimit
     {
         get
@@ -185,56 +185,56 @@ public class ApplicationConfig : SettingsBase<ApplicationConfig>
             hotkeyRepeatLimit = Math.Max(value, 200);
         }
     }
-    [Category("Integration"), DefaultValue(WaylandCaptureMode.Automatic), Description("Selects the screen capture path for Wayland sessions.")]
+    [Category("Integration"), DefaultValue(WaylandCaptureMode.Automatic), Description("Select the screen capture method for Wayland sessions.")]
     public WaylandCaptureMode WaylandCaptureMode { get; set; } = WaylandCaptureMode.Automatic;
-    [Category("Clipboard"), DefaultValue(true), Description("Show clipboard content viewer when using clipboard upload in main window.")]
+    [Category("Clipboard"), DefaultValue(true), Description("Show the clipboard content before an upload from the main window.")]
     public bool ShowClipboardContentViewer { get; set; }
     //
-    [Category("Image"), DefaultValue(false), Description("Strip color space information chunks from PNG image.")]
+    [Category("Image"), DefaultValue(false), Description("Remove color space information from PNG images.")]
     public bool PNGStripColorSpaceInformation { get; set; }
     //
-    [Category("Image"), DefaultValue(true), Description("If JPEG exif contains orientation data then rotate image accordingly.")]
+    [Category("Image"), DefaultValue(true), Description("Use JPEG EXIF orientation data to rotate images.")]
     public bool RotateImageByExifOrientationData { get; set; }
     //
-    [Category("Upload"), DefaultValue(false), Description("Can be used to disable uploading application wide.")]
+    [Category("Upload"), DefaultValue(false), Description("Disable all uploads.")]
     public bool DisableUpload { get; set; }
     //
-    [Category("Upload"), DefaultValue(false), Description("Accept invalid SSL certificates when uploading.")]
+    [Category("Upload"), DefaultValue(false), Description("Allow invalid TLS certificates during uploads.")]
     public bool AcceptInvalidSSLCertificates { get; set; }
     //
-    [Category("Upload"), DefaultValue(true), Description("Ignore emojis while URL encoding upload results.")]
+    [Category("Upload"), DefaultValue(true), Description("Do not encode emoji in upload result URLs.")]
     public bool URLEncodeIgnoreEmoji { get; set; }
     //
-    [Category("Upload"), DefaultValue(true), Description("Show first time upload warning.")]
+    [Category("Upload"), DefaultValue(true), Description("Show a warning before the first upload.")]
     public bool ShowUploadWarning { get; set; }
     //
-    [Category("Upload"), DefaultValue(true), Description("Show more than 10 files upload warning.")]
+    [Category("Upload"), DefaultValue(true), Description("Show a warning before an upload of more than 10 files.")]
     public bool ShowMultiUploadWarning { get; set; }
     //
-    [Category("Upload"), DefaultValue(100), Description("Large file size defined in MB. SnapX will warn before uploading large files. 0 disables this feature.")]
+    [Category("Upload"), DefaultValue(100), Description("Set the large file limit in MB. SnapX shows a warning before it uploads a larger file. Enter 0 to disable the warning.")]
     public int ShowLargeFileSizeWarning { get; set; }
     //
     [Category("Paths"),
      Description(
-         "Custom uploaders configuration path. If you have already configured this setting in another device and you are attempting to use the same location, then backup the file before configuring this setting and restore after exiting SnapX.")]
+         "Set the custom uploader configuration path. If another device uses this path, make a backup before you change it.")]
     public string? CustomUploadersConfigPath { get; set; } = "";
     //
-    [Category("Paths"), Description("Custom hotkeys configuration path. If you have already configured this setting in another device and you are attempting to use the same location, then backup the file before configuring this setting and restore after exiting SnapX.")]
+    [Category("Paths"), Description("Set the keyboard shortcut configuration path. If another device uses this path, make a backup before you change it.")]
     public string? CustomHotkeysConfigPath { get; set; } = "";
-    [Category("Paths"), Description("Custom screenshot path (secondary location). If custom screenshot path is temporarily unavailable (e.g. network share), SnapX will use this location (recommended to be a local path).")]
+    [Category("Paths"), Description("Set a second screenshot path. SnapX uses this path when the primary path is not available. Use a local path.")]
     public string? CustomScreenshotsPath2 { get; set; } = "";
     //
-    [Category("Drag and drop window"), DefaultValue(150), Description("Size of drop window.")]
+    [Category("Drag and drop window"), DefaultValue(150), Description("Set the size of the drop window.")]
     public int DropSize { get; set; }
 
-    [Category("Drag and drop window"), DefaultValue(5), Description("Position offset of drop window.")]
+    [Category("Drag and drop window"), DefaultValue(5), Description("Set the position offset of the drop window.")]
     public int DropOffset { get; set; }
-    [Category("Drag and drop window"), DefaultValue(100), Description("Opacity of drop window.")]
+    [Category("Drag and drop window"), DefaultValue(100), Description("Set the opacity of the drop window.")]
     public int DropOpacity { get; set; }
 
-    [Category("Drag and drop window"), DefaultValue(255), Description("When you drag file to drop window then opacity will change to this.")]
+    [Category("Drag and drop window"), DefaultValue(255), Description("Set the opacity while you drag a file to the drop window.")]
     public int DropHoverOpacity { get; set; }
-    [Category("Drag and drop window"), DefaultValue(ContentAlignment.BottomRight), Description("Where drop window will open.")]
+    [Category("Drag and drop window"), DefaultValue(ContentAlignment.BottomRight), Description("Set the location of the drop window.")]
     public ContentAlignment DropAlignment { get; set; }
 
     public string? SQLitePath { get; set; }

@@ -25,7 +25,7 @@ internal static class JsonReaderExtensions
         }
         catch
         {
-            // Swallow — fallback will be used
+            // Ignore the error and use the fallback.
         }
 
         return null;

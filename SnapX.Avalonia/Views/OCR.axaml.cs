@@ -46,11 +46,11 @@ public partial class OCR : FAAppWindow
         // XAML will overwrite the title if it's put here
         if (_item is not null)
         {
-            Title = $"OCR Result for {_item.FileName}";
+            Title = $"OCR result: {_item.FileName}";
         }
         else if (_img is not null)
         {
-            Title = $"OCR Result for image {_img.Metadata.DecodedImageFormat?.Name}";
+            Title = $"OCR result: {_img.Metadata.DecodedImageFormat?.Name} image";
         }
         else
         {
@@ -77,7 +77,7 @@ public partial class OCR : FAAppWindow
 
             if (LanguageSelector?.SelectedIndex is not (>= 0 and int index)) return;
 
-            Title = $"OCR Result for dropped file {_img.Metadata.DecodedImageFormat?.Name}";
+            Title = $"OCR result: dropped {_img.Metadata.DecodedImageFormat?.Name} file";
             var code = _ocrViewModel.GetLanguageCode(index);
             await RunOCRAsync(code);
         }
@@ -86,7 +86,7 @@ public partial class OCR : FAAppWindow
             DebugHelper.WriteException(ex);
             await new FAContentDialog
             {
-                Title = "Drop Error",
+                Title = "File drop error",
                 Content = ex.Message,
                 CloseButtonText = "OK"
             }.ShowAsync(this);
@@ -313,7 +313,7 @@ public partial class OCR : FAAppWindow
     {
         if (LanguageSelector?.SelectedIndex is not (>= 0 and var index))
         {
-            DebugHelper.WriteLine($"WTF! Selected index is still invalid.");
+            DebugHelper.WriteLine("The selected OCR language index is not valid.");
             return;
         }
 
@@ -336,7 +336,7 @@ public partial class OCR : FAAppWindow
         _img = capturedImage;
         if (LanguageSelector?.SelectedIndex is not (>= 0 and var index))
             return;
-        Title = $"OCR Result for image {_img.Metadata.DecodedImageFormat?.Name}";
+        Title = $"OCR result: {_img.Metadata.DecodedImageFormat?.Name} image";
         var code = _ocrViewModel.GetLanguageCode(index);
         await RunOCRAsync(code);
     }
@@ -425,7 +425,7 @@ public partial class OCR : FAAppWindow
             else
             {
                 DebugHelper.WriteAlways("OCR clipboard did not get back data");
-                await new FAContentDialog { Title = "Error", Content = "Clipboard is empty.", CloseButtonText = "OK" }.ShowAsync(this);
+                await new FAContentDialog { Title = "Clipboard error", Content = "The clipboard is empty.", CloseButtonText = "OK" }.ShowAsync(this);
                 return;
             }
 
@@ -436,7 +436,7 @@ public partial class OCR : FAAppWindow
                 if (file is null)
                 {
                     DebugHelper.WriteAlways("OCR clipboard did not get an image file");
-                    await new FAContentDialog { Title = "Error", Content = "No image or file found on clipboard.", CloseButtonText = "OK" }.ShowAsync(this);
+                    await new FAContentDialog { Title = "Clipboard error", Content = "The clipboard does not contain an image or an image file.", CloseButtonText = "OK" }.ShowAsync(this);
                     return;
                 }
 
@@ -455,7 +455,7 @@ public partial class OCR : FAAppWindow
             if (LanguageSelector?.SelectedIndex is not (>= 0 and var index))
                 return;
 
-            Title = $"OCR Result for clipboard image {_img.Metadata.DecodedImageFormat?.Name}";
+            Title = $"OCR result: clipboard {_img.Metadata.DecodedImageFormat?.Name} image";
             var code = _ocrViewModel.GetLanguageCode(index);
             await RunOCRAsync(code);
         }
@@ -494,7 +494,7 @@ public partial class OCR : FAAppWindow
             if (LanguageSelector?.SelectedIndex is not (>= 0 and var index))
                 return;
 
-            Title = $"OCR Result for file {_img.Metadata.DecodedImageFormat?.Name}";
+            Title = $"OCR result: {_img.Metadata.DecodedImageFormat?.Name} file";
             var code = _ocrViewModel.GetLanguageCode(index);
             await RunOCRAsync(code);
         }
@@ -531,7 +531,7 @@ public partial class OCR : FAAppWindow
                 }
                 else
                 {
-                    RegionText.Text = $"Select region ({delay}s Delay)";
+                    RegionText.Text = $"Select region after {delay} seconds";
                     RegionIcon.Symbol = FluentIcons.Common.Symbol.Clock;
                     source.Click += SelectRegionDelay_Click;
                 }

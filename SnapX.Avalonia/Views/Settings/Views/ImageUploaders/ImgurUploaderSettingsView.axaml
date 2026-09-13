@@ -11,7 +11,7 @@
             IsClosable="False"
             IsOpen="True"
             Margin="0,0,0,8"
-            Message="Their OAuth2 API is currently broken. We have reached out to Imgur support with no response. User accounts may be limited."
+            Message="The Imgur OAuth 2 API does not work. Uploads to Imgur user accounts can fail."
             Severity="Warning"
             Title="Imgur OAuth2 Unavailable" />
         <controls:FASettingsExpanderItem Content="Account Type" ToolTip.Tip="Choose between Anonymous or User account uploads">

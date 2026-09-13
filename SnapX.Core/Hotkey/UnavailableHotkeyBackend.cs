@@ -16,7 +16,7 @@ public sealed class UnavailableHotkeyBackend : IHotkeyBackend
 
     public string? AvailabilityError { get; }
 
-    public UnavailableHotkeyBackend(string error, string name = "Unsupported")
+    public UnavailableHotkeyBackend(string error, string name = "Not supported")
     {
         AvailabilityError = error;
         Name = name;
@@ -27,7 +27,7 @@ public sealed class UnavailableHotkeyBackend : IHotkeyBackend
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var error = AvailabilityError ?? "Global hotkeys are unavailable.";
+        var error = AvailabilityError ?? "Keyboard shortcuts are not available.";
         IReadOnlyDictionary<string, HotkeyBackendRegistrationResult> results = registrations.ToDictionary(
             registration => registration.Id,
             _ => HotkeyBackendRegistrationResult.Failure(error),

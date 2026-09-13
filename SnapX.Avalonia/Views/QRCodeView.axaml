@@ -44,7 +44,7 @@
                             <MenuItem
                                 Click="SelectRegionDelay_Click"
                                 CommandParameter="Default"
-                                Header="Select with Configured Delay">
+                                Header="Use the configured delay">
                                 <MenuItem.Icon>
                                     <controls1:FASymbolIcon Symbol="Clock" />
                                 </MenuItem.Icon>
@@ -53,23 +53,23 @@
                             <MenuItem
                                 Click="SelectRegionDelay_Click"
                                 CommandParameter="3"
-                                Header="3 Second Delay" />
+                                Header="3-second delay" />
                             <MenuItem
                                 Click="SelectRegionDelay_Click"
                                 CommandParameter="5"
-                                Header="5 Second Delay" />
+                                Header="5-second delay" />
                             <MenuItem
                                 Click="SelectRegionDelay_Click"
                                 CommandParameter="10"
-                                Header="10 Second Delay" />
+                                Header="10-second delay" />
                         </MenuFlyout>
                     </SplitButton.Flyout>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <fluent:SymbolIcon Name="RegionIcon" Symbol="ScreenCut" />
-                        <TextBlock Name="RegionText" Text="Scan from Region" />
+                        <TextBlock Name="RegionText" Text="Scan a region" />
                     </StackPanel>
                 </SplitButton>
-                <SplitButton Click="QrClipboard_Click" ToolTip.Tip="Only supports one file/paste at once.">
+                <SplitButton Click="QrClipboard_Click" ToolTip.Tip="Paste one file or one image at a time.">
                     <SplitButton.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                             <MenuItem Click="QrFile_Click" Header="Select an image file">
@@ -81,7 +81,7 @@
                     </SplitButton.Flyout>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <fluent:SymbolIcon Symbol="ClipboardPaste" />
-                        <TextBlock Text="Paste from Clipboard" />
+                        <TextBlock Text="Paste from clipboard" />
                     </StackPanel>
                 </SplitButton>
             </StackPanel>
@@ -96,7 +96,7 @@
                 VerticalAlignment="Stretch">
                 <ToolTip.Tip>
                     <TextBlock MaxWidth="300" TextWrapping="Wrap">
-                        Enter the text or URL for the QR code. Very large input can use a large amount of memory.
+                        Enter text or a URL for the QR code. A large input can use much memory.
                     </TextBlock>
                 </ToolTip.Tip>
             </TextBox>
@@ -106,7 +106,7 @@
                 Grid.Row="2"
                 Margin="0,5,0,0"
                 Opacity="0.6"
-                Text="Enter text or URL to generate code" />
+                Text="Enter text or a URL to make a QR code" />
         </Grid>
 
         <Border

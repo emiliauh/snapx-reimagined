@@ -46,7 +46,7 @@ public sealed class HotkeyManager : IDisposable
         lock (_sync)
         {
             foreach (HotkeySettings previous in Hotkeys)
-                MarkNotConfigured(previous, "Hotkey configuration was replaced.");
+                MarkNotConfigured(previous, "The keyboard shortcut configuration was replaced.");
             Hotkeys = hotkeys?.Where(setting => setting != null).ToList() ?? [];
             _lastActivation.Clear();
         }
@@ -82,7 +82,7 @@ public sealed class HotkeyManager : IDisposable
         {
             if (removeFromList) Hotkeys.Remove(setting);
             desired = Hotkeys.Where(candidate => !ReferenceEquals(candidate, setting)).ToList();
-            MarkNotConfigured(setting, "Hotkey is not registered.");
+            MarkNotConfigured(setting, "The keyboard shortcut is not registered.");
         }
         ApplyRegistrations(desired);
     }
@@ -97,7 +97,7 @@ public sealed class HotkeyManager : IDisposable
                 ? Hotkeys.Where(x => x?.TaskSettings?.Job == HotkeyType.DisableHotkeys).ToList()
                 : [];
             foreach (var setting in Hotkeys.Except(retained))
-                MarkNotConfigured(setting, "Hotkey is not registered.");
+                MarkNotConfigured(setting, "The keyboard shortcut is not registered.");
             if (removeFromList)
             {
                 Hotkeys.Clear();
@@ -160,13 +160,13 @@ public sealed class HotkeyManager : IDisposable
             {
                 if (unregistrationError == null)
                 {
-                    MarkNotConfigured(setting, "Hotkey manager was disposed.");
+                    MarkNotConfigured(setting, "The keyboard shortcut service stopped.");
                 }
                 else if (setting.HotkeyInfo != null)
                 {
                     setting.HotkeyInfo.ID = 0;
                     setting.HotkeyInfo.Status = HotkeyStatus.Failed;
-                    setting.HotkeyInfo.StatusMessage = $"Hotkey cleanup failed: {unregistrationError}";
+                    setting.HotkeyInfo.StatusMessage = $"SnapX could not remove the keyboard shortcut. Details: {unregistrationError}";
                 }
             }
             _active.Clear();
@@ -205,7 +205,7 @@ public sealed class HotkeyManager : IDisposable
             }
             else
             {
-                string error = _backend.AvailabilityError ?? $"{_backend.Name} is unavailable.";
+                string error = _backend.AvailabilityError ?? $"{_backend.Name} is not available.";
                 results = FailureResults(registrations, error);
             }
         }
@@ -254,31 +254,31 @@ public sealed class HotkeyManager : IDisposable
             if (setting?.HotkeyInfo is null || setting.TaskSettings is null)
             {
                 if (setting?.HotkeyInfo is not null)
-                    MarkNotConfigured(setting, "Hotkey task settings are missing.");
+                    MarkNotConfigured(setting, "The keyboard shortcut has no task settings.");
                 continue;
             }
 
             HotkeyInfo info = setting.HotkeyInfo;
             if (!info.IsValidHotkey)
             {
-                MarkNotConfigured(setting, "The key combination is empty or invalid.");
+                MarkNotConfigured(setting, "The key combination is empty or is not valid.");
                 continue;
             }
             if (!RegistrationAllowed)
             {
-                MarkNotConfigured(setting, "Global hotkeys were disabled for this process.");
+                MarkNotConfigured(setting, "Keyboard shortcuts are off for this process.");
                 continue;
             }
             if (_hotkeysDisabled && setting.TaskSettings.Job != HotkeyType.DisableHotkeys)
             {
-                MarkNotConfigured(setting, "Global hotkeys are currently disabled.");
+                MarkNotConfigured(setting, "Keyboard shortcuts are off.");
                 continue;
             }
             if (!gestures.Add((info.KeyCode, info.ModifiersEnum)))
             {
                 info.ID = 0;
                 info.Status = HotkeyStatus.Failed;
-                info.StatusMessage = $"Duplicate hotkey combination: {info}.";
+                info.StatusMessage = $"Another keyboard shortcut uses this key combination: {info}.";
                 continue;
             }
 
@@ -310,7 +310,7 @@ public sealed class HotkeyManager : IDisposable
             ushort candidate = _nextId++;
             if (!used.Contains(candidate)) return candidate;
         }
-        throw new InvalidOperationException("No global hotkey registration IDs remain available.");
+        throw new InvalidOperationException("No keyboard shortcut registration IDs are available.");
     }
 
     private static bool IsSafeRegistrationId(string? value) =>

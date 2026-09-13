@@ -215,7 +215,7 @@ public class WindowsCapture : BaseCapture
         DebugHelper.WriteLine($"Width: {surface.Description.Width}");
         DebugHelper.WriteLine($"Height: {surface.Description.Height}");
         // Workaround to get around:
-        // hez2010 — 8:32 PM
+        // hez2010, 8:32 PM
         // CsWinRT currently relies on some source generators that only applies to source code you authored,
         // so it won't work well if you referenced an external library and used the interfaces it provides,
         // because no code (mainly, vtbl) was generated for them.
@@ -277,7 +277,7 @@ public class WindowsCapture : BaseCapture
         var captureItem = CaptureItemHelper.CreateItemForWindow(hwnd);
         if (captureItem == null)
         {
-            DebugHelper.WriteLine("WindowsCapture was provided with a invalid item (null) for Windows.Graphics.Capture to capture window... :(");
+            DebugHelper.WriteLine("WindowsCapture received a null item for Windows.Graphics.Capture.");
             return null;
         }
 
@@ -285,12 +285,12 @@ public class WindowsCapture : BaseCapture
         using var device = CreateDirect3DDeviceFromVorticeDevice(d3d11Device);
         if (device == null)
         {
-            DebugHelper.WriteLine("WindowsCapture was provided with a invalid  IDirect3DDevice (null) for Windows.Graphics.Capture to capture window... :( ");
+            DebugHelper.WriteLine("WindowsCapture received a null IDirect3DDevice for Windows.Graphics.Capture.");
             return null;
         }
 
         var size = captureItem.Size;
-        DebugHelper.WriteLine($"Capture Item Size... Width: {size.Width}, Height: {size.Height}");
+        DebugHelper.WriteLine($"Capture item size. Width: {size.Width}. Height: {size.Height}.");
         using var framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(device, DirectXPixelFormat.B8G8R8A8UIntNormalized,
             1,
             size);
@@ -310,7 +310,7 @@ public class WindowsCapture : BaseCapture
         session.IncludeSecondaryWindows = true;
         session.IsCursorCaptureEnabled = true;
         session.StartCapture();
-        DebugHelper.WriteLine("Waiting for frame...");
+        DebugHelper.WriteLine("Waiting for a frame.");
         using var result = await asyncFrame.Task.WaitAsync(TimeSpan.FromSeconds(10));
         if (result == null)
         {

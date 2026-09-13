@@ -14,7 +14,7 @@ internal class Shadow : ImageEffect
 {
     private float opacity;
 
-    [DefaultValue(0.6f), Description("Choose a value between 0.1 and 1.0")]
+    [DefaultValue(0.6f), Description("Enter a value from 0.1 through 1.0.")]
     public float Opacity
     {
         get

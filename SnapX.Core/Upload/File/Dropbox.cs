@@ -200,7 +200,7 @@ public sealed class Dropbox : FileUploader, IOAuth2Basic
     {
         if (stream.Length > 150000000)
         {
-            Errors.Add("There's a 150MB limit to uploads through the API.");
+            Errors.Add("The API upload limit is 150 MB.");
             return null;
         }
 

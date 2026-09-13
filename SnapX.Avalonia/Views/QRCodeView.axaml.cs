@@ -226,10 +226,10 @@ public partial class QRCodeView : FAAppWindow
             {
                 var dialog = new FAContentDialog
                 {
-                    Title = "No code detected",
+                    Title = "No code found",
                     Content = new SelectableTextBlock
                     {
-                        Text = "SnapX did not find a code in that area. Select a larger area or use higher contrast.",
+                        Text = "SnapX did not find a code in the selected area. Select a larger area or increase the contrast.",
                         TextWrapping = TextWrapping.Wrap
                     },
                     PrimaryButtonText = "Try again",
@@ -296,7 +296,7 @@ public partial class QRCodeView : FAAppWindow
 
         var dialog = new FAContentDialog
         {
-            Title = isUrl ? "External Link Found" : isBinary ? "Binary Data Found" : "Text Content Found",
+            Title = isUrl ? "External link found" : isBinary ? "Binary data found" : "Text found",
             Content = contentStack,
             CloseButtonText = "Dismiss",
             DefaultButton = FAContentDialogButton.Close
@@ -304,11 +304,11 @@ public partial class QRCodeView : FAAppWindow
 
         if (isBinary && qrImage == null)
         {
-            dialog.PrimaryButtonText = "Save Binary";
+            dialog.PrimaryButtonText = "Save binary data";
         }
         else
         {
-            dialog.PrimaryButtonText = isUrl ? "Open Link" : "Copy Text";
+            dialog.PrimaryButtonText = isUrl ? "Open link" : "Copy text";
             dialog.SecondaryButtonText = isUrl ? "Copy URL" : null;
         }
 
@@ -319,7 +319,7 @@ public partial class QRCodeView : FAAppWindow
         {
             if (isBinary && qrImage == null)
             {
-                var storageFile = await topLevel!.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = "Save Binary QR Content" });
+                var storageFile = await topLevel!.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = "Save binary QR content" });
                 if (storageFile != null)
                 {
                     await using var stream = await storageFile.OpenWriteAsync();

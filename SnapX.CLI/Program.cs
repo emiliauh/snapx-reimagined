@@ -28,9 +28,9 @@ if (args.Length == 0 || args[0] == "--help" || args[0] == "-h")
     about.Show();
 
     Console.WriteLine();
-    Console.WriteLine("SnapX.CLI is an empty project to dedicated to the developer feedback loop.");
-    Console.WriteLine("It makes running SnapX's CLI faster than running Avalonia and it's more simple & universal.");
-    Console.WriteLine("You can use ShareX's documentation found here. https://getsharex.com/docs/command-line-arguments to test SnapX.Core");
+    Console.WriteLine("SnapX.CLI provides command-line access to SnapX.Core.");
+    Console.WriteLine("Use it to test SnapX.Core without the graphical application.");
+    Console.WriteLine("For command-line instructions, read the ShareX documentation: https://getsharex.com/docs/command-line-arguments");
 }
 var sigintReceived = false;
 
@@ -53,7 +53,7 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) =>
     }
     else
     {
-        Console.WriteLine("Received SIGTERM, ignoring it because already processed SIGINT");
+        Console.WriteLine("SnapX received SIGTERM after SIGINT. SnapX will ignore SIGTERM.");
     }
 };
 if (!sigintReceived)
@@ -74,7 +74,7 @@ if (!sigintReceived)
 
     if (TaskManager.IsBusy)
     {
-        Console.WriteLine("A background task is still running after 60 seconds; shutting down anyway.");
+        Console.WriteLine("A background task did not finish in 60 seconds. SnapX will close now.");
     }
 
     snapx.shutdown();

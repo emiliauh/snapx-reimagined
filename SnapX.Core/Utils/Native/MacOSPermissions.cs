@@ -22,7 +22,7 @@ public sealed class MacOSPermissionException : UnauthorizedAccessException
     public string SettingsUrl { get; }
 
     public MacOSPermissionException(MacOSPermissionKind permission)
-        : base("SnapX needs Screen & System Audio Recording permission. Open System Settings > Privacy & Security > Screen & System Audio Recording, allow SnapX, then try again.")
+        : base("SnapX needs permission to record the screen and system audio. In System Settings, go to Privacy and Security, and then Screen and System Audio Recording. Allow SnapX. Then try again.")
     {
         Permission = permission;
         SettingsUrl = MacOSPermissions.GetSettingsUrl(permission);

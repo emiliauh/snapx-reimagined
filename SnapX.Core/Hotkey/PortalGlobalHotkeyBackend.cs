@@ -26,13 +26,13 @@ internal sealed class PortalGlobalHotkeyBackend : IHotkeyBackend
 
     public event Action<string>? Activated;
 
-    public string Name => "freedesktop GlobalShortcuts portal";
+    public string Name => "Wayland keyboard shortcut portal";
 
     public bool IsAvailable => OperatingSystem.IsLinux() && !string.IsNullOrWhiteSpace(DBusAddress.Session);
 
     public string? AvailabilityError => IsAvailable
         ? null
-        : "The freedesktop GlobalShortcuts portal requires a Linux session D-Bus address.";
+        : "Wayland keyboard shortcuts need a Linux session D-Bus address.";
 
     public async Task<IReadOnlyDictionary<string, HotkeyBackendRegistrationResult>> RegisterAsync(
         IReadOnlyCollection<HotkeyRegistration> registrations,
@@ -49,7 +49,7 @@ internal sealed class PortalGlobalHotkeyBackend : IHotkeyBackend
 
             if (!IsAvailable)
             {
-                string error = AvailabilityError ?? "The GlobalShortcuts portal is unavailable.";
+                string error = AvailabilityError ?? "The Wayland keyboard shortcut portal is not available.";
                 return registrations.ToDictionary(
                     registration => registration.Id,
                     _ => HotkeyBackendRegistrationResult.Failure(error),
@@ -98,21 +98,21 @@ internal sealed class PortalGlobalHotkeyBackend : IHotkeyBackend
                     hostApplicationId is null)
                 {
                     throw new InvalidOperationException(
-                        $"The portal could not identify SnapX. Install {DefaultApplicationId}.desktop, " +
-                        $"or set {ApplicationIdEnvironmentVariable} to an installed desktop application ID " +
-                        "for a development launch.",
+                        $"The portal could not identify SnapX. Install {DefaultApplicationId}.desktop. " +
+                        $"For a development launch, set {ApplicationIdEnvironmentVariable} to the ID " +
+                        "of an installed desktop application.",
                         ex);
                 }
 
                 if (sessionResponse.ResponseCode != 0)
                 {
                     throw new InvalidOperationException(
-                        $"The desktop denied the global shortcut session (response {sessionResponse.ResponseCode}).");
+                        $"The desktop did not allow the keyboard shortcut session. Response code: {sessionResponse.ResponseCode}.");
                 }
 
                 if (!sessionResponse.Results.TryGetValue("session_handle", out VariantValue sessionValue))
                 {
-                    throw new InvalidOperationException("The GlobalShortcuts portal did not return a session handle.");
+                    throw new InvalidOperationException("The keyboard shortcut portal did not return a session handle.");
                 }
 
                 string sessionHandlePath = sessionValue.Type switch
@@ -120,7 +120,7 @@ internal sealed class PortalGlobalHotkeyBackend : IHotkeyBackend
                     VariantValueType.ObjectPath => sessionValue.GetObjectPathAsString(),
                     VariantValueType.String => sessionValue.GetString(),
                     _ => throw new InvalidOperationException(
-                        $"The GlobalShortcuts portal returned an unsupported session handle type: {sessionValue.Type}.")
+                        $"The keyboard shortcut portal returned a session handle type that SnapX does not support: {sessionValue.Type}.")
                 };
                 var sessionHandle = new ObjectPath(sessionHandlePath);
                 var newSession = desktop.CreateSession(sessionHandle);
@@ -163,7 +163,7 @@ internal sealed class PortalGlobalHotkeyBackend : IHotkeyBackend
                 if (bindResponse.ResponseCode != 0)
                 {
                     throw new InvalidOperationException(
-                        $"The desktop denied the global shortcut request (response {bindResponse.ResponseCode}).");
+                        $"The desktop did not allow the keyboard shortcut. Response code: {bindResponse.ResponseCode}.");
                 }
 
                 connection = newConnection;

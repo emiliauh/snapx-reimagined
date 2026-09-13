@@ -50,7 +50,7 @@ public sealed class ImageAnnotationWindow : Window
 
     private ImageAnnotationWindow(Image source)
     {
-        Title = "SnapX — Annotate screenshot";
+        Title = "SnapX: Annotate a screenshot";
         Width = Math.Clamp(source.Width + 96, 760, 1440);
         Height = Math.Clamp(source.Height + 180, 600, 1000);
         MinWidth = 720;
@@ -89,7 +89,7 @@ public sealed class ImageAnnotationWindow : Window
         {
             toolbar.Children.Add(new TextBlock
             {
-                Text = "Wayland selection complete — annotate before SnapX saves the screenshot.",
+                Text = "The Wayland selection is complete. Add annotations before SnapX saves the screenshot.",
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(4, 0, 10, 0),
                 Opacity = .78
@@ -182,7 +182,7 @@ public sealed class ImageAnnotationWindow : Window
         toolbar.Children.Add(colorPicker);
         toolbar.Children.Add(recentSwatches);
         var eyedropper = AddButton(toolbar, "Pick color", (_, _) => canvas.BeginColorPick());
-        ToolTip.SetTip(eyedropper, "Click a pixel in the original screenshot to pick its color; Escape cancels");
+        ToolTip.SetTip(eyedropper, "Select a pixel in the original screenshot to use its color. Press Escape to cancel.");
         global::Avalonia.Automation.AutomationProperties.SetName(eyedropper, "Pick color from original screenshot");
         canvas.ColorPicked += (_, _) =>
         {
@@ -282,7 +282,7 @@ public sealed class ImageAnnotationWindow : Window
         };
         footer.Children.Add(new TextBlock
         {
-            Text = $"{source.Width:N0} × {source.Height:N0} px • drag selected annotations to move; use any white handle to resize",
+            Text = $"{source.Width:N0} by {source.Height:N0} pixels. Drag the selected annotations to move them. Drag a white handle to change their size.",
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             Opacity = .72
