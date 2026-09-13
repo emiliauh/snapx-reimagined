@@ -306,7 +306,17 @@
             </ToggleButton>
         </controls:FANavigationView.PaneCustomContent>
         <Border>
-            <TransitioningContentControl Content="{Binding CurrentPage}" />
+            <TransitioningContentControl
+                x:Name="MainPageHost"
+                ClipToBounds="True"
+                Content="{Binding CurrentPage}">
+                <TransitioningContentControl.PageTransition>
+                    <CrossFade
+                        Duration="0:0:0.16"
+                        FadeInEasing="CubicEaseOut"
+                        FadeOutEasing="CubicEaseOut" />
+                </TransitioningContentControl.PageTransition>
+            </TransitioningContentControl>
         </Border>
     </controls:FANavigationView>
 </UserControl>

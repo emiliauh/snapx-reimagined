@@ -7,6 +7,7 @@ using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.Messaging;
 using FluentAvalonia.UI.Controls;
+using FluentAvalonia.Core;
 using SnapX.Avalonia.ViewModels;
 using SnapX.Core;
 using SnapX.Core.Upload;
@@ -68,6 +69,8 @@ public partial class SettingsMainView : UserControl
         DataContext = viewModel;
         _vm = viewModel;
         InitializeComponent();
+        if (!FAUISettings.AreAnimationsEnabled())
+            SettingsPageHost.PageTransition = null;
         SizeChanged += (_, _) => ApplyResponsiveLayout();
     }
 

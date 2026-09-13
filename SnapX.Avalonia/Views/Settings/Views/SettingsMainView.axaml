@@ -786,7 +786,17 @@
             <AutoCompleteBox x:Name="NavViewSearchBox" />
         </controls:FANavigationView.AutoCompleteBox>
         <Border>
-            <TransitioningContentControl Content="{Binding CurrentPage}" />
+            <TransitioningContentControl
+                x:Name="SettingsPageHost"
+                ClipToBounds="True"
+                Content="{Binding CurrentPage}">
+                <TransitioningContentControl.PageTransition>
+                    <CrossFade
+                        Duration="0:0:0.14"
+                        FadeInEasing="CubicEaseOut"
+                        FadeOutEasing="CubicEaseOut" />
+                </TransitioningContentControl.PageTransition>
+            </TransitioningContentControl>
         </Border>
     </controls:FANavigationView>
 </UserControl>

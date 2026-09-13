@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using FluentAvalonia.UI.Controls;
+using FluentAvalonia.Core;
 using SnapX.Avalonia.ViewModels;
 using SnapX.Avalonia.Views.Controls;
 using SnapX.Core;
@@ -36,6 +37,8 @@ public partial class MainView : UserControl
     public MainView()
     {
         InitializeComponent();
+        if (!FAUISettings.AreAnimationsEnabled())
+            MainPageHost.PageTransition = null;
         DataContextChanged += (_, _) =>
         {
             if (!_isAttachedToVisualTree)
@@ -390,6 +393,7 @@ public partial class MainView : UserControl
 
             MainNavView.IsPaneVisible = false;
             _responsiveViewModel.IsPaneOpen = false;
+            MainNavView.Resources["NavigationViewContentMargin"] = new Thickness(0);
             return;
         }
 
@@ -397,6 +401,7 @@ public partial class MainView : UserControl
             return;
 
         _mainPaneSuppressedForSettings = false;
+        MainNavView.Resources.Remove("NavigationViewContentMargin");
         MainNavView.IsPaneVisible = _mainPaneWasVisible;
         _responsiveViewModel.IsPaneOpen = _mainPaneWasOpen;
     }
