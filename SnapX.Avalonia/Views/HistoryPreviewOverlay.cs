@@ -46,6 +46,7 @@ public sealed class HistoryPreviewOverlay
     private Process? _videoProcess;
     private WriteableBitmap? _videoBitmap;
     private Image? _videoImage;
+    private ZoomableImagePreview? _imagePreview;
     private byte[]? _pendingVideoFrame;
     private int _videoUpdateScheduled;
     private volatile bool _videoClosed;
@@ -270,41 +271,27 @@ public sealed class HistoryPreviewOverlay
 
     private Control BuildContentSurface()
     {
-        var scroll = new ScrollViewer
-        {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Margin = new Thickness(16, 8, 16, 0)
-        };
-
         if (_isImage)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(_item.FilePath))
                 {
-                    scroll.Content = MakeUnavailableText("The image path is missing.");
+                    return MakeUnavailableSurface("The image path is missing.");
                 }
-                else
-                {
-                    var bitmap = new Bitmap(_item.FilePath);
-                    var image = new Image
-                    {
-                        Source = bitmap,
-                        Stretch = Stretch.Uniform,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
-                    };
-                    scroll.Content = image;
-                }
+
+                var bitmap = new Bitmap(_item.FilePath);
+                _imagePreview = new ZoomableImagePreview(bitmap);
+                return _imagePreview;
             }
             catch (Exception ex)
             {
                 DebugHelper.WriteException(ex, "Failed to decode the history image.");
-                scroll.Content = MakeUnavailableText($"Unable to decode the image: {ex.Message}");
+                return MakeUnavailableSurface($"Unable to decode the image: {ex.Message}");
             }
-            return scroll;
         }
+
+        var scroll = CreateContentScroller();
 
         if (_isVideo)
         {
@@ -347,6 +334,20 @@ public sealed class HistoryPreviewOverlay
         }
 
         scroll.Content = MakeUnavailableText("This file type cannot be previewed inside SnapX.");
+        return scroll;
+    }
+
+    private static ScrollViewer CreateContentScroller() => new()
+    {
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        Margin = new Thickness(16, 8, 16, 0)
+    };
+
+    private static Control MakeUnavailableSurface(string message)
+    {
+        var scroll = CreateContentScroller();
+        scroll.Content = MakeUnavailableText(message);
         return scroll;
     }
 
@@ -745,6 +746,392 @@ public sealed class HistoryPreviewOverlay
     private bool IsTextExtension(string ext) => ext is
         ".csv" or ".json" or ".log" or ".md" or ".rtf" or ".text" or ".txt" or ".xml" or ".yaml" or ".yml";
 
+    /// <summary>
+    /// Image-only preview surface with pixel-aware fit/zoom and pointer-aware
+    /// panning. The displayed size participates in layout (rather than using a
+    /// render transform) so the ScrollViewer always has a truthful extent.
+    /// </summary>
+    private sealed class ZoomableImagePreview : Grid, IDisposable
+    {
+        private const double MaximumZoom = 8.0;
+        private const double DragThreshold = 5.0;
+        private const double ZoomStep = 1.25;
+
+        private readonly Bitmap _bitmap;
+        private readonly ScrollViewer _scroll;
+        private readonly Image _image;
+        private readonly TextBlock _zoomText;
+        private readonly Button _zoomOutButton;
+        private readonly Button _zoomInButton;
+        private readonly Cursor _clickCursor = new(StandardCursorType.Hand);
+        private readonly Cursor _panCursor = new(StandardCursorType.SizeAll);
+        private double _fitZoom = 1.0;
+        private double _zoom = 1.0;
+        private double _pinchStartZoom;
+        private bool _fitMode = true;
+        private bool _pinchActive;
+        private bool _pointerDown;
+        private bool _dragging;
+        private Point _pressPoint;
+        private Vector _pressOffset;
+        private long _zoomRevision;
+        private bool _disposed;
+
+        public ZoomableImagePreview(Bitmap bitmap)
+        {
+            _bitmap = bitmap;
+            Margin = new Thickness(16, 8, 16, 0);
+            ClipToBounds = true;
+
+            _image = new Image
+            {
+                Source = bitmap,
+                Stretch = Stretch.Fill,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = _clickCursor
+            };
+
+            _scroll = new ScrollViewer
+            {
+                Content = _image,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            _scroll.SizeChanged += Scroll_OnSizeChanged;
+            _scroll.PointerWheelChanged += Scroll_OnPointerWheelChanged;
+            _scroll.PointerTouchPadGestureMagnify += Scroll_OnTouchPadMagnify;
+            _scroll.Pinch += Scroll_OnPinch;
+            _scroll.PinchEnded += Scroll_OnPinchEnded;
+            _scroll.GestureRecognizers.Add(new PinchGestureRecognizer());
+
+            _image.PointerPressed += Image_OnPointerPressed;
+            _image.PointerMoved += Image_OnPointerMoved;
+            _image.PointerReleased += Image_OnPointerReleased;
+            _image.PointerCaptureLost += Image_OnPointerCaptureLost;
+
+            _zoomOutButton = MakeZoomButton("−", "Zoom out", (_, _) => ZoomBy(1.0 / ZoomStep));
+            _zoomInButton = MakeZoomButton("+", "Zoom in", (_, _) => ZoomBy(ZoomStep));
+            _zoomText = new TextBlock
+            {
+                Width = 56,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = Brushes.White,
+                FontSize = 12
+            };
+            var fitButton = MakeZoomButton("Fit", "Fit the whole image in the preview", (_, _) => SetFitZoom());
+            fitButton.Width = 44;
+
+            var controls = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 2
+            };
+            controls.Children.Add(_zoomOutButton);
+            controls.Children.Add(_zoomText);
+            controls.Children.Add(_zoomInButton);
+            controls.Children.Add(fitButton);
+
+            var controlsBackground = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(220, 38, 38, 44)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(4),
+                Margin = new Thickness(12),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Child = controls
+            };
+
+            Children.Add(_scroll);
+            Children.Add(controlsBackground);
+            UpdateImageSize();
+        }
+
+        private static Button MakeZoomButton(string text, string tooltip, EventHandler<RoutedEventArgs> click)
+        {
+            var button = new Button
+            {
+                Content = text,
+                Width = 32,
+                Height = 28,
+                MinWidth = 0,
+                MinHeight = 0,
+                Padding = new Thickness(0),
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            ToolTip.SetTip(button, tooltip);
+            button.Click += click;
+            return button;
+        }
+
+        private void Scroll_OnSizeChanged(object? sender, SizeChangedEventArgs e)
+        {
+            double availableWidth = Math.Max(1, e.NewSize.Width);
+            double availableHeight = Math.Max(1, e.NewSize.Height);
+            double nextFit = Math.Min(1.0, Math.Min(
+                availableWidth / Math.Max(1, _bitmap.Size.Width),
+                availableHeight / Math.Max(1, _bitmap.Size.Height)));
+            nextFit = Math.Clamp(nextFit, 0.01, 1.0);
+
+            bool fitChanged = Math.Abs(nextFit - _fitZoom) > 0.0001;
+            _fitZoom = nextFit;
+            if (_fitMode && fitChanged)
+            {
+                ApplyZoom(_fitZoom, GetViewportCenter(), remainInFitMode: true);
+            }
+            else
+            {
+                UpdateInteractionState();
+            }
+        }
+
+        private void Scroll_OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+        {
+            // Preserve unmodified wheel/two-finger scrolling for panning. A
+            // command/control modifier turns it into pointer-anchored zoom,
+            // matching image editors on macOS and the other desktop targets.
+            if ((e.KeyModifiers & (KeyModifiers.Meta | KeyModifiers.Control)) == 0 || e.Delta.Y == 0)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            ZoomBy(e.Delta.Y > 0 ? ZoomStep : 1.0 / ZoomStep, e.GetPosition(_scroll));
+        }
+
+        private void Scroll_OnTouchPadMagnify(object? sender, PointerDeltaEventArgs e)
+        {
+            e.Handled = true;
+            // Native macOS magnification arrives as a small signed delta.
+            // Exponential scaling remains smooth for both very small and
+            // coalesced events without ever producing a negative factor.
+            double factor = Math.Exp(e.Delta.Y);
+            ZoomBy(factor, e.GetPosition(_scroll));
+        }
+
+        private void Scroll_OnPinch(object? sender, PinchEventArgs e)
+        {
+            if (!_pinchActive)
+            {
+                _pinchActive = true;
+                _pinchStartZoom = _zoom;
+            }
+
+            e.Handled = true;
+            ApplyZoom(_pinchStartZoom * e.Scale, e.ScaleOrigin, remainInFitMode: false);
+        }
+
+        private void Scroll_OnPinchEnded(object? sender, PinchEndedEventArgs e)
+        {
+            _pinchActive = false;
+            e.Handled = true;
+        }
+
+        private void Image_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (!e.GetCurrentPoint(_image).Properties.IsLeftButtonPressed)
+            {
+                return;
+            }
+
+            _pointerDown = true;
+            _dragging = false;
+            _pressPoint = e.GetPosition(_scroll);
+            _pressOffset = _scroll.Offset;
+            e.Pointer.Capture(_image);
+        }
+
+        private void Image_OnPointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (!_pointerDown)
+            {
+                return;
+            }
+
+            Point current = e.GetPosition(_scroll);
+            Vector delta = current - _pressPoint;
+            if (!_dragging && Math.Sqrt(delta.X * delta.X + delta.Y * delta.Y) >= DragThreshold && CanPan())
+            {
+                _dragging = true;
+            }
+
+            if (!_dragging)
+            {
+                return;
+            }
+
+            _scroll.Offset = ClampOffset(new Vector(_pressOffset.X - delta.X, _pressOffset.Y - delta.Y));
+            e.Handled = true;
+        }
+
+        private void Image_OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (!_pointerDown)
+            {
+                return;
+            }
+
+            bool wasDragging = _dragging;
+            Point releasePoint = e.GetPosition(_scroll);
+            EndPointerInteraction(e.Pointer);
+            e.Handled = true;
+
+            if (!wasDragging)
+            {
+                ToggleZoom(releasePoint);
+            }
+        }
+
+        private void Image_OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+        {
+            _pointerDown = false;
+            _dragging = false;
+            UpdateInteractionState();
+        }
+
+        private void EndPointerInteraction(IPointer pointer)
+        {
+            _pointerDown = false;
+            _dragging = false;
+            pointer.Capture(null);
+            UpdateInteractionState();
+        }
+
+        private void ToggleZoom(Point anchor)
+        {
+            if (_fitMode)
+            {
+                double usefulZoom = _fitZoom < 0.999 ? 1.0 : Math.Min(MaximumZoom, 2.0);
+                ApplyZoom(usefulZoom, anchor, remainInFitMode: false);
+            }
+            else
+            {
+                SetFitZoom(anchor);
+            }
+        }
+
+        private void ZoomBy(double factor, Point? anchor = null) =>
+            ApplyZoom(_zoom * factor, anchor ?? GetViewportCenter(), remainInFitMode: false);
+
+        private void SetFitZoom(Point? anchor = null) =>
+            ApplyZoom(_fitZoom, anchor ?? GetViewportCenter(), remainInFitMode: true);
+
+        private void ApplyZoom(double requestedZoom, Point anchor, bool remainInFitMode)
+        {
+            double nextZoom = Math.Clamp(requestedZoom, _fitZoom, MaximumZoom);
+            double oldZoom = Math.Max(0.01, _zoom);
+            Vector oldOffset = _scroll.Offset;
+            Size viewport = GetViewportSize();
+            Vector oldPadding = GetCenterPadding(oldZoom, viewport);
+            double imageX = (anchor.X + oldOffset.X - oldPadding.X) / oldZoom;
+            double imageY = (anchor.Y + oldOffset.Y - oldPadding.Y) / oldZoom;
+
+            _zoom = nextZoom;
+            _fitMode = remainInFitMode || Math.Abs(_zoom - _fitZoom) < 0.0001;
+            UpdateImageSize();
+
+            Vector newPadding = GetCenterPadding(_zoom, viewport);
+            Vector requestedOffset = new(
+                newPadding.X + imageX * _zoom - anchor.X,
+                newPadding.Y + imageY * _zoom - anchor.Y);
+            long revision = ++_zoomRevision;
+
+            // Explicit image dimensions update the extent during the next
+            // layout pass. Re-apply the pointer-anchored offset afterwards so
+            // zooming does not make the detail under the cursor jump away.
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!_disposed && revision == _zoomRevision)
+                {
+                    _scroll.Offset = ClampOffset(requestedOffset);
+                }
+            }, DispatcherPriority.Loaded);
+        }
+
+        private void UpdateImageSize()
+        {
+            _image.Width = Math.Max(1, _bitmap.Size.Width * _zoom);
+            _image.Height = Math.Max(1, _bitmap.Size.Height * _zoom);
+            UpdateInteractionState();
+        }
+
+        private void UpdateInteractionState()
+        {
+            _zoomText.Text = $"{Math.Round(_zoom * 100):0}%";
+            _zoomOutButton.IsEnabled = _zoom > _fitZoom + 0.0001;
+            _zoomInButton.IsEnabled = _zoom < MaximumZoom - 0.0001;
+            _image.Cursor = CanPan() ? _panCursor : _clickCursor;
+            ToolTip.SetTip(_image, CanPan()
+                ? "Drag to pan; click to fit; pinch or Command/Ctrl-scroll to zoom"
+                : "Click to zoom; pinch or Command/Ctrl-scroll to zoom");
+        }
+
+        private bool CanPan()
+        {
+            Size viewport = GetViewportSize();
+            return _bitmap.Size.Width * _zoom > viewport.Width + 0.5 ||
+                   _bitmap.Size.Height * _zoom > viewport.Height + 0.5;
+        }
+
+        private Point GetViewportCenter()
+        {
+            Size viewport = GetViewportSize();
+            return new Point(viewport.Width / 2.0, viewport.Height / 2.0);
+        }
+
+        private Size GetViewportSize()
+        {
+            Size viewport = _scroll.Viewport;
+            if (viewport.Width <= 0 || viewport.Height <= 0)
+            {
+                viewport = _scroll.Bounds.Size;
+            }
+            return new Size(Math.Max(1, viewport.Width), Math.Max(1, viewport.Height));
+        }
+
+        private Vector GetCenterPadding(double zoom, Size viewport) => new(
+            Math.Max(0, (viewport.Width - _bitmap.Size.Width * zoom) / 2.0),
+            Math.Max(0, (viewport.Height - _bitmap.Size.Height * zoom) / 2.0));
+
+        private Vector ClampOffset(Vector offset)
+        {
+            Size viewport = GetViewportSize();
+            double maxX = Math.Max(0, _bitmap.Size.Width * _zoom - viewport.Width);
+            double maxY = Math.Max(0, _bitmap.Size.Height * _zoom - viewport.Height);
+            return new Vector(Math.Clamp(offset.X, 0, maxX), Math.Clamp(offset.Y, 0, maxY));
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _scroll.SizeChanged -= Scroll_OnSizeChanged;
+            _scroll.PointerWheelChanged -= Scroll_OnPointerWheelChanged;
+            _scroll.PointerTouchPadGestureMagnify -= Scroll_OnTouchPadMagnify;
+            _scroll.Pinch -= Scroll_OnPinch;
+            _scroll.PinchEnded -= Scroll_OnPinchEnded;
+            _image.PointerPressed -= Image_OnPointerPressed;
+            _image.PointerMoved -= Image_OnPointerMoved;
+            _image.PointerReleased -= Image_OnPointerReleased;
+            _image.PointerCaptureLost -= Image_OnPointerCaptureLost;
+            _image.Source = null;
+            _bitmap.Dispose();
+            _clickCursor.Dispose();
+            _panCursor.Dispose();
+        }
+    }
+
     private void Owner_OnClosed(object? sender, EventArgs e) => Dispose();
 
     public void Dispose()
@@ -787,6 +1174,8 @@ public sealed class HistoryPreviewOverlay
             _videoImage.Source = null;
         }
         _scrim.Child = null;
+        _imagePreview?.Dispose();
+        _imagePreview = null;
         WriteableBitmap? videoBitmap = _videoBitmap;
         _videoBitmap = null;
         _videoImage = null;
